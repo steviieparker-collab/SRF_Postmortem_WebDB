@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SRF Event Report - {{ event.filename }}</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 2em; color: #333; }
+        h1 { color: #1a1a2e; border-bottom: 2px solid #e94560; }
+        table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+        th, td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+        th { background-color: #f5f5f5; }
+        .footer { margin-top: 2em; color: #999; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <h1>SRF Event Report</h1>
+    <h2>Event Summary</h2>
+    <table>
+        <tr><th>Property</th><th>Value</th></tr>
+        <tr><td>Filename</td><td>{{ event.filename }}</td></tr>
+        <tr><td>Timestamp</td><td>{{ timestamp_str }}</td></tr>
+        <tr><td>Classification</td><td>{{ classification.case_str }} — {{ classification.description }}</td></tr>
+        <tr><td>Confidence</td><td>{{ confidence_pct }}</td></tr>
+        <tr><td>Fault</td><td>{{ classification.fault }}</td></tr>
+    </table>
+
+    {% if has_analog %}
+    <h2>Analog Signal Metrics</h2>
+    <table>
+        <tr><th>Channel</th><th>Mean</th><th>Std</th><th>Min</th><th>Max</th><th>Baseline</th></tr>
+        {% for stat in analog_stats %}
+        <tr>
+            <td>{{ stat.channel }}</td>
+            <td>{{ stat.mean | round(4) }}</td>
+            <td>{{ stat.std | round(4) }}</td>
+            <td>{{ stat.min | round(4) }}</td>
+            <td>{{ stat.max | round(4) }}</td>
+            <td>{{ stat.baseline | round(4) }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
+    {% if has_digital %}
+    <h2>Digital Signal Events</h2>
+    <table>
+        <tr><th>Channel</th><th>Count</th></tr>
+        {% for dc in digital_counts %}
+        <tr><td>{{ dc.channel }}</td><td>{{ dc.count }}</td></tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
+    {% if has_timeline %}
+    <h2>Event Timeline</h2>
+    <table>
+        <tr><th>Group</th><th>Channel</th><th>Time (raw)</th><th>Time (effective)</th><th>Type</th><th>Value</th></tr>
+        {% for entry in timeline %}
+        <tr>
+            <td>{{ entry.group }}</td><td>{{ entry.channel }}</td>
+            <td>{{ entry.time_raw | round(4) }}</td><td>{{ entry.time_effective | round(4) }}</td>
+            <td>{{ entry.type }}</td><td>{{ entry.value }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
+    <div class="footer">
+        <p>Generated at: {{ generated_at }}</p>
+        {% if attachments %}
+        <p>Attachments: {{ attachments | join(", ") }}</p>
+        {% endif %}
+    </div>
+</body>
+</html>

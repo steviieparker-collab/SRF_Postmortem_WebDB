@@ -1,0 +1,30 @@
+# SRF Event Report
+
+## Event Summary
+- **Timestamp:** {{ timestamp_str }}
+- **Classification:** {{ classification.case_str }} — {{ classification.description }}
+- **Confidence:** {{ confidence_pct }}
+- **Fault:** {{ classification.fault }}
+
+## Event Timeline
+
+{% if classification.first_events %}
+① First
+{% for ev in classification.first_events %}
+{{ ev.channel }} {{ "%.2f"|format(ev.time_effective * 1000) }} ms [{{ "%.3f"|format(ev.value) }}]
+{% endfor %}
+{% endif %}
+{% if classification.second_events %}
+② Second (fastest {{ [classification.second_events|length, 2]|min }})
+{% for ev in classification.second_events[:2] %}
+{{ ev.channel }} {{ "%.2f"|format(ev.time_effective * 1000) }} ms [{{ "%.3f"|format(ev.value) }}]
+{% endfor %}
+{% endif %}
+{% if classification.third_events %}
+③ Third
+{% for ev in classification.third_events %}
+{{ ev.channel }} {{ "%.2f"|format(ev.time_effective * 1000) }} ms [{{ "%.3f"|format(ev.value) }}]
+{% endfor %}
+{% endif %}
+---
+*Generated at: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}*

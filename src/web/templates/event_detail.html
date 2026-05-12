@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ event.id }} — SRF Postmortem Viewer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="/static/css/style.css?v=9" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="/static/js/charts.js?v=6"></script>
+    <style>
+        body { background: #0d1117; color: #e6edf3; font-size: .9rem; }
+        .card { background: #161b22; border-color: #30363d; }
+        .card-header { background: #1c2128; border-bottom: 1px solid #30363d; }
+        .form-control, .form-select {
+            background: #0d1117; border-color: #30363d; color: #e6edf3;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: #58a6ff; box-shadow: 0 0 0 0.15rem rgba(88,166,255,0.3);
+        }
+        .similar-card:hover { border-color: #58a6ff; transition: border-color .2s; }
+        .btn-outline-view { border-color: #30363d; color: #8b949e; }
+        .btn-outline-view:hover, .btn-outline-view.active {
+            background: #21262d; border-color: #58a6ff; color: #58a6ff;
+        }
+        .view-group { margin-bottom: 8px; }
+        .js-plotly-plot .plotly .modebar { background: #161b22 !important; }
+        .table-sm td { border: none; padding: 1px 4px; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0d1117; }
+        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+        textarea.form-control { resize: vertical; min-height: 60px; }
+    </style>
+</head>
+<body>
+<div class="container-fluid py-3">
+    <!-- Header with nav -->
+    <div class="row mb-2 align-items-center">
+        <div class="col">
+            <h5 class="mb-0">
+                <a href="{{ back_url }}" class="text-decoration-none text-secondary me-2">
+                    <i class="bi bi-arrow-left"></i>
+                </a>
+                {{ event.id }}
+                {% if event.case_id and event.case_id > 0 %}
+                <span class="badge case-badge-{{ event.fault_type|extract_case_id }} fs-6 ms-2 align-middle">{{ event.fault_type or ('Case ' ~ event.case_id) }}</span>
+                {% endif %}
+                {% if event.user_fault_type and event.user_fault_type != event.fault_type %}
+                <span class="badge case-badge-{{ event.user_fault_type|extract_case_id }} fs-6 ms-2 align-middle" title="User override">
+                    <i class="bi bi-pencil"></i> {{ event.user_fault_type }}
+                </span>
+                {% endif %}
+            </h5>
+            <small class="text-secondary">{{ event.timestamp }}</small>
+        </div>
+        <!-- Prev / Next buttons -->
+        <div class="col-auto d-flex gap-1">
+            {% if prev_event_id %}
+            <a href="/events/{{ prev_event_id }}{% if filter_query %}?{{ filter_query }}{% endif %}"
+               class="btn btn-sm btn-outline-secondary"
+               title="Previous event in filtered list">
+                <i class="bi bi-chevron-left"></i> Prev
+            </a>
+            {% endif %}
+            {% if next_event_id %}
+            <a href="/events/{{ next_event_id }}{% if filter_query %}?{{ filter_query }}{% endif %}"
+               class="btn btn-sm btn-outline-secondary"
+               title="Next event in filtered list">
+                Next <i class="bi bi-chevron-right"></i>
+            </a>
+            {% endif %}
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteEvent()" title="Delete this event">
+                <i class="bi bi-trash3"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Info Bar (3 cards in a row) -->
+    <div class="row g-2 mb-3">
+        <!-- Event Sequence -->
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header py-1"><strong>Event Sequence</strong></div>
+                <div class="card-body py-2">
+                    <div class="small">
+                        {% if time_groups and time_groups.first and time_groups.first.events %}
+                        {% set tg = time_groups.first %}
+                        <span style="color:#58a6ff;">① First</span>
+                        <ul class="list-unstyled mb-1 ps-2" style="font-size:.8rem;">
+                            {% for ev in tg.events[:5] %}
+                            <li>
+                                <span class="text-light">{{ ev.channel.replace('_v','').replace('_d','') }}</span>
+                                <span class="text-secondary ms-1">{{ "%.2f"|format(ev.time_s * 1000) }} ms</span>
+                                <span class="ms-1">[{{ "%.3f"|format(ev.value) }}]</span>
+                            </li>
+                            {% endfor %}
+                            {% if tg.events|length > 5 %}
+                            <li class="text-secondary">+{{ tg.events|length - 5 }} more</li>
+                            {% endif %}
+                        </ul>
+                        {% endif %}
+                        {% if time_groups and time_groups.second and time_groups.second.events %}
+                        {% set tg2 = time_groups.second %}
+                        <span style="color:#d29922;">② Second (fastest 2)</span>
+                        <ul class="list-unstyled mb-0 ps-2" style="font-size:.8rem;">
+                            {% for ev in tg2.events[:2] %}
+                            <li>
+                                <span class="text-light">{{ ev.channel.replace('_v','').replace('_d','') }}</span>
+                                <span class="text-secondary ms-1">{{ "%.2f"|format(ev.time_s * 1000) }} ms</span>
+                                <span class="ms-1">[{{ "%.3f"|format(ev.value) }}]</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <span class="text-secondary">No sequence data</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Beam Time (input + datalist) -->
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header py-1"><strong>User Beam Time</strong></div>
+                <div class="card-body py-2">
+                    <div class="d-flex gap-1">
+                        <input type="text" class="form-control form-control-sm" id="user-beam-time-input"
+                               list="beam-time-list"
+                               value="{{ event.user_beam_time }}"
+                               placeholder="e.g. 2026-01"
+                               autocomplete="off">
+                        <button class="btn btn-outline-primary btn-sm" onclick="updateUserBeamTime()">
+                            <i class="bi bi-check"></i>
+                        </button>
+                        <datalist id="beam-time-list">
+                            {% for bt in user_beam_times %}
+                            <option value="{{ bt }}">
+                            {% endfor %}
+                        </datalist>
+                    </div>
+                    <small class="text-secondary" id="ubt-status"></small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header py-1"><strong>Notes</strong></div>
+                <div class="card-body py-2">
+                    <div class="d-flex flex-column gap-1">
+                        <textarea class="form-control form-control-sm" id="notes-input"
+                                  rows="2" placeholder="Add notes about this event...">{{ event.notes or '' }}</textarea>
+                        <button class="btn btn-outline-primary btn-sm align-self-end" onclick="updateNotes()">
+                            <i class="bi bi-check"></i> Save
+                        </button>
+                    </div>
+                    <small class="text-secondary" id="notes-status"></small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 2: Fault Diagnosis -->
+    <div class="row g-2 mb-3">
+        <!-- Fault Diagnosis (editable dropdown) -->
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header py-1"><strong>Fault Diagnosis</strong></div>
+                <div class="card-body py-2">
+                    {% set display_fault = event.user_fault_type or event.fault_type or 'Unknown' %}
+                    {% set is_user_set = event.user_fault_type and event.user_fault_type != '' %}
+                    <div class="d-flex flex-column gap-1">
+                        <select class="form-select form-select-sm" id="user-fault-type-select">
+                            <option value="">— Classifier result: {{ event.fault_type or 'Unknown' }} —</option>
+                            {% for cid, cname in case_fault_types.items() %}
+                            {% if cid > 0 %}
+                            <option value="{{ cname }}" {% if display_fault == cname and is_user_set %}selected{% endif %}>
+                                {{ cname }}
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-outline-primary btn-sm flex-grow-1" onclick="updateUserFaultType()">
+                                <i class="bi bi-check"></i> Apply
+                            </button>
+                            {% if is_user_set %}
+                            <button class="btn btn-outline-secondary btn-sm" onclick="resetUserFaultType()" title="Restore classifier result">
+                                <i class="bi bi-arrow-counterclockwise"></i> Reset
+                            </button>
+                            {% endif %}
+                        </div>
+                        <small class="text-secondary">
+                            <span class="badge case-badge-{{ event.fault_type|extract_case_id }} me-1">
+                                {{ event.fault_type or 'Unknown' }}
+                            </span>
+                            {{ "%.0f"|format(event.fault_confidence * 100) }}% confidence
+                            {% if is_user_set %}
+                            <span class="ms-2 text-info"><i class="bi bi-pencil"></i> User override</span>
+                            {% endif %}
+                        </small>
+                    </div>
+                    <small class="text-secondary" id="uft-status"></small>
+                    <div class="mt-1 small text-secondary">{{ event.case_fault[:80] }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Report (if exists) -->
+        {% if event.report_md %}
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header py-1"><strong>Report</strong></div>
+                <div class="card-body py-2 small text-secondary" style="max-height:250px;overflow-y:auto;white-space:pre-wrap;">
+                    {{ event.report_md }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Waveform Plot -->
+    <div class="row g-2 mb-3">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header py-1 d-flex justify-content-between align-items-center">
+                    <strong>Waveform</strong>
+                    <div class="btn-group btn-group-sm view-group" role="group">
+                        <button type="button" class="btn btn-outline-view active"
+                                onclick="updateViewButtons('1ms')">±1ms</button>
+                        <button type="button" class="btn btn-outline-view"
+                                onclick="updateViewButtons('5ms')">±5ms</button>
+                        <button type="button" class="btn btn-outline-view"
+                                onclick="updateViewButtons('10ms')">±10ms</button>
+                        <button type="button" class="btn btn-outline-view"
+                                onclick="updateViewButtons('50ms')">±50ms</button>
+                    </div>
+                </div>
+                <div class="card-body p-2 position-relative" id="waveform-plot-wrapper">
+                    <div id="waveform-plot" style="width:100%;height:600px;"></div>
+                    <!-- Bottom Prev / Next inside waveform card footer -->
+                    <div class="d-flex justify-content-center gap-2 mt-2 pt-2 border-top border-secondary">
+                        {% if prev_event_id %}
+                        <a href="/events/{{ prev_event_id }}{% if filter_query %}?{{ filter_query }}{% endif %}"
+                           class="btn btn-outline-secondary btn-sm"
+                           title="Previous event in filtered list">
+                            <i class="bi bi-chevron-left"></i> Prev
+                        </a>
+                        {% endif %}
+                        {% if next_event_id %}
+                        <a href="/events/{{ next_event_id }}{% if filter_query %}?{{ filter_query }}{% endif %}"
+                           class="btn btn-outline-secondary btn-sm"
+                           title="Next event in filtered list">
+                            Next <i class="bi bi-chevron-right"></i>
+                        </a>
+                        {% endif %}
+                        {% if not prev_event_id and not next_event_id %}
+                        <span class="text-secondary small">No adjacent events</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attachments Section -->
+    <div class="row g-2 mb-3">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header py-1 d-flex justify-content-between align-items-center">
+                    <strong><i class="bi bi-paperclip"></i> Attachments</strong>
+                    <div>
+                        <button class="btn btn-sm btn-outline-primary" onclick="document.getElementById('attachment-upload-input').click()">
+                            <i class="bi bi-upload"></i> Upload
+                        </button>
+                        <input type="file" id="attachment-upload-input" multiple style="display:none"
+                               onchange="uploadAttachments(this.files)">
+                    </div>
+                </div>
+                <div class="card-body py-2" id="attachments-list">
+                    <div class="text-secondary small text-center py-2" id="attachments-loading">
+                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                        Loading attachments...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ── User Beam Time Update ──────────────────────────────
+async function updateUserBeamTime() {
+    const input = document.getElementById('user-beam-time-input');
+    const status = document.getElementById('ubt-status');
+    const value = input.value.trim();
+    status.textContent = 'Saving...';
+    try {
+        const resp = await fetch('/api/events/{{ event.id }}/user-beam-time', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({value: value}),
+        });
+        if (resp.ok) {
+            status.textContent = '✓ Saved';
+            status.style.color = '#3fb950';
+        } else {
+            status.textContent = '✗ Error';
+            status.style.color = '#f85149';
+        }
+    } catch (e) {
+        status.textContent = '✗ Network error';
+        status.style.color = '#f85149';
+    }
+    setTimeout(() => { status.textContent = ''; }, 3000);
+}
+
+// ── Notes Update ───────────────────────────────────────
+async function updateNotes() {
+    const textarea = document.getElementById('notes-input');
+    const status = document.getElementById('notes-status');
+    const value = textarea.value.trim();
+    status.textContent = 'Saving...';
+    try {
+        const resp = await fetch('/api/events/{{ event.id }}/notes', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({value: value}),
+        });
+        if (resp.ok) {
+            status.textContent = '✓ Saved';
+            status.style.color = '#3fb950';
+        } else {
+            status.textContent = '✗ Error';
+            status.style.color = '#f85149';
+        }
+    } catch (e) {
+        status.textContent = '✗ Network error';
+        status.style.color = '#f85149';
+    }
+    setTimeout(() => { status.textContent = ''; }, 3000);
+}
+
+// ── User Fault Type Update ─────────────────────────────
+async function updateUserFaultType() {
+    const select = document.getElementById('user-fault-type-select');
+    const status = document.getElementById('uft-status');
+    const value = select.value;
+    status.textContent = 'Saving...';
+    try {
+        const resp = await fetch('/api/events/{{ event.id }}/user-fault-type', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({value: value}),
+        });
+        if (resp.ok) {
+            status.textContent = '✓ Saved';
+            status.style.color = '#3fb950';
+            setTimeout(() => location.reload(), 800);
+        } else {
+            status.textContent = '✗ Error';
+            status.style.color = '#f85149';
+        }
+    } catch (e) {
+        status.textContent = '✗ Network error';
+        status.style.color = '#f85149';
+    }
+    setTimeout(() => { if (status.textContent !== '✓ Saved') status.textContent = ''; }, 3000);
+}
+
+// ── Reset User Fault Type ──────────────────────────────
+async function resetUserFaultType() {
+    const status = document.getElementById('uft-status');
+    status.textContent = 'Resetting...';
+    try {
+        const resp = await fetch('/api/events/{{ event.id }}/user-fault-type', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({value: ''}),
+        });
+        if (resp.ok) {
+            status.textContent = '✓ Reset to classifier';
+            status.style.color = '#3fb950';
+            setTimeout(() => location.reload(), 800);
+        } else {
+            status.textContent = '✗ Error';
+            status.style.color = '#f85149';
+        }
+    } catch (e) {
+        status.textContent = '✗ Network error';
+        status.style.color = '#f85149';
+    }
+}
+
+// ── View Toggle ────────────────────────────────────────
+function updateViewButtons(mode) {
+    document.querySelectorAll('.view-group .btn-group > .btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view-group .btn-group > .btn').forEach(b => {
+        const onclick = b.getAttribute('onclick');
+        if (onclick && onclick.includes("'" + mode + "'")) {
+            b.classList.add('active');
+        }
+    });
+    if (typeof setView === 'function') window.setView(mode);
+}
+
+// ── Delete Event ────────────────────────────────────────
+function deleteEvent() {
+    if (!confirm('Delete this event permanently?\n\n{{ event.id }}')) return;
+    const pw = prompt('Enter password to delete:');
+    if (pw === null || pw === '') return;
+    fetch('/api/events/{{ event.id }}?password=' + encodeURIComponent(pw), { method: 'DELETE' })
+        .then(r => r.json())
+        .then(d => {
+            if (d.ok) {
+                window.location.href = '{{ back_url or "/" }}';
+            } else {
+                alert('Delete failed: ' + (d.error || 'Unknown error'));
+            }
+        })
+        .catch(e => alert('Delete failed: ' + e));
+}
+
+// ── Attachments ────────────────────────────────────────
+function formatFileSize(bytes) {
+    if (bytes === null || bytes === undefined) return 'Unknown';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function getFileIcon(mimeType) {
+    if (!mimeType) return 'bi-file-earmark';
+    if (mimeType.startsWith('image/')) return 'bi-file-earmark-image';
+    if (mimeType.startsWith('video/')) return 'bi-file-earmark-play';
+    if (mimeType.startsWith('audio/')) return 'bi-file-earmark-music';
+    if (mimeType.includes('pdf')) return 'bi-file-earmark-pdf';
+    if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('tar') || mimeType.includes('7z') || mimeType.includes('gzip'))
+        return 'bi-file-earmark-zip';
+    if (mimeType.includes('text') || mimeType.includes('csv') || mimeType.includes('json') || mimeType.includes('yaml'))
+        return 'bi-file-earmark-text';
+    if (mimeType.includes('spreadsheet') || mimeType.includes('excel') || mimeType.includes('csv'))
+        return 'bi-file-earmark-spreadsheet';
+    return 'bi-file-earmark';
+}
+
+async function loadAttachments() {
+    const container = document.getElementById('attachments-list');
+    const loadingEl = document.getElementById('attachments-loading');
+    if (loadingEl) loadingEl.style.display = 'block';
+    
+    try {
+        const resp = await fetch('/api/events/{{ event.id }}/attachments');
+        const data = await resp.json();
+        
+        if (loadingEl) loadingEl.style.display = 'none';
+        
+        if (!data.ok || !data.attachments || data.attachments.length === 0) {
+            container.innerHTML = '<div class="text-secondary small text-center py-2">No attachments yet. Click <strong>Upload</strong> to add files.</div>';
+            return;
+        }
+        
+        let html = '<div class="list-group list-group-flush" style="background:transparent;">';
+        for (const att of data.attachments) {
+            const iconClass = getFileIcon(att.mime_type);
+            const sizeStr = formatFileSize(att.file_size);
+            const dateStr = att.uploaded_at ? att.uploaded_at.slice(0, 19).replace('T', ' ') : '';
+            html += `
+                <div class="list-group-item d-flex justify-content-between align-items-center py-2" style="background:transparent;border-color:#30363d;">
+                    <div class="d-flex align-items-center gap-2" style="min-width:0;">
+                        <i class="bi ${iconClass} fs-5 text-secondary"></i>
+                        <a href="/api/attachments/${att.id}/download" class="text-decoration-none text-light small text-truncate" target="_blank" download="${att.original_name}">
+                            ${att.original_name}
+                        </a>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                        <small class="text-secondary">${sizeStr}</small>
+                        <small class="text-secondary" style="font-size:.65rem;">${dateStr}</small>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="deleteAttachment(${att.id})" title="Delete attachment" style="font-size:.7rem;">
+                            <i class="bi bi-trash3"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+        html += '</div>';
+        container.innerHTML = html;
+    } catch (e) {
+        if (loadingEl) loadingEl.style.display = 'none';
+        container.innerHTML = '<div class="text-danger small text-center py-2">Failed to load attachments: ' + e.message + '</div>';
+    }
+}
+
+async function uploadAttachments(files) {
+    if (!files || files.length === 0) return;
+    
+    const container = document.getElementById('attachments-list');
+    container.innerHTML = '<div class="text-secondary small text-center py-2"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Uploading ' + files.length + ' file(s)...</div>';
+    
+    const formData = new FormData();
+    for (const file of files) {
+        formData.append('files', file);
+    }
+    
+    try {
+        const resp = await fetch('/api/events/{{ event.id }}/attachments', {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            await loadAttachments();
+        } else {
+            container.innerHTML = '<div class="text-danger small text-center py-2">Upload failed: ' + (data.error || 'Unknown error') + '</div>';
+        }
+    } catch (e) {
+        container.innerHTML = '<div class="text-danger small text-center py-2">Upload failed: ' + e.message + '</div>';
+    }
+}
+
+async function deleteAttachment(attachmentId) {
+    const pw = prompt('Enter password to delete this attachment:');
+    if (!pw) return;
+    
+    try {
+        const resp = await fetch('/api/attachments/' + attachmentId + '?password=' + encodeURIComponent(pw), {
+            method: 'DELETE',
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            await loadAttachments();
+        } else {
+            alert('Delete failed: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Delete failed: ' + e.message);
+    }
+}
+
+// ── Init on load ───────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    {% if analog_metrics %}
+    const analogMetrics = {{ analog_metrics | tojson | safe }};
+    {% else %}
+    const analogMetrics = null;
+    {% endif %}
+    {% if digital_pattern %}
+    const digitalPattern = {{ digital_pattern | tojson | safe }};
+    {% else %}
+    const digitalPattern = null;
+    {% endif %}
+    const eventData = { 
+        id: '{{ event.id }}', 
+        filename: '{{ merged_filename }}' 
+    };
+
+    if (typeof renderWaveform === 'function') {
+        renderWaveform('waveform-plot', eventData, analogMetrics, digitalPattern);
+    }
+    
+    // Load attachments
+    loadAttachments();
+});
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

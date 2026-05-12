@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% block title %}Settings — SRF Postmortem Viewer{% endblock %}
+
+{% block extra_head %}
+<style>
+.section-card {
+    background-color: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 0.5rem;
+    margin-bottom: 1.25rem;
+}
+.section-card .card-header {
+    background-color: #1c2128;
+    border-bottom: 1px solid #30363d;
+    font-weight: 600;
+}
+.form-label-sm { font-size: 0.85rem; color: #8b949e; margin-bottom: 0.2rem; }
+.status-badge { font-size: 0.8rem; padding: 0.2rem 0.6rem; }
+.log-box {
+    background-color: #0d1117; border: 1px solid #30363d; border-radius: 0.25rem;
+    padding: 0.75rem; max-height: 200px; overflow-y: auto;
+    font-family: 'SFMono-Regular', 'Fira Code', monospace; font-size: 0.8rem; color: #8b949e;
+}
+.log-box .log-running { color: #58a6ff; }
+.log-box .log-ok { color: #3fb950; }
+.log-box .log-error { color: #f85149; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if auth_required %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-4 text-center">
+        <i class="bi bi-lock-fill" style="font-size: 3rem; color: #f85149;"></i>
+        <h5 class="mt-3">Access Denied</h5>
+        <p class="text-secondary">Enter password via the Settings button in the navigation bar.</p>
+        <a href="/" class="btn btn-outline-secondary">Back to Events</a>
+    </div>
+</div>
+{% else %}
+
+<div class="row mb-3">
+    <div class="col">
+        <h4><i class="bi bi-gear-fill me-2"></i>Pipeline Control
+            <a href="/settings" class="btn btn-sm btn-outline-warning ms-2" title="Lock"><i class="bi bi-lock"></i></a>
+        </h4>
+        <p class="text-secondary">Configure watch folders, email settings, and run the monitoring pipeline.</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-5 mb-3">
+        <div class="section-card p-3">
+            <h6 class="mb-3"><i class="bi bi-activity me-2"></i>Pipeline Status</h6>
+            <div id="pipeline-status">
+                <div class="d-flex align-items-center mb-2">
+                    <span class="me-2">Status:</span>
+                    <span id="status-indicator" class="badge {% if pipeline_status.running %}bg-primary{% else %}bg-secondary{% endif %} status-badge">
+                        {{ "Running" if pipeline_status.running else "Idle" }}
+                    </span>
+                </div>
+                <div class="mb-1"><small class="text-secondary">Mode:</small> <span id="status-mode">{{ pipeline_status.mode or "-" }}</span></div>
+                <div class="mb-1"><small class="text-secondary">Progress:</small> <span id="status-progress">{{ pipeline_status.progress or "-" }}</span></div>
+                <div class="mb-1"><small class="text-secondary">Started:</small> <span id="status-started">{{ pipeline_status.started_at or "-" }}</span></div>
+                <div class="log-box mt-2" id="status-log"><div class="log-entry text-secondary">Pipeline idle.</div></div>
+            </div>
+        </div>
+        <div class="section-card p-3">
+            <h6 class="mb-3"><i class="bi bi-play-fill me-2"></i>Actions</h6>
+            <div class="d-grid gap-2">
+                <button class="btn btn-primary" onclick="runPipeline('batch')" id="btn-batch"><i class="bi bi-gear-wide-connected me-1"></i> Run Full Pipeline</button>
+<div class="btn-group">
+                <button class="btn btn-info" onclick="backupDB()" id="btn-backup"><i class="bi bi-cloud-download me-1"></i> Backup DB</button>
+                <button class="btn btn-warning" onclick="listBackups()" id="btn-list-backups"><i class="bi bi-archive me-1"></i> Get Backup Files</button>
+                </div>
+                <div id="restore-panel" style="display:none;" class="d-flex gap-2 align-items-center mt-1">
+                    <select class="form-select form-select-sm" id="backup-select" style="max-width:300px;">
+                        <option value="">Select backup to restore...</option>
+                    </select>
+                    <button class="btn btn-sm btn-danger" onclick="restoreBackup()"><i class="bi bi-exclamation-triangle"></i> Restore</button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('restore-panel').style.display='none'">Cancel</button>
+                </div>
+                <button class="btn btn-success" onclick="runPipeline('import')" id="btn-import"><i class="bi bi-database-fill-add me-1"></i> Import to DB</button>
+                <div class="btn-group">
+                    <button class="btn btn-warning" onclick="runPipeline('monitor-start')" id="btn-monitor-start"><i class="bi bi-eye-fill me-1"></i> Start Monitor</button>
+                    <button class="btn btn-danger" onclick="runPipeline('monitor-stop')" id="btn-monitor-stop"><i class="bi bi-stop-fill me-1"></i> Stop Monitor</button>
+                    <button class="btn btn-danger" onclick="runPipeline('stop')" id="btn-stop-all"><i class="bi bi-x-circle-fill me-1"></i> Stop All</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="section-card p-3">
+            <h6 class="mb-3"><i class="bi bi-folder2-open me-2"></i>Watch Folders</h6>
+            {% for i in range(3) %}
+            <div class="mb-2">
+                <label class="form-label-sm">Scope {{ i + 1 }}</label>
+                <input type="text" class="form-control form-control-sm watch-folder-input" id="watch-{{ i }}"
+                       value="{{ watch_folders[i] if i < watch_folders|length else '' }}">
+            </div>
+            {% endfor %}
+            <button class="btn btn-sm btn-outline-primary mt-1" onclick="saveWatchFolders()">
+                <i class="bi bi-save me-1"></i>Save Folders
+            </button>
+            <span id="folder-save-msg" class="ms-2 small"></span>
+        </div>
+        <div class="section-card p-3">
+            <h6 class="mb-3"><i class="bi bi-envelope-fill me-2"></i>Email Settings</h6>
+            <div class="row g-2">
+                <div class="col-md-6">
+                    <label class="form-label-sm">SMTP Server</label>
+                    <input type="text" class="form-control form-control-sm" id="email-server" value="{{ email.smtp_server }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label-sm">Port</label>
+                    <input type="number" class="form-control form-control-sm" id="email-port" value="{{ email.smtp_port }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label-sm">Subject</label>
+                    <input type="text" class="form-control form-control-sm" id="email-subject" value="{{ email.subject_template }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label-sm">Sender</label>
+                    <input type="email" class="form-control form-control-sm" id="email-sender" value="{{ email.sender_email }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label-sm">Receivers (comma separated)</label>
+                    <input type="text" class="form-control form-control-sm" id="email-receivers" value="{{ email.receiver_emails | join(', ') }}">
+                </div>
+            </div>
+            <button class="btn btn-sm btn-outline-primary mt-2" onclick="saveEmailSettings()"><i class="bi bi-save me-1"></i>Save</button>
+            <span id="email-save-msg" class="ms-2 small"></span>
+        </div>
+        <div class="section-card p-3">
+            <h6 class="mb-3">
+                <i class="bi bi-filetype-yml me-2"></i>Configuration (config.yaml)
+                <button class="btn btn-sm btn-outline-secondary ms-2" onclick="reloadYaml()"><i class="bi bi-arrow-clockwise"></i></button>
+            </h6>
+            <textarea class="form-control font-monospace" id="config-yaml" rows="10" style="font-size: 0.75rem;">{{ config_text }}</textarea>
+            <div class="mt-2">
+                <button class="btn btn-sm btn-outline-primary" onclick="saveYamlConfig()"><i class="bi bi-save me-1"></i>Save YAML</button>
+                <button class="btn btn-sm btn-outline-danger ms-1" onclick="resetServer()"><i class="bi bi-arrow-repeat me-1"></i>Reload Config</button>
+                <span id="yaml-save-msg" class="ms-2 small"></span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const _pw = new URLSearchParams(window.location.search).get('password') || '';
+function _ensurePw() {
+    if (_pw) return _pw;
+    const p = prompt('Enter admin password:');
+    if (p) {
+        // Update page URL so reloads preserve password
+        const url = new URL(window.location);
+        url.searchParams.set('password', p);
+        window.history.replaceState({}, '', url);
+    }
+    return p || '';
+}
+function _url(url) {
+    const pw = new URLSearchParams(window.location.search).get('password') || '';
+    return pw ? url + (url.includes('?')?'&':'?') + 'password=' + encodeURIComponent(pw) : url;
+}
+function api(url, o) { return fetch(_url(url), o); }
+
+function pollStatus() {
+    api('/api/pipeline/status').then(r=>r.json()).then(s=>{
+        document.getElementById('status-indicator').textContent = s.running ? 'Running' : 'Idle';
+        document.getElementById('status-indicator').className = s.running ? 'badge bg-primary status-badge' : 'badge bg-secondary status-badge';
+        document.getElementById('status-mode').textContent = s.mode || '-';
+        document.getElementById('status-progress').textContent = s.progress || '-';
+        document.getElementById('status-started').textContent = s.started_at || '-';
+        const el = document.getElementById('status-log');
+        if (s.running) {
+            el.innerHTML = '<div class="log-entry log-running">▶ ' + s.progress + '</div>';
+            ['btn-batch','btn-import','btn-monitor-start'].forEach(id=>document.getElementById(id).disabled=true);
+            document.getElementById('btn-monitor-stop').disabled = false;
+            setTimeout(pollStatus, 2000);
+        } else {
+            ['btn-batch','btn-import','btn-monitor-start'].forEach(id=>document.getElementById(id).disabled=false);
+            document.getElementById('btn-monitor-stop').disabled = true;
+            let html = '';
+            if (s.last_result) {
+                const r = s.last_result;
+                if (r.db_imported !== undefined) html += '<div class="log-entry log-ok">✓ Batch: ' + r.db_imported + ' events</div>';
+                else if (r.imported !== undefined) html += '<div class="log-entry log-ok">✓ Import: ' + r.imported + ' events</div>';
+                else html += '<div class="log-entry log-ok">✓ ' + JSON.stringify(r) + '</div>';
+            }
+            if (s.error) html += '<div class="log-entry log-error">✗ ' + s.error + '</div>';
+            if (!html) html = '<div class="log-entry text-secondary">Pipeline idle.</div>';
+            el.innerHTML = html;
+        }
+    });
+}
+
+function runPipeline(a) {
+    if (a === 'stop') {
+        fetch(_url('/api/pipeline/stop'), {method: 'POST'}).then(r => r.json()).then(d => {
+            document.getElementById('status-log').innerHTML += '<div class="log-entry log-error">⏹ Pipeline stop requested...</div>';
+        });
+        return;
+    }
+    document.getElementById('status-log').innerHTML = '<div class="log-entry log-running">▶ Starting ' + a + '...</div>';
+    const m = {batch:'/api/pipeline/batch',import:'/api/pipeline/import','monitor-start':'/api/pipeline/monitor/start','monitor-stop':'/api/pipeline/monitor/stop'};
+    api(m[a],{method:'POST'}).then(r=>r.json()).then(d=>{
+        if (d.error) document.getElementById('status-log').innerHTML += '<div class="log-entry log-error">✗ ' + d.error + '</div>';
+        else { document.getElementById('status-log').innerHTML += '<div class="log-entry log-ok">✓ ' + d.message + '</div>'; setTimeout(pollStatus, 500); }
+    });
+}
+
+function saveWatchFolders() {
+    const f=[],m=document.getElementById('folder-save-msg'); m.textContent='Saving...';
+    for(let i=0;i<3;i++) f.push(document.getElementById('watch-'+i).value.trim());
+    api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({watch_folders:f})})
+        .then(r=>r.json()).then(d=>{m.textContent=d.ok?'✅ Saved':'❌ '+(d.error||'');m.className=d.ok?'text-success':'text-danger';if(d.ok)setTimeout(()=>m.textContent='',3000);});
+}
+
+function saveEmailSettings() {
+    const m=document.getElementById('email-save-msg'); m.textContent='Saving...';
+    api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({email:{smtp_server:document.getElementById('email-server').value, smtp_port:parseInt(document.getElementById('email-port').value)||587, sender_email:document.getElementById('email-sender').value, receiver_emails:document.getElementById('email-receivers').value.split(',').map(s=>s.trim()).filter(s=>s), subject_template:document.getElementById('email-subject').value}})
+    }).then(r=>r.json()).then(d=>{m.textContent=d.ok?'✅ Saved':'❌ '+(d.error||'');m.className=d.ok?'text-success':'text-danger';if(d.ok)setTimeout(()=>m.textContent='',3000);});
+}
+
+function backupDB() {
+    const log = document.getElementById('status-log');
+    log.innerHTML = '<div class="log-entry log-running">▶ Backing up database...</div>';
+    api('/api/db/backup', {method:'POST'}).then(r=>r.json()).then(d => {
+        if (d.ok) {
+            log.innerHTML += '<div class="log-entry log-ok">✓ Backup saved: ' + d.path + '</div>';
+        } else {
+            log.innerHTML += '<div class="log-entry log-error">✗ ' + (d.error || 'Backup failed') + '</div>';
+        }
+    }).catch(e => {
+        log.innerHTML += '<div class="log-entry log-error">✗ Network error: ' + e.message + '</div>';
+    });
+}
+
+function listBackups() {
+    const panel = document.getElementById('restore-panel');
+    const select = document.getElementById('backup-select');
+    panel.style.display = 'flex';
+    select.disabled = true;
+    select.innerHTML = '<option value="">Loading backups...</option>';
+    
+    // Ensure password is set before API call
+    const pw = new URLSearchParams(window.location.search).get('password') || '';
+    if (!pw) {
+        const entered = _ensurePw();
+        if (!entered) {
+            select.innerHTML = '<option value="">Password required</option>';
+            select.disabled = false;
+            return;
+        }
+    }
+    
+    api('/api/db/backups').then(r=>r.json()).then(d => {
+        select.innerHTML = '<option value="">Select backup to restore...</option>';
+        if (d.error) {
+            select.innerHTML = '<option value="">Error: ' + d.error + '</option>';
+        } else if (d.ok && d.backups.length > 0) {
+            d.backups.forEach(b => {
+                const size = b.size > 1048576 ? (b.size/1048576).toFixed(1)+'MB' : (b.size/1024).toFixed(1)+'KB';
+                const date = new Date(b.modified * 1000).toLocaleString();
+                select.innerHTML += '<option value="' + b.path + '">' + b.filename + ' (' + size + ', ' + date + ')</option>';
+            });
+        } else {
+            select.innerHTML = '<option value="">No backups found</option>';
+        }
+        select.disabled = false;
+    }).catch(e => {
+        select.innerHTML = '<option value="">Failed to load backups: ' + e.message + '</option>';
+        select.disabled = false;
+    });
+}
+
+function restoreBackup() {
+    const select = document.getElementById('backup-select');
+    const path = select.value;
+    if (!path) { alert('Select a backup file first.'); return; }
+    const name = select.options[select.selectedIndex].text;
+    if (!confirm('⚠️ RESTORE from:\n\n' + name + '\n\nThis will REPLACE the current database with the backup.\nCurrent DB will be saved as events.db.restore_bak.\n\nProceed?')) return;
+    const log = document.getElementById('status-log');
+    log.innerHTML = '<div class="log-entry log-running">▶ Restoring from ' + name + '...</div>';
+    api('/api/db/restore', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({backup_file: path})
+    }).then(r=>r.json()).then(d => {
+        if (d.ok) {
+            log.innerHTML += '<div class="log-entry log-ok">✓ Restore complete! Restored: ' + (d.restored || []).join(', ') + '</div>';
+            log.innerHTML += '<div class="log-entry log-running">⟳ Reloading page in 3 seconds...</div>';
+            setTimeout(() => location.reload(), 3000);
+        } else {
+            log.innerHTML += '<div class="log-entry log-error">✗ ' + (d.error || 'Restore failed') + '</div>';
+        }
+    }).catch(e => {
+        log.innerHTML += '<div class="log-entry log-error">✗ Network error: ' + e.message + '</div>';
+    });
+}
+
+function saveYamlConfig() {
+    const m=document.getElementById('yaml-save-msg'); m.textContent='Saving...';
+    api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({raw_yaml:document.getElementById('config-yaml').value})})
+        .then(r=>r.json()).then(d=>{m.textContent=d.ok?'✅ Saved':'❌ '+(d.error||'');m.className=d.ok?'text-success':'text-danger';if(d.ok)setTimeout(()=>m.textContent='',3000);});
+}
+
+function reloadYaml() { api('/api/config').then(r=>r.json()).then(d=>{if(d.yaml)document.getElementById('config-yaml').value=d.yaml;}); }
+function resetServer() { api('/api/pipeline/reset',{method:'POST'}).then(r=>r.json()).then(d=>{const m=document.getElementById('yaml-save-msg');m.textContent=d.ok?'✅ Reloaded':'❌ '+(d.error||'');m.className=d.ok?'text-success':'text-danger';if(d.ok)setTimeout(()=>m.textContent='',3000);reloadYaml();}); }
+
+document.addEventListener('DOMContentLoaded', pollStatus);
+</script>
+{% endblock %}

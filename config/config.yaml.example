@@ -1,0 +1,89 @@
+paths:
+  processed_dir: ./data/processed
+  merged_dir: ./data/merged
+  results_dir: ./data/results
+  reports_dir: ./data/reports
+  graphs_dir: ./data/graphs
+  log_dir: ./logs
+  log_file: srf_postmortem.log
+  watch_folders:
+  - /mnt/w/
+  - /mnt/x/
+  - /mnt/y/
+  graphs_db_dir: ./db/graphs
+db:
+  path: ./db/events.db
+access:
+  password: 'your_password_here'
+  session_ttl_minutes: 60
+web:
+  host: 0.0.0.0
+  port: 50510
+  title: SRF Postmortem Viewer
+system:
+  mode: batch
+  check_interval: 1.0
+email:
+  smtp_server: smtp.gmail.com
+  smtp_port: 587
+  sender_email: sehwanpark@g.postech.edu
+  sender_password: 'your_app_password_here'
+  receiver_emails:
+  - refull98@gmail.com
+  subject_template: SRF Event Report - {case}
+classification:
+  beam_min_v: 2.0
+  dump_ratio: 0.5
+  digital_min_persistence_ms: 0.01
+  digital_delay_compensation_ms: 0.4
+  simultaneous_window_ms: 0.01
+  highhigh_threshold: 1.4
+  low_threshold: 0.9
+  lowlow_threshold: 0.5
+  baseline_start_s: -0.5
+  baseline_end_s: -0.45
+  baseline_clip_v: 0.01
+  search_start_s: -0.045
+  search_end_s: 0.05
+preprocessor:
+  segment_pre_s: 0.05
+  segment_post_s: 0.05
+  decimation_factor: 2
+  parquet_compression: zstd
+grouper:
+  window_s: 180.0
+  wait_timeout: 300
+  merge_strategy: full_join
+visualization:
+  analog_colors:
+    B: '#FFE033'
+    C: '#00D4FF'
+    D: '#FF1E6B'
+    E: '#96D800'
+  figure_size:
+  - 15
+  - 8
+  dpi: 150
+report:
+  include_sections:
+  - event_summary
+  - classification_result
+  - signal_metrics
+  - digital_events
+  - recommended_actions
+  - attachment_list
+  output_format: markdown
+  include_graphs: true
+  include_raw_data: false
+logging:
+  level: INFO
+  format: json
+  rotation: daily
+  retention_days: 30
+  console_enabled: true
+  file_enabled: true
+monitor:
+  data_root: /home/shpark/.openclaw/code-team-workspace/SRF_postmortem/data
+  merged_dir: merged
+  graphs_dir: graphs
+  reports_dir: reports

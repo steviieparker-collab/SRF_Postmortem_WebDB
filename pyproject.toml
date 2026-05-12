@@ -1,0 +1,82 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "srf-postmortem"
+version = "0.2.0"
+description = "Unified SRF Postmortem event analysis pipeline + web viewer"
+readme = "README.md"
+authors = [
+    {name = "Sehwan PARK", email = "stevieepark@example.com"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Operating System :: OS Independent",
+]
+keywords = ["srf", "postmortem", "beam-dump", "monitoring", "analysis", "web-viewer"]
+requires-python = ">=3.10"
+dependencies = [
+    # Data processing
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "polars>=0.20.0",
+    "scipy>=1.10.0",
+    # Config / validation
+    "pyyaml>=6.0",
+    "pydantic>=2.0.0",
+    # Visualization
+    "matplotlib>=3.7.0",
+    "plotly>=5.18",
+    # Web server
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+    "aiofiles>=23.0",
+    "aiosqlite>=0.20",
+    # System
+    "watchdog>=3.0.0",
+    "Pillow>=10.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+]
+system_tray = [
+    "pystray>=0.19.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/srf-postmortem"
+Repository = "https://github.com/your-org/srf-postmortem.git"
+
+[project.scripts]
+srf-postmortem = "src.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+]

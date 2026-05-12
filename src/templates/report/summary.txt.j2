@@ -1,0 +1,30 @@
+SRF EVENT REPORT
+=================
+File: {{ event.filename }}
+Time: {{ timestamp_str }}
+Case: {{ classification.case_str }} - {{ classification.description }}
+Confidence: {{ confidence_pct }}
+Fault: {{ classification.fault }}
+
+{% if has_analog -%}
+Analog Signals:
+{% for stat in analog_stats -%}
+  {{ stat.channel }}: mean={{ stat.mean | round(4) }}, min={{ stat.min | round(4) }}, max={{ stat.max | round(4) }}
+{% endfor %}
+{% endif %}
+
+{% if has_digital -%}
+Digital Events:
+{% for dc in digital_counts -%}
+  {{ dc.channel }}: {{ dc.count }}
+{% endfor %}
+{% endif %}
+
+{% if has_timeline -%}
+Timeline:
+{% for entry in timeline -%}
+  [{{ entry.group }}] {{ entry.channel }} @ {{ entry.time_effective | round(4) }}ms ({{ entry.type }}, {{ entry.value }})
+{% endfor %}
+{% endif %}
+--
+Generated at: {{ generated_at }}

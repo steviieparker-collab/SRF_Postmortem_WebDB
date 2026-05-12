@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+
+{% block title %}Case Statistics — SRF Postmortem Viewer{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col">
+        <h4 class="mb-0"><i class="bi bi-bar-chart-fill me-2"></i>Case Statistics</h4>
+    </div>
+    <div class="col-auto d-flex gap-2">
+        <span class="text-secondary small align-self-center" id="stats-info"></span>
+        <a href="/" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Back to Events
+        </a>
+    </div>
+</div>
+
+<!-- Filter Controls -->
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-1">
+                <label class="form-label small mb-1">Year</label>
+                <select class="form-select form-select-sm" id="stats-year" onchange="var p=new URLSearchParams(location.search);var v=this.value;if(v)p.set('year',v);else p.delete('year');location.href='?'+p.toString()">
+                    <option value="">All years</option>
+                    {% for y in years %}
+                    <option value="{{ y }}">{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-auto d-flex align-items-center" style="padding-bottom:2px;">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="stats-hide-ms"
+                           onchange="var p=new URLSearchParams(location.search);var y=document.getElementById('stats-year').value;if(y)p.set('year',y);p.set('hide_ms',this.checked?'true':'false');location.href='?'+p.toString()"
+                           autocomplete="off"
+                           {% if hide_ms == 'true' %}checked{% endif %}>
+                    <label class="form-check-label small" for="stats-hide-ms">MS 제외</label>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">User Beam Time</label>
+                <select class="form-select form-select-sm" id="stats-beam-time" size="6" multiple>
+                    <option value="" selected>All</option>
+                    {% for bt in user_beam_times %}
+                    <option value="{{ bt }}">{{ bt }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-1">
+                <button class="btn btn-primary btn-sm w-100" onclick="loadStats()">
+                    <i class="bi bi-arrow-repeat"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading -->
+<div id="stats-loading" class="text-center text-secondary py-5" style="display:none;">
+    <div class="spinner-border spinner-border-sm me-2" role="status"></div>Loading...
+</div>
+
+<!-- Results -->
+<div id="stats-content">
+    <!-- Summary -->
+    <div class="row g-2 mb-3">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body py-2">
+                    <div class="h4 mb-0" id="stat-total">-</div>
+                    <small class="text-secondary">Total Events</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body py-2">
+                    <div class="h4 mb-0" id="stat-case-count">-</div>
+                    <small class="text-secondary">Cases Active</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body py-2">
+                    <div class="h4 mb-0" id="stat-top-fault">-</div>
+                    <small class="text-secondary">Top Case</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts: Case distribution + Fault type distribution -->
+    <div class="row g-2 mb-3">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header py-1"><strong>Case Distribution</strong></div>
+                <div class="card-body p-2">
+                    <div id="chart-case-dist" style="width:100%;height:550px;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header py-1"><strong>Fault Type Distribution</strong></div>
+                <div class="card-body p-2">
+                    <div id="chart-fault-dist" style="width:100%;height:350px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fault Type Histogram over time -->
+    <div class="card mb-3">
+        <div class="card-header py-1">
+            <strong>Fault Type Over Time</strong>
+            <small class="text-secondary ms-2" id="histogram-subtitle"></small>
+        </div>
+        <div class="card-body p-2">
+            <div id="chart-histogram" style="width:100%;height:400px;"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Unified case color palette (0-13) — used in all charts and badges
+const CASE_COLORS = [
+    '#636efa',  // Case 0  — indigo
+    '#ef553b',  // Case 1  — red
+    '#00cc96',  // Case 2  — teal
+    '#ab63fa',  // Case 3  — purple
+    '#ffa15a',  // Case 4  — orange
+    '#19d3f3',  // Case 5  — cyan
+    '#ff6692',  // Case 6  — pink
+    '#b6e880',  // Case 7  — lime
+    '#ff97ff',  // Case 8  — light magenta
+    '#fecb52',  // Case 9  — yellow
+    '#8a9fd1',  // Case 10 — lavender
+    '#6b8e8e',  // Case 11 — teal-gray
+    '#c4b0a0',  // Case 12 — tan
+    '#a1c9f4',  // Case 13 — light blue
+];
+
+function caseColor(caseId) {
+    return CASE_COLORS[Math.max(0, Math.min(caseId, 13))];
+}
+
+function extractCaseId(faultTypeName) {
+    const m = (faultTypeName || '').match(/^Case (\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
+}
+
+function getSelectedBeamTimes() {
+    const sel = document.getElementById('stats-beam-time');
+    const values = [];
+    for (const opt of sel.options) {
+        if (opt.selected) {
+            if (opt.value === '') {
+                return [];  // All selected
+            }
+            values.push(opt.value);
+        }
+    }
+    return values;
+}
+
+async function loadStats() {
+    const loading = document.getElementById('stats-loading');
+    loading.style.display = 'block';
+
+    const year = document.getElementById('stats-year').value;
+    const btList = getSelectedBeamTimes();
+    const hideMs = document.getElementById('stats-hide-ms').checked;
+
+    // Load pie/bar stats
+    const params = new URLSearchParams();
+    if (btList.length > 0) params.set('user_beam_time', btList.join(','));
+    if (year) {
+        params.set('date_from', year + '-01-01');
+        params.set('date_to', (parseInt(year) + 1) + '-01-01');
+    }
+    if (hideMs) params.set('hide_ms', 'true');
+
+    try {
+        const resp = await fetch('/api/stats/cases?' + params.toString());
+        const data = await resp.json();
+        renderStats(data);
+        document.getElementById('stats-info').textContent = data.total + ' events';
+    } catch (e) {
+        console.error('Stats error:', e);
+    }
+
+    // Load histogram
+    const histParams = new URLSearchParams();
+    if (year) histParams.set('year', year);
+    if (btList.length > 0) histParams.set('user_beam_time', btList.join(','));
+    if (hideMs) histParams.set('hide_ms', 'true');
+    try {
+        const resp = await fetch('/api/stats/histogram?' + histParams.toString());
+        const data = await resp.json();
+        renderHistogram(data, year, btList.join(',') || null, hideMs);
+    } catch (e) {
+        console.error('Histogram error:', e);
+    }
+
+    loading.style.display = 'none';
+}
+
+function renderStats(data) {
+    const CASE_FAULT_NAMES = {
+        0: 'Unclassified', 1: 'Case 1: Beam_loss', 2: 'Case 2: Beam_loss', 3: 'Case 3: RF_Interlock',
+        4: 'Case 4: MIS', 5: 'Case 5: PSI', 6: 'Case 6: Multi_interlock(same group)',
+        7: 'Case 7: Multi_interlock(different group)', 8: 'Case 8: Cavity_blip',
+        9: 'Case 9: Cavity_quench', 10: 'Case 10: RF_path_Forward', 11: 'Case 11: RF_path_Cavity',
+        12: 'Case 12: Cavity_detune', 13: 'Case 13: RF_source_fault',
+    };
+
+    document.getElementById('stat-total').textContent = data.total;
+    document.getElementById('stat-case-count').textContent = data.case_stats.filter(c => c.case_id > 0).length;
+    document.getElementById('stat-top-fault').textContent = data.fault_stats.length > 0
+        ? `${data.fault_stats[0].fault_type} (${data.fault_stats[0].count})` : '-';
+
+    // Case distribution pie — 70% diameter, centered
+    const caseChart = [{
+        labels: data.case_stats.map(c => c.case_id === 0 ? 'Unclassified' : (CASE_FAULT_NAMES[c.case_id] || `Case ${c.case_id}`)),
+        values: data.case_stats.map(c => c.count),
+        type: 'pie',
+        domain: { x: [0.1, 0.9], y: [0.1, 0.9] },
+        textfont: { size: 10 },
+        marker: { colors: data.case_stats.map(c => caseColor(c.case_id)) },
+        textinfo: 'label+percent',
+        hovertemplate: '%{label}<br>%{value} events (%{percent})<extra></extra>',
+    }];
+    Plotly.newPlot('chart-case-dist', caseChart, {
+        paper_bgcolor: '#0d1117', plot_bgcolor: '#0d1117',
+        font: { color: '#8b949e', size: 11 },
+        margin: { l: 40, r: 40, t: 40, b: 20 },
+        showlegend: false,
+    }, { responsive: true, displaylogo: false });
+
+    // Fault type bar with % — colored by case
+    const total = data.total || 1;
+    const shortNames = data.fault_stats.map(f => (f.fault_type || 'Unknown').replace('Case ', 'C').replace('Multi_interlock', 'Multi_intlk'));
+    const faultColors = data.fault_stats.map(f => caseColor(extractCaseId(f.fault_type)));
+    const faultChart = [{
+        x: shortNames,
+        y: data.fault_stats.map(f => f.count),
+        type: 'bar',
+        marker: { color: faultColors },
+        text: data.fault_stats.map(f => `${f.count} (${((f.count / total) * 100).toFixed(1)}%)`),
+        textposition: 'outside',
+        textfont: { size: 9 },
+        hovertemplate: '%{customdata}<br>%{y} events (%{customdata2}%)<extra></extra>',
+        customdata: data.fault_stats.map(f => f.fault_type || 'Unknown'),
+        customdata2: data.fault_stats.map(f => ((f.count / total) * 100).toFixed(1)),
+    }];
+    // Compute max y for y-axis padding
+    const ftMaxY = Math.max(...data.fault_stats.map(f => f.count), 0);
+    Plotly.newPlot('chart-fault-dist', faultChart, {
+        paper_bgcolor: '#0d1117', plot_bgcolor: '#0d1117',
+        font: { color: '#8b949e', size: 11 },
+        xaxis: { gridcolor: '#21262d', color: '#8b949e', tickangle: -30, automargin: true },
+        yaxis: { gridcolor: '#21262d', color: '#8b949e', title: 'Count', range: [0, ftMaxY + ftMaxY * 0.2] },
+        margin: { l: 40, r: 20, t: 20, b: 120 },
+        bargap: 0.3,
+    }, { responsive: true, displaylogo: false });
+}
+
+function renderHistogram(data, year, bt, hideMs) {
+    const subtitle = document.getElementById('histogram-subtitle');
+    if (bt) {
+        subtitle.textContent = `— ${bt}${hideMs ? ' (MS 제외)' : ''}`;
+    } else if (year) {
+        subtitle.textContent = `— ${year}${hideMs ? ' (MS 제외)' : ''}`;
+    } else {
+        subtitle.textContent = `— All time${hideMs ? ' (MS 제외)' : ''}`;
+    }
+
+    // Debug: log first few periods to verify beam time labels
+    if (data.periods && data.periods.length > 0) {
+        console.log('Histogram periods:', data.periods.slice(0,5));
+    }
+
+    if (!data.traces || data.traces.length === 0 || data.periods.length === 0) {
+        document.getElementById('chart-histogram').innerHTML =
+            '<div class="text-center text-secondary py-5 small">No data for this selection</div>';
+        return;
+    }
+
+    // Auto height & Y-axis max+10 padding
+    const histHeight = Math.max(400, Math.min(800, data.periods.length * 30 + 150));
+    document.getElementById('chart-histogram').style.height = histHeight + 'px';
+    
+    // Compute max y value for padding
+    let maxY = 0;
+    for (const t of data.traces) {
+        for (const v of t.y) {
+            if (v > maxY) maxY = v;
+        }
+    }
+
+    const layout = {
+        paper_bgcolor: '#0d1117',
+        plot_bgcolor: '#0d1117',
+        font: { color: '#8b949e', size: 11 },
+        xaxis: {
+            gridcolor: '#21262d',
+            color: '#8b949e',
+            tickangle: -45,
+            automargin: true,
+            type: 'category',
+        },
+        yaxis: {
+            gridcolor: '#21262d',
+            color: '#8b949e',
+            title: 'Events',
+            range: [0, maxY + 10],
+        },
+        margin: { l: 40, r: 20, t: 30, b: 120 },
+        barmode: 'stack',
+        legend: { font: { size: 9 }, orientation: 'h', y: -0.25 },
+        hovermode: 'x unified',
+    };
+
+    // Compute totals per period for percentage
+    const periodTotals = {};
+    for (const t of data.traces) {
+        for (let j = 0; j < t.x.length; j++) {
+            periodTotals[t.x[j]] = (periodTotals[t.x[j]] || 0) + t.y[j];
+        }
+    }
+    
+    const traces = data.traces.map((t) => {
+        const text = t.y.map((v, j) => {
+            const total = periodTotals[t.x[j]] || 1;
+            return v > 0 ? v + '(' + ((v / total) * 100).toFixed(1) + '%)' : '';
+        });
+        return {
+            ...t,
+            marker: { color: caseColor(extractCaseId(t.name)) },
+            text: text,
+            textposition: 'inside',
+            textfont: { size: 9, color: '#fff' },
+            hovertemplate: '%{x}<br>%{y} events<extra></extra>',
+        };
+    });
+
+    Plotly.newPlot('chart-histogram', traces, layout, { responsive: true, displaylogo: false });
+}
+
+// Restore filters from URL on init
+document.addEventListener('DOMContentLoaded', function() {
+    var p = new URLSearchParams(location.search);
+    if (p.has('year')) {
+        document.getElementById('stats-year').value = p.get('year');
+    }
+    loadStats();
+});
+</script>
+{% endblock %}

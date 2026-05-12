@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ko" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SRF Postmortem WebDB{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="/static/css/style.css?v=9" rel="stylesheet">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark border-bottom border-secondary mb-4">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center" href="/">
+                <i class="bi bi-lightning-charge-fill text-warning me-2"></i>
+                <strong>SRF Postmortem WebDB</strong>
+            </a>
+            <div class="d-flex align-items-center gap-2">
+                <span id="pipeline-status" class="badge bg-secondary d-flex align-items-center gap-1" style="font-weight:400;font-size:.72rem;">
+                    <span id="status-dot" style="width:8px;height:8px;border-radius:50%;background:#666;"></span>
+                    <span id="status-label">Idle</span>
+                </span>
+                <a href="/stats" class="btn btn-sm btn-outline-secondary" title="Statistics">
+                    <i class="bi bi-bar-chart-fill"></i> Stats
+                </a>
+                <a href="#" class="btn btn-sm btn-outline-secondary" title="Pipeline Control"
+                   onclick="var pw=prompt('Enter password:');if(pw)location.href='/settings?password='+encodeURIComponent(pw);return false;">
+                    <i class="bi bi-gear-fill"></i> Settings
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container-fluid px-4">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer style="background:#161b22;border-top:1px solid #30363d;padding:1.5rem 0;margin-top:3rem;font-size:.85rem;color:#8b949e;">
+        <div class="container-fluid px-4">
+            <div class="row">
+                <div class="col-md-7">
+                    <strong>SRF Postmortem Viewer</strong> &mdash; PAL (Pohang Accelerator Laboratory) PLS-II SRF postmortem beam dump event analysis system.<br>
+                    <small>&copy; 2026 PAL. All rights reserved.</small>
+                </div>
+                <div class="col-md-5 text-md-end mt-2 mt-md-0">
+                    <a href="https://pal.postech.ac.kr/" target="_blank" class="me-3">PAL</a>
+                    <a href="https://plsarchiver.postech.ac.kr/" target="_blank" class="me-3">PLS-II Status</a>
+                    <a href="/api/events" target="_blank">API</a><br>
+                    <small>Developed by Sehwan PARK<br>
+                    054-279-1628 &middot; <a href="mailto:sehwanpark@postech.ac.kr" style="color:#58a6ff;">sehwanpark@postech.ac.kr</a></small>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+    {% block extra_scripts %}{% endblock %}
+    <script>
+    // Pipeline status poller (every 5s)
+    setInterval(function() {
+        fetch('/api/pipeline/status')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                var dot = document.getElementById('status-dot');
+                var label = document.getElementById('status-label');
+                var badge = document.getElementById('pipeline-status');
+                if (d.running) {
+                    dot.style.background = '#2ea043';
+                    label.textContent = d.mode === 'monitor' ? 'Monitoring' : d.mode === 'batch' ? 'Running' : 'Running';
+                    badge.className = 'badge bg-success d-flex align-items-center gap-1';
+                } else {
+                    dot.style.background = '#666';
+                    label.textContent = 'Idle';
+                    badge.className = 'badge bg-secondary d-flex align-items-center gap-1';
+                }
+            })
+            .catch(function() {
+                var dot = document.getElementById('status-dot');
+                dot.style.background = '#d32f2f';
+                document.getElementById('status-label').textContent = 'Error';
+            });
+    }, 5000);
+    </script>
+</body>
+</html>

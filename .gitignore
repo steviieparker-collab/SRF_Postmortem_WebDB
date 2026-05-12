@@ -1,0 +1,47 @@
+# ── Generated / Runtime Data ──
+data/merged/
+data/attachments/
+data/graphs/
+data/processed/
+data/results/
+data/reports/
+data/watch/
+data/append/scope*/
+data/append/merged/
+data/append/*.txt
+data/srf_events.db
+
+# ── Database ──
+db/*.db
+db/backups/
+
+# ── Logs ──
+logs/
+*.log
+nohup.out
+
+# ── Config (contains secrets) ──
+config/config.yaml
+!config/config.yaml.example
+
+# ── Python ──
+__pycache__/
+*.pyc
+*.pyo
+.eggs/
+dist/
+build/
+*.egg-info/
+
+# ── OS / Editor ──
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Memory / Notes ──
+memory/
+실행방법.txt

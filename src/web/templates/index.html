@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+
+{% block title %}Events — SRF Postmortem Viewer{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+.bt-strip {
+    width: 24px;
+    min-width: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-right: 1px solid #30363d;
+    margin: -8px 10px -8px -12px;
+    padding: 8px 2px;
+    background: #1a1f27;
+    border-radius: 8px 0 0 8px;
+    font-size: .7rem;
+    line-height: 1;
+    color: #8b949e;
+    font-weight: 600;
+}
+.bt-strip span {
+    writing-mode: unset;
+    transform: rotate(-90deg);
+    white-space: nowrap;
+}
+footer {
+    background-color: #161b22;
+    border-top: 1px solid #30363d;
+    padding: 1.5rem 0;
+    margin-top: 3rem;
+    font-size: 0.85rem;
+    color: #8b949e;
+}
+footer a { color: #58a6ff; text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+
+/* Multi-select */
+.event-card { cursor: pointer; }
+.event-card.selected { border-color: #58a6ff !important; box-shadow: 0 0 0 1px #58a6ff; }
+.event-check { display: none; margin-right: 8px; align-self: center; }
+.multi-on .event-check { display: block; }
+.batch-bar {
+    display: none;
+    background: #1c2128;
+    border: 1px solid #30363d;
+    border-radius: 0.5rem;
+    padding: 0.5rem 1rem;
+    margin-bottom: 1rem;
+    align-items: center;
+    gap: 0.75rem;
+}
+.batch-bar.show { display: flex; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col">
+        <h4 class="mb-0"><i class="bi bi-list-ul me-2"></i>Event History</h4>
+        <small class="text-secondary">{{ total }} events total</small>
+    </div>
+    <div class="col-auto"></div>
+</div>
+
+<!-- Filters -->
+<form method="GET" class="row g-2 mb-3" id="filter-form">
+    <div class="col-md-auto">
+        <select class="form-select form-select-sm" name="year" onchange="this.form.submit()" style="min-width:100px;">
+            <option value="">All years</option>
+            {% for y in years %}
+            <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+            {% endfor %}
+        </select>
+        <div class="mt-1 d-flex gap-3">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="hide-ms-check"
+                       onchange="const h=document.getElementById('hide-ms-hidden');h.value=this.checked?'true':'false';document.getElementById('filter-form').submit()"
+                       autocomplete="off"
+                       {% if hide_ms == 'true' %}checked{% endif %}>
+                <label class="form-check-label small" for="hide-ms-check">MS 제외</label>
+                <input type="hidden" id="hide-ms-hidden" name="hide_ms" value="{{ hide_ms }}">
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="multi-toggle" autocomplete="off">
+                <label class="form-check-label small" for="multi-toggle">Multi</label>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <select class="form-select form-select-sm" id="bt-multi" name="user_beam_time" size="6" multiple>
+            <option value="" {% if not user_beam_time %}selected{% endif %}>All beam times</option>
+            {% for bt in user_beam_times %}
+            <option value="{{ bt }}" {% if bt == user_beam_time %}selected{% endif %}>{{ bt }}</option>
+            {% endfor %}
+        </select>
+        <div class="mt-1 d-flex gap-2">
+            <small class="text-secondary">Ctrl+click / Shift+click</small>
+            <a href="?bt_sort={{ 'asc' if bt_sort == 'desc' else 'desc' }}{% if current_fault_type %}&fault_type={{ current_fault_type }}{% endif %}{% if search %}&search={{ search }}{% endif %}{% if year %}&year={{ year }}{% endif %}&hide_ms={{ hide_ms }}"
+               class="btn btn-outline-secondary btn-sm py-0"
+               title="Toggle sort order"
+               style="font-size:.7rem;">
+                {% if bt_sort == 'desc' %}
+                <i class="bi bi-sort-down"></i>
+                {% else %}
+                <i class="bi bi-sort-up"></i>
+                {% endif %}
+            </a>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <select class="form-select form-select-sm" name="fault_type" onchange="this.form.submit()">
+            <option value="">All fault types</option>
+            {% for ft in fault_types %}
+            <option value="{{ ft.name }}" {% if ft.name == current_fault_type %}selected{% endif %}>
+                {{ ft.name }} ({{ ft.event_count }})
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-2">
+        <input type="text" class="form-control form-control-sm" name="search"
+               placeholder="Search notes..." value="{{ search }}">
+    </div>
+    <div class="col-md-1">
+        <button type="submit" class="btn btn-primary btn-sm w-100">
+            <i class="bi bi-search"></i> Filter
+        </button>
+    </div>
+    <div class="col-md-1">
+        <a href="/?hide_ms=true" class="btn btn-outline-secondary btn-sm w-100">Clear</a>
+    </div>
+</form>
+
+<!-- Batch Action Bar -->
+<div id="batch-bar" class="batch-bar">
+    <div class="form-check mb-0">
+        <input class="form-check-input" type="checkbox" id="select-all">
+        <label class="form-check-label small" for="select-all">Select All</label>
+    </div>
+    <span class="text-secondary small" id="batch-count">0 selected</span>
+    <button class="btn btn-danger btn-sm" onclick="batchDelete()" id="batch-delete-btn">
+        <i class="bi bi-trash"></i> Delete
+    </button>
+    <button class="btn btn-warning btn-sm" onclick="batchBeamTime()" id="batch-bt-btn">
+        <i class="bi bi-pencil"></i> Set Beam Time
+    </button>
+</div>
+
+<!-- Event List -->
+{% if events %}
+<div class="row" id="event-list">
+    {% for event in events %}
+    <div class="col-12 col-lg-6 mb-2 event-item">
+        <a href="/events/{{ event.id }}{% if filter_query %}?{{ filter_query }}{% endif %}{% if bt_sort and bt_sort != 'desc' %}{% if filter_query %}&{% else %}?{% endif %}bt_sort={{ bt_sort }}{% endif %}" class="text-decoration-none event-card-link">
+        <div class="card event-card h-100" data-id="{{ event.id }}">
+            <div class="card-body d-flex">
+                <div class="event-check">
+                    <input class="form-check-input event-cb" type="checkbox" value="{{ event.id }}">
+                </div>
+                <div class="bt-strip">
+                    {% if event.user_beam_time %}
+                    <span>{{ event.user_beam_time }}</span>
+                    {% endif %}
+                </div>
+                <div class="flex-grow-1" style="min-width:0;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong class="text-light event-id">{{ event.id }}</strong>
+                            {% if event.fault_type %}
+                            <span class="badge case-badge-{{ event.fault_type|extract_case_id }} me-1">{{ event.fault_type }}</span>
+                            {% endif %}
+                            {% if event.user_fault_type and event.user_fault_type != event.fault_type %}
+                            <span class="badge case-badge-{{ event.user_fault_type|extract_case_id }} ms-1" title="User override">
+                                <i class="bi bi-pencil"></i> {{ event.user_fault_type }}
+                            </span>
+                            {% endif %}
+                        </div>
+                        <small class="text-secondary">{{ event.timestamp[:19] }}</small>
+                    </div>
+                    <div class="mt-1 small text-secondary d-flex flex-wrap gap-2">
+                        {% if event.beam_current is not none %}
+                        <span><i class="bi bi-water"></i> {{ "%.0f"|format(event.beam_current) }}mA</span>
+                        {% endif %}
+                        {% if attachment_counts and attachment_counts.get(event.id, 0) > 0 %}
+                        <span class="badge" style="background:#1f6feb;color:#fff;font-size:.7rem;">
+                            <i class="bi bi-paperclip"></i> {{ attachment_counts[event.id] }}
+                        </span>
+                        {% endif %}
+                        {% if event.case_description %}
+                        <span class="small" style="color:#58a6ff;">{{ event.case_description[:50] }}{% if event.case_description|length > 50 %}...{% endif %}</span>
+                        {% endif %}
+                    </div>
+                    {% if event.notes and event.notes|length > 0 %}
+                    <div class="mt-0 small" style="color:#d29922;font-size:.7rem;">
+                        <i class="bi bi-chat-text"></i> {{ event.notes[:40] }}{% if event.notes|length > 40 %}...{% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </a>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<nav class="mt-3">
+    <ul class="pagination pagination-sm justify-content-center">
+        {% set extra_params = '' %}
+        {% if current_fault_type %}{% set extra_params = extra_params + '&fault_type=' + current_fault_type %}{% endif %}
+        {% if search %}{% set extra_params = extra_params + '&search=' + search %}{% endif %}
+        {% if user_beam_time %}{% set extra_params = extra_params + '&user_beam_time=' + user_beam_time %}{% endif %}
+        {% if bt_sort != 'desc' %}{% set extra_params = extra_params + '&bt_sort=' + bt_sort %}{% endif %}
+        {% if year %}{% set extra_params = extra_params + '&year=' + year %}{% endif %}
+        {% set extra_params = extra_params + '&hide_ms=' + hide_ms %}
+        <li class="page-item {{ 'disabled' if page <= 1 }}">
+            <a class="page-link" href="?page={{ page - 1 }}{{ extra_params }}">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+        </li>
+        {% for p in range([1, page-4]|max, [total_pages, page+5]|min + 1) %}
+        <li class="page-item {{ 'active' if p == page }}">
+            <a class="page-link" href="?page={{ p }}{{ extra_params }}">
+                {{ p }}
+            </a>
+        </li>
+        {% endfor %}
+        <li class="page-item {{ 'disabled' if page >= total_pages }}">
+            <a class="page-link" href="?page={{ page + 1 }}{{ extra_params }}">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
+
+{% else %}
+<div class="text-center text-secondary py-5">
+    <i class="bi bi-archive" style="font-size: 4rem;"></i>
+    <h5 class="mt-3">No events found</h5>
+    <p class="small">Events will appear here once the monitor pipeline runs and stores them in the database.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ── Multi-select mode ──────────────────────────────────
+const multiToggle = document.getElementById('multi-toggle');
+const eventList = document.getElementById('event-list');
+const batchBar = document.getElementById('batch-bar');
+
+multiToggle.addEventListener('change', () => {
+    document.querySelectorAll('.event-item').forEach(el => el.classList.toggle('multi-on', multiToggle.checked));
+    batchBar.classList.toggle('show', multiToggle.checked);
+    updateCount();
+    if (!multiToggle.checked) {
+        document.querySelectorAll('.event-cb').forEach(cb => cb.checked = false);
+        document.querySelectorAll('.event-card').forEach(c => c.classList.remove('selected'));
+    }
+});
+
+// Select All
+document.getElementById('select-all').addEventListener('change', () => {
+    const checked = document.getElementById('select-all').checked;
+    document.querySelectorAll('.event-cb').forEach(cb => { cb.checked = checked; });
+    document.querySelectorAll('.event-card').forEach(c => c.classList.toggle('selected', checked));
+    updateCount();
+});
+
+// Individual checkbox → card highlight
+eventList.addEventListener('change', (e) => {
+    if (e.target.classList.contains('event-cb')) {
+        e.target.closest('.event-card').classList.toggle('selected', e.target.checked);
+        updateCount();
+    }
+});
+
+// Click card to toggle checkbox (multi mode) or navigate (normal mode)
+eventList.addEventListener('click', (e) => {
+    const card = e.target.closest('.event-card');
+    if (!card) return;
+    // Don't toggle if clicking the checkbox itself
+    if (e.target.closest('.event-check')) return;
+    
+    if (multiToggle.checked) {
+        // Multi mode: toggle checkbox, prevent navigation
+        e.preventDefault();
+        const cb = card.querySelector('.event-cb');
+        cb.checked = !cb.checked;
+        card.classList.toggle('selected', cb.checked);
+        updateCount();
+    }
+    // Normal mode: let the <a> tag handle navigation
+});
+
+function updateCount() {
+    const n = document.querySelectorAll('.event-cb:checked').length;
+    document.getElementById('batch-count').textContent = n + ' selected';
+    document.getElementById('select-all').checked = document.querySelectorAll('.event-cb:checked').length === document.querySelectorAll('.event-cb').length && n > 0;
+}
+
+// ── Batch operations ──────────────────────────────────
+function getSelectedIds() {
+    return Array.from(document.querySelectorAll('.event-cb:checked')).map(cb => cb.value);
+}
+
+function batchDelete() {
+    const ids = getSelectedIds();
+    if (ids.length === 0) { showResultModal('No Selection', 'Select events first.', 'warning'); return; }
+    const pw = prompt('Enter password to delete ' + ids.length + ' events:');
+    if (!pw) return;
+    if (!confirm('Delete ' + ids.length + ' events? This cannot be undone.')) return;
+
+    fetch('/api/events/batch-delete?password=' + encodeURIComponent(pw), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_ids: ids })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) { showResultModal('Error', d.error, 'danger'); return; }
+        const msg = d.deleted + ' events deleted.' + (d.errors.length ? ' Errors: ' + d.errors.length : '');
+        showResultModal('Deleted', msg, 'success');
+        if (d.deleted > 0) setTimeout(() => location.reload(), 1500);
+    });
+}
+
+function batchBeamTime() {
+    const ids = getSelectedIds();
+    if (ids.length === 0) { showResultModal('No Selection', 'Select events first.', 'warning'); return; }
+    const bt = prompt('Enter user beam time for ' + ids.length + ' events:');
+    if (bt === null) return;
+    const pw = prompt('Enter password:');
+    if (!pw) return;
+
+    fetch('/api/events/batch-beamtime?password=' + encodeURIComponent(pw), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_ids: ids, beam_time: bt })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) { showResultModal('Error', d.error, 'danger'); return; }
+        const msg = d.updated + ' events updated.' + (d.errors.length ? ' Errors: ' + d.errors.length : '');
+        showResultModal('Beam Time Set', msg, 'success');
+        if (d.updated > 0) setTimeout(() => location.reload(), 1500);
+    });
+}
+
+// ── Modal helper ──────────────────────────────────────
+function showResultModal(title, body, color = 'info') {
+    const el = document.createElement('div');
+    el.className = 'modal fade'; el.id = 'resultModal'; el.setAttribute('tabindex', '-1');
+    el.innerHTML = `<div class="modal-dialog modal-dialog-scrollable"><div class="modal-content" style="background:#161b22;border:1px solid #30363d;"><div class="modal-header" style="border-bottom:1px solid #30363d;"><h6 class="modal-title text-${color}">${title}</h6><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body">${body}</div><div class="modal-footer" style="border-top:1px solid #30363d;"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button></div></div></div>`;
+    document.body.appendChild(el);
+    const m = new bootstrap.Modal(el); m.show();
+    el.addEventListener('hidden.bs.modal', () => el.remove());
+}
+</script>
+{% endblock %}

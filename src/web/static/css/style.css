@@ -1,0 +1,145 @@
+/* SRF Postmortem Viewer — Dark Theme */
+
+body {
+    background-color: #0d1117;
+    color: #e6edf3;
+    font-size: 0.9rem;
+}
+
+.navbar {
+    background-color: #161b22 !important;
+}
+
+/* Event cards */
+.event-card {
+    background-color: #161b22;
+    border: 1px solid #30363d;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    cursor: pointer;
+}
+.event-card:hover {
+    border-color: #58a6ff;
+    box-shadow: 0 0 8px rgba(88, 166, 255, 0.15);
+}
+.event-id {
+    font-family: 'SFMono-Regular', 'Fira Code', monospace;
+    font-size: 0.85rem;
+}
+
+.fault-badge {
+    font-family: 'SFMono-Regular', 'Fira Code', monospace;
+    font-size: 0.75rem;
+}
+
+/* Detail cards */
+.card {
+    background-color: #161b22;
+    border: 1px solid #30363d;
+}
+.card-header {
+    background-color: #1c2128;
+    border-bottom: 1px solid #30363d;
+    color: #e6edf3;
+}
+
+.table-borderless td {
+    padding: 0.15rem 0.25rem;
+    color: #e6edf3;
+}
+
+/* Similar events */
+.similar-card {
+    background-color: #1c2128;
+    border: 1px solid #30363d;
+    transition: border-color 0.15s;
+}
+.similar-card:hover {
+    border-color: #58a6ff;
+}
+
+/* Report */
+.report-body {
+    background-color: #0d1117;
+    border-radius: 0 0 0.25rem 0.25rem;
+}
+
+/* Pagination */
+.pagination {
+    --bs-pagination-bg: #161b22;
+    --bs-pagination-border-color: #30363d;
+    --bs-pagination-color: #e6edf3;
+    --bs-pagination-hover-bg: #1c2128;
+    --bs-pagination-hover-color: #58a6ff;
+    --bs-pagination-active-bg: #1f6feb;
+    --bs-pagination-active-border-color: #1f6feb;
+    --bs-pagination-disabled-bg: #0d1117;
+    --bs-pagination-disabled-color: #484f58;
+}
+
+/* Form controls on dark */
+.form-control, .form-select {
+    background-color: #0d1117;
+    border-color: #30363d;
+    color: #e6edf3;
+}
+.form-control:focus, .form-select:focus {
+    background-color: #0d1117;
+    border-color: #58a6ff;
+    color: #e6edf3;
+    box-shadow: 0 0 0 0.15rem rgba(88, 166, 255, 0.25);
+}
+
+/* Progress bar for similarity */
+.progress {
+    background-color: #21262d;
+}
+
+/* Plotly legend: reduce line height for digital items */
+/* Custom digital legend box */
+.digital-legend-box {
+    position: absolute;
+    bottom: 110.5px;
+    left: 70px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    font-size: 7.2px;
+    line-height: 1.1;
+    z-index: 10;
+    pointer-events: none;
+    max-height: 50%;
+    overflow-y: auto;
+}
+.digital-legend-item {
+    white-space: nowrap;
+    padding: 0;
+    margin: 0;
+    line-height: 1.2;
+}
+
+/* Case badge colors (matching stats chart palette) */
+.case-badge-0  { background-color: #636efa; }  /* plotly default blue */
+.case-badge-1  { background-color: #ef553b; }  /* plotly red */
+.case-badge-2  { background-color: #00cc96; }  /* plotly teal */
+.case-badge-3  { background-color: #ab63fa; }  /* plotly purple */
+.case-badge-4  { background-color: #ffa15a; }  /* plotly orange */
+.case-badge-5  { background-color: #19d3f3; color: #000; }  /* plotly cyan */
+.case-badge-6  { background-color: #ff6692; }  /* plotly pink */
+.case-badge-7  { background-color: #b6e880; color: #000; }  /* plotly lime */
+.case-badge-8  { background-color: #ff97ff; color: #000; }  /* plotly light magenta */
+.case-badge-9  { background-color: #fecb52; color: #000; }  /* plotly yellow */
+.case-badge-10 { background-color: #8a9fd1; color: #000; }  /* plotly lavender */
+.case-badge-11 { background-color: #6b8e8e; }  /* plotly teal-gray */
+.case-badge-12 { background-color: #c4b0a0; color: #000; }  /* plotly tan */
+.case-badge-13 { background-color: #a1c9f4; color: #000; }  /* plotly light blue */
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    .container-fluid {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+    .event-card .card-body {
+        padding: 0.5rem 0.75rem;
+    }
+}
