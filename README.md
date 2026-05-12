@@ -62,8 +62,13 @@ A web-based system for viewing, analyzing, and managing SRF beam dump postmortem
 ### Prerequisites
 
 ```bash
-# Python 3.11+ required
+# Python 3.10+ required
+
+# Option A: Using requirements.txt
 pip install -r requirements.txt
+
+# Option B: Using pyproject.toml (editable install)
+pip install -e .
 ```
 
 ### Configuration
@@ -203,4 +208,4 @@ SRF_postmortem/
 
 ## License
 
-Internal use — POSTECH SRF Lab
+Internal use — POHANG ACCELERATOR LABORATORY SRF GROUP
