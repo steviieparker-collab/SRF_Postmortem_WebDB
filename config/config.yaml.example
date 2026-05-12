@@ -10,6 +10,10 @@ paths:
   - /mnt/w/
   - /mnt/x/
   - /mnt/y/
+  append_dirs:
+  - ./data/append/scope1
+  - ./data/append/scope2
+  - ./data/append/scope3
   graphs_db_dir: ./db/graphs
 db:
   path: ./db/events.db

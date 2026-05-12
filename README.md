@@ -2,7 +2,7 @@
 
 **Superconducting RF Beam Dump Event Viewer & History Database**
 
-A web-based system for viewing, analyzing, and managing SRF beam dump postmortem events. Replaces existing monitoring system Event DB with an independent implementation.
+A web-based system for viewing, analyzing, and managing SRF beam dump postmortem events.
 
 ---
 
@@ -12,6 +12,9 @@ A web-based system for viewing, analyzing, and managing SRF beam dump postmortem
 - **Event List** — Paginated list with filters (year, beam time, fault type, notes search, MS exclusion)
 - **Event Detail** — Interactive Plotly waveform charts (analog + digital overlays), zoom controls
 - **Filter-Aware Navigation** — Prev/Next preserves current filter context
+<img width="1119" height="927" alt="image" src="https://github.com/user-attachments/assets/a72437ae-4dd2-4192-8466-154a08d725fc" />
+<img width="1129" height="473" alt="image" src="https://github.com/user-attachments/assets/17d82fb1-2e3f-4065-9c7b-2c2119d9f6d4" />
+<img width="1128" height="854" alt="image" src="https://github.com/user-attachments/assets/6cafcde6-fed0-431f-a458-585711f34cc8" />
 
 ### 🔍 Classification Engine
 - Rule-based v4.0 classifier with **13 fault cases**
@@ -22,7 +25,7 @@ A web-based system for viewing, analyzing, and managing SRF beam dump postmortem
 ### 📝 User Annotations
 - **Beam Time** — User-assignable beam time periods (e.g., "2026-2nd")
 - **Fault Type** — User override for classifier results
-- **Notes** — Free-text notes per event (preview on main page)
+- **Notes** — Free-text notes per event (preview on main page, first 40 chars)
 - Auto-save via REST API
 
 ### 📎 File Attachments
@@ -30,17 +33,28 @@ A web-based system for viewing, analyzing, and managing SRF beam dump postmortem
 - Download with original filename preserved
 - MIME-type aware file icons
 - Password-protected deletion
+- Attachment count badge on event list
 
 ### 📈 Statistics
 - Case distribution & fault type histogram
 - **Fault Type Over Time** — Period-by-period breakdown
 - Digital channel co-occurrence analysis
 - MS period filtering
+<img width="1117" height="929" alt="image" src="https://github.com/user-attachments/assets/3463629f-0e4a-40c6-a340-993916659dc2" />
+<img width="1101" height="468" alt="image" src="https://github.com/user-attachments/assets/5b015d4e-2f49-40be-b474-27b9382ce336" />
 
 ### 💾 Backup & Restore
 - Full backup: DB + merged parquet + attachments → single `.tar.gz`
 - One-click restore from Settings page
 - Password-protected operations
+- Restore replaces DB, merged parquet files, and attachments
+<img width="1111" height="800" alt="image" src="https://github.com/user-attachments/assets/6f585c02-fd04-4907-bc21-545e54268944" />
+
+### 🔧 Append Data Pipeline
+- **Settings page** — Input 3 scope CSV directories and run the full pipeline
+- Preprocess CSVs → Merge by timestamp → Classify → Import to DB — all in one click
+- Automatically detects and replaces existing events with the same ID
+- Background execution with real-time status logging
 
 ---
 
@@ -86,18 +100,62 @@ python -m src.web.server
 # → http://localhost:50510
 ```
 
-### Import Events
+---
+
+## Usage Guide
+
+### Append Data (CSV → DB)
+
+The **Append** pipeline processes raw CSV files from 3 oscilloscope channels, merges them by timestamp, runs classification, and stores results in the database.
+
+**Via Settings Page:**
+
+1. Navigate to `http://localhost:50510/settings` (enter admin password)
+2. Scroll to **Append Data** section
+3. Enter the 3 scope CSV directories (default: `data/append/scope1`, `scope2`, `scope3`)
+4. Click **Append (CSV Preprocess → Merge → Classify → Import)**
+5. Monitor progress in the status log panel
+
+```
+Scope 1:  data/append/scope1
+Scope 2:  data/append/scope2
+Scope 3:  data/append/scope3
+                          │
+                    ┌─────┴─────┐
+                    │ Append    │
+                    └─────┬─────┘
+                          │
+            ┌─────────────┼─────────────┐
+            ▼             ▼             ▼
+      Preprocessor   Preprocessor   Preprocessor
+      (CSV→Parquet)  (CSV→Parquet)  (CSV→Parquet)
+            │             │             │
+            └─────────────┼─────────────┘
+                          ▼
+                     Grouper
+                 (Merge by time)
+                          │
+                          ▼
+              ┌─────────────────────┐
+              │  Check existing     │
+              │  events in merged/  │
+              │  and DB → overwrite │
+              └──────────┬──────────┘
+                         ▼
+                    Import to DB
+```
+
+**Pipeline replaces existing events:**
+- If a merged parquet with the same event ID already exists → old merged file + DB record are removed before importing the new one
+- This ensures clean updates when re-processing the same CSV data
+
+### Import Events (Parquet → DB)
+
+If you already have merged parquet files in `data/merged/`:
 
 ```bash
-# 1. Preprocess and merge scope CSV files
-python3 data/append/append-merge.py \
-    -i data/append/scope1 data/append/scope2 data/append/scope3 \
-    -o data/append/merged
-
-# 2. Copy merged parquet to data/merged/
-cp data/append/merged/*.parquet data/merged/
-
-# 3. Import via Settings page or API
+# Via Settings page: click "Import to DB"
+# Via API:
 curl -X POST http://localhost:50510/api/import
 ```
 
@@ -109,6 +167,14 @@ curl -X POST "http://localhost:50510/api/db/backup?password=YOUR_PW"
 
 # Or use Settings page → Backup DB / Get Backup Files → Restore
 ```
+
+### File Attachments
+
+- Navigate to an **Event Detail** page
+- Scroll to the **Attachments** section below the waveform
+- Click **Upload** to add files (images, PDFs, documents)
+- Click the download link to retrieve files with original filename
+- Click the delete icon (trash) to remove (requires password)
 
 ---
 
@@ -125,7 +191,7 @@ SRF_postmortem/
 ├── data/
 │   ├── merged/                  # Merged parquet waveforms
 │   ├── attachments/             # Uploaded files per event
-│   ├── append/                  # CSV preprocessing utility
+│   ├── append/                  # CSV preprocessing utility (data dirs)
 │   ├── processed/               # Preprocessed parquet files
 │   ├── graphs/                  # Generated waveform images
 │   ├── results/                 # Classification results (JSON)
@@ -142,9 +208,15 @@ SRF_postmortem/
 │   │   ├── repository.py        # CRUD operations
 │   │   └── similarity.py        # Event similarity engine
 │   ├── classifier/              # Rule-based classification
-│   ├── pipeline/                # Preprocessor / Grouper / Report
+│   ├── pipeline/                # Preprocessor, Grouper, AppendMerge
+│   │   ├── preprocessor.py      # CSV → Parquet
+│   │   ├── grouper.py           # Merge by timestamp
+│   │   ├── append_merge.py      # Integrated append pipeline
+│   │   ├── classifier.py        # Event classifier
+│   │   └── ...
 │   └── orchestrator.py          # Pipeline orchestration
 ├── logs/                        # Application logs
+├── requirements.txt             # Python dependencies
 └── pyproject.toml
 ```
 
@@ -175,6 +247,17 @@ SRF_postmortem/
 | `POST` | `/api/events/{id}/user-beam-time` | Set beam time |
 | `POST` | `/api/events/{id}/user-fault-type` | Override fault type |
 
+### Pipeline
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/pipeline/append` | Run append: CSV → Merge → Classify → DB |
+| `POST` | `/api/pipeline/batch` | Run full monitoring pipeline |
+| `POST` | `/api/pipeline/import` | Import merged parquet → DB only |
+| `POST` | `/api/pipeline/monitor/start` | Start folder monitoring |
+| `POST` | `/api/pipeline/monitor/stop` | Stop folder monitoring |
+| `POST` | `/api/pipeline/stop` | Stop all running pipelines |
+| `GET` | `/api/pipeline/status` | Get current pipeline status |
+
 ### System
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -182,8 +265,30 @@ SRF_postmortem/
 | `GET` | `/api/db/backups` | List available backups |
 | `POST` | `/api/db/restore` | Restore from backup |
 | `POST` | `/api/import` | Import parquet → DB |
+| `GET` | `/api/config/append-dirs` | Get configured append directories |
 | `GET` | `/api/stats/cases` | Case statistics |
 | `GET` | `/api/stats/histogram` | Fault type over time |
+
+---
+
+## Configuration
+
+**`config/config.yaml`** key sections:
+
+```yaml
+paths:
+  append_dirs:              # Default scope dirs for Append pipeline
+    - ./data/append/scope1
+    - ./data/append/scope2
+    - ./data/append/scope3
+
+access:
+  password: 'your_password'  # Web UI admin password
+
+web:
+  host: 0.0.0.0
+  port: 50510
+```
 
 ---
 
