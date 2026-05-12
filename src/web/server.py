@@ -926,7 +926,7 @@ async def api_stats_histogram(
                 conditions.append("user_beam_time = ?")
                 params.append(user_beam_time)
         if hide_ms == "true":
-            conditions.append("user_beam_time NOT LIKE '%차 MS'")
+            conditions.append("(user_beam_time NOT LIKE '%MS%' OR user_beam_time IS NULL OR user_beam_time = '')")
         
         where_clause = "WHERE " + " AND ".join(conditions)
         
