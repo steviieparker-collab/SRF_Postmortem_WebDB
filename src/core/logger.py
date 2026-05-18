@@ -16,6 +16,12 @@ from typing import Any, Dict, Optional, Union
 from .config import get_config
 
 
+class UvicornAccessFilter(logging.Filter):
+    """Filter out uvicorn access log noise (pipeline status polling)."""
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not record.name.startswith("uvicorn.access")
+
+
 class JSONFormatter(logging.Formatter):
     """JSON formatter for structured logging."""
     
@@ -112,6 +118,12 @@ def setup_logging(
     logger = logging.getLogger()
     logger.setLevel(getattr(logging, level.upper()))
     
+    # Suppress uvicorn access log propagation (pipeline status polling)
+    for log_name in ["uvicorn.access", "uvicorn"]:
+        u_logger = logging.getLogger(log_name)
+        u_logger.setLevel(logging.WARNING)
+        u_logger.propagate = False
+    
     # Clear existing handlers
     logger.handlers.clear()
     
@@ -119,6 +131,7 @@ def setup_logging(
     if console and logging_config.console_enabled:
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(getattr(logging, level.upper()))
+        console_handler.addFilter(UvicornAccessFilter())
         
         if logging_config.console_format == "colored":
             console_formatter = ColoredConsoleFormatter()
