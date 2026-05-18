@@ -1293,8 +1293,13 @@ async def api_pipeline_reset(request: Request):
 # ── CLI entry point ───────────────────────────────────────────
 
 if __name__ == "__main__":
+    import logging
     import uvicorn
     from ..core.config import get_config
+
+    # Suppress uvicorn access log noise (pipeline status polling floods console)
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn").setLevel(logging.WARNING)
 
     cfg = get_config()
     uvicorn.run(app, host=cfg.web.host, port=cfg.web.port,
