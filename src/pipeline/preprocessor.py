@@ -306,14 +306,6 @@ class Preprocessor:
             "processing_time": None,
         }
 
-        # Skip zero-byte files (likely still being written or incomplete transfer)
-        if csv_path.stat().st_size == 0:
-            return False, "파일 크기 0 (쓰기 중이거나 빈 파일)", None
-
-        # Skip very small files (< 1KB, incomplete)
-        if csv_path.stat().st_size < 1024:
-            return False, f"파일 크기 너무 작음 ({csv_path.stat().st_size} bytes, 불완전한 쓰기)", None
-
         for attempt in range(max_retries):
             try:
                 start_time = time.time()

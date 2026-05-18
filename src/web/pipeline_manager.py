@@ -6,6 +6,7 @@ so the web server stays responsive.
 """
 
 import json
+import os
 import sys
 import threading
 import time
@@ -398,21 +399,26 @@ def start_monitor(config_path: str = "config/config.yaml"):
                                 processed_csv.add(csv_path.name)
                             continue
 
-                        # 파일 안정성 확인: 크기가 변하지 않을 때까지 대기 (쓰기 완료 보장)
-                        file_size = csv_path.stat().st_size
-                        _pipeline_status.update(_ts(f"Checking {csv_path.name}... ({int(file_size / 1024)}KB)"))
-                        for _wait in range(6):
-                            try:
-                                with open(csv_path, 'rb') as _f:
-                                    _f.read(1)
-                                # 크기가 안정적인지 확인 (1초 후 같은 크기면 완료된 것으로 간주)
-                                time.sleep(1.0)
-                                new_size = csv_path.stat().st_size
-                                if file_size == new_size:
-                                    break
-                                file_size = new_size
-                            except (PermissionError, OSError):
-                                time.sleep(1.0)
+                        # 파일 쓰기 완료 대기 (크기가 안정화될 때까지, 최대 60초)
+                        def _wait_for_file_complete(fpath: Path, timeout: int = 60) -> int:
+                            """파일 크기가 안정화될 때까지 대기. 최종 크기 반환."""
+                            start = time.time()
+                            last_size = -1
+                            while True:
+                                try:
+                                    with open(fpath, 'rb') as _f:
+                                        _f.read(1)  # 접근 가능 확인
+                                    size = os.path.getsize(fpath)
+                                except (PermissionError, OSError):
+                                    size = -1
+                                if size == last_size and size > 0:
+                                    return size
+                                last_size = size
+                                if time.time() - start > timeout:
+                                    return size if size > 0 else 0
+                                time.sleep(2.0)
+                        
+                        file_size = _wait_for_file_complete(csv_path)
                         _pipeline_status.update(_ts(f"Processing {csv_path.name}... ({int(file_size / 1024)}KB)"))
                         try:
                             success, reason, metadata = orch.preprocessor.process_one(csv_path, pqt_path, max_retries=3)
