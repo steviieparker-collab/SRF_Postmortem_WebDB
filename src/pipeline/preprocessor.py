@@ -97,6 +97,7 @@ class Preprocessor:
                 has_header=False,
                 skip_rows=skip_rows,
                 ignore_errors=True,
+                encoding="utf-8",
             )
             df = df.with_columns(pl.all().cast(pl.Float64, strict=False))
             return df.to_numpy()

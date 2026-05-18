@@ -168,7 +168,7 @@ class DataExtractor:
         csv_path = results_dir / "clustering_results.csv"
         if csv_path.exists():
             self.logger.debug(f"Looking for classification result for '{filename}' in {csv_path}")
-            df = pd.read_csv(csv_path)
+            df = pd.read_csv(csv_path, encoding='utf-8')
             row = df[df["filename"] == filename]
             if not row.empty:
                 case = int(row["case"].iloc[0])
