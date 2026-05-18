@@ -478,7 +478,7 @@ def start_monitor(config_path: str = "config/config.yaml"):
                         time.sleep(config.system.check_interval)
                         continue
 
-                elif not newly_processed and wait_start is not None:
+                elif not newly_processed and wait_start is not None and not all_ready:
                     # Still waiting but no new files this cycle — check timeout
                     elapsed = time.time() - wait_start
                     _pipeline_status.update(_ts(
@@ -496,6 +496,11 @@ def start_monitor(config_path: str = "config/config.yaml"):
                     else:
                         time.sleep(config.system.check_interval)
                         continue
+                elif all_ready and wait_start is not None:
+                    # All 3 scopes ready — start pipeline immediately
+                    _pipeline_status.update(_ts("All 3 scopes ready — starting pipeline"))
+                    wait_start = None
+                    run_pipeline = True
 
                 # ── Step 3: Pipeline execution ─────────────────────
                 # At this point: either all_ready=True, timeout forced, or nothing
