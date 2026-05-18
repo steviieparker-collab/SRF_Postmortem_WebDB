@@ -19,12 +19,14 @@
 .status-badge { font-size: 0.8rem; padding: 0.2rem 0.6rem; }
 .log-box {
     background-color: #0d1117; border: 1px solid #30363d; border-radius: 0.25rem;
-    padding: 0.75rem; max-height: 200px; overflow-y: auto;
+    padding: 0.75rem; max-height: 400px; min-height: 200px; overflow-y: auto;
     font-family: 'SFMono-Regular', 'Fira Code', monospace; font-size: 0.8rem; color: #8b949e;
+    white-space: pre-wrap; word-break: break-all;
 }
 .log-box .log-running { color: #58a6ff; }
 .log-box .log-ok { color: #3fb950; }
 .log-box .log-error { color: #f85149; }
+.log-box .log-info { color: #8b949e; }
 </style>
 {% endblock %}
 
@@ -187,24 +189,47 @@ function pollStatus() {
         document.getElementById('status-progress').textContent = s.progress || '-';
         document.getElementById('status-started').textContent = s.started_at || '-';
         const el = document.getElementById('status-log');
+        const _logAppend = (html) => {
+            el.innerHTML += html;
+            el.scrollTop = el.scrollHeight;
+        };
         if (s.running) {
-            el.innerHTML = '<div class="log-entry log-running">▶ ' + s.progress + '</div>';
             ['btn-batch','btn-import','btn-monitor-start'].forEach(id=>document.getElementById(id).disabled=true);
             document.getElementById('btn-monitor-stop').disabled = false;
+            // 실시간 진행률: 로그에 중복 없이 마지막 메시지만 업데이트
+            const progressMsg = '▶ ' + s.progress;
+            const lastEntry = el.lastElementChild;
+            if (lastEntry && lastEntry.classList.contains('log-running')) {
+                lastEntry.textContent = progressMsg;
+            } else {
+                _logAppend('<div class="log-entry log-running">' + progressMsg + '</div>');
+            }
             setTimeout(pollStatus, 2000);
         } else {
             ['btn-batch','btn-import','btn-monitor-start'].forEach(id=>document.getElementById(id).disabled=false);
             document.getElementById('btn-monitor-stop').disabled = true;
-            let html = '';
+            let appended = false;
             if (s.last_result) {
                 const r = s.last_result;
-                if (r.db_imported !== undefined) html += '<div class="log-entry log-ok">✓ Batch: ' + r.db_imported + ' events</div>';
-                else if (r.imported !== undefined) html += '<div class="log-entry log-ok">✓ Import: ' + r.imported + ' events</div>';
-                else html += '<div class="log-entry log-ok">✓ ' + JSON.stringify(r) + '</div>';
+                let msg = '';
+                if (r.db_imported !== undefined) msg = '✓ Batch complete: ' + r.db_imported + ' events imported';
+                else if (r.imported !== undefined) msg = '✓ Import: ' + r.imported + ' events';
+                else if (r.message) msg = '✓ ' + r.message;
+                else msg = '✓ ' + JSON.stringify(r);
+                // Check for duplicate before appending
+                const lastEntry = el.lastElementChild;
+                if (!lastEntry || lastEntry.textContent.trim() !== msg) {
+                    _logAppend('<div class="log-entry log-ok">' + msg + '</div>');
+                    appended = true;
+                }
             }
-            if (s.error) html += '<div class="log-entry log-error">✗ ' + s.error + '</div>';
-            if (!html) html = '<div class="log-entry text-secondary">Pipeline idle.</div>';
-            el.innerHTML = html;
+            if (s.error) {
+                _logAppend('<div class="log-entry log-error">✗ ' + s.error + '</div>');
+                appended = true;
+            }
+            if (!appended && el.children.length === 0) {
+                el.innerHTML = '<div class="log-entry log-info">Pipeline idle.</div>';
+            }
         }
     });
 }
@@ -216,11 +241,15 @@ function runPipeline(a) {
         });
         return;
     }
-    document.getElementById('status-log').innerHTML = '<div class="log-entry log-running">▶ Starting ' + a + '...</div>';
+    const el = document.getElementById('status-log');
+    el.innerHTML += '<div class="log-entry log-running">▶ Starting ' + a + '...</div>';
+    el.scrollTop = el.scrollHeight;
     const m = {batch:'/api/pipeline/batch',import:'/api/pipeline/import','monitor-start':'/api/pipeline/monitor/start','monitor-stop':'/api/pipeline/monitor/stop'};
     api(m[a],{method:'POST'}).then(r=>r.json()).then(d=>{
-        if (d.error) document.getElementById('status-log').innerHTML += '<div class="log-entry log-error">✗ ' + d.error + '</div>';
-        else { document.getElementById('status-log').innerHTML += '<div class="log-entry log-ok">✓ ' + d.message + '</div>'; setTimeout(pollStatus, 500); }
+        if (d.error) el.innerHTML += '<div class="log-entry log-error">✗ ' + d.error + '</div>';
+        else el.innerHTML += '<div class="log-entry log-ok">✓ ' + d.message + '</div>';
+        el.scrollTop = el.scrollHeight;
+        if (!d.error) setTimeout(pollStatus, 500);
     });
 }
 
@@ -240,15 +269,18 @@ function saveEmailSettings() {
 
 function backupDB() {
     const log = document.getElementById('status-log');
-    log.innerHTML = '<div class="log-entry log-running">▶ Backing up database...</div>';
+    log.innerHTML += '<div class="log-entry log-running">▶ Backing up database...</div>';
+    log.scrollTop = log.scrollHeight;
     api('/api/db/backup', {method:'POST'}).then(r=>r.json()).then(d => {
         if (d.ok) {
             log.innerHTML += '<div class="log-entry log-ok">✓ Backup saved: ' + d.path + '</div>';
         } else {
             log.innerHTML += '<div class="log-entry log-error">✗ ' + (d.error || 'Backup failed') + '</div>';
         }
+        log.scrollTop = log.scrollHeight;
     }).catch(e => {
         log.innerHTML += '<div class="log-entry log-error">✗ Network error: ' + e.message + '</div>';
+        log.scrollTop = log.scrollHeight;
     });
 }
 
@@ -260,7 +292,8 @@ function runAppend() {
     ];
     if (dirs.some(d => !d)) { alert('3개 scope 폴더를 모두 입력해주세요.'); return; }
     const log = document.getElementById('status-log');
-    log.innerHTML = '<div class="log-entry log-running">▶ Append pipeline starting...</div>';
+    log.innerHTML += '<div class="log-entry log-running">▶ Append pipeline starting...</div>';
+    log.scrollTop = log.scrollHeight;
     document.getElementById('btn-append').disabled = true;
     api('/api/pipeline/append', {
         method: 'POST',
@@ -272,10 +305,12 @@ function runAppend() {
             document.getElementById('btn-append').disabled = false;
         } else {
             log.innerHTML += '<div class="log-entry log-ok">✓ ' + d.message + '</div>';
-            setTimeout(pollStatus, 1000);
         }
+        log.scrollTop = log.scrollHeight;
+        if (!d.error) setTimeout(pollStatus, 1000);
     }).catch(e => {
         log.innerHTML += '<div class="log-entry log-error">✗ Network error: ' + e.message + '</div>';
+        log.scrollTop = log.scrollHeight;
         document.getElementById('btn-append').disabled = false;
     });
 }
@@ -333,7 +368,8 @@ function restoreBackup() {
     const name = select.options[select.selectedIndex].text;
     if (!confirm('⚠️ RESTORE from:\n\n' + name + '\n\nThis will REPLACE the current database with the backup.\nCurrent DB will be saved as events.db.restore_bak.\n\nProceed?')) return;
     const log = document.getElementById('status-log');
-    log.innerHTML = '<div class="log-entry log-running">▶ Restoring from ' + name + '...</div>';
+    log.innerHTML += '<div class="log-entry log-running">▶ Restoring from ' + name + '...</div>';
+    log.scrollTop = log.scrollHeight;
     api('/api/db/restore', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
