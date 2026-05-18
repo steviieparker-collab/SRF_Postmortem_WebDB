@@ -664,7 +664,7 @@ def main():
     classification = None
     if args.classification_json:
         import json
-        with open(args.classification_json, 'r') as f:
+        with open(args.classification_json, 'r', encoding='utf-8') as f:
             classification = json.load(f)
 
     if args.input_dir:
