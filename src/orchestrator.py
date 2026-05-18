@@ -348,6 +348,14 @@ class SRFOrchestrator:
                     scope_dir = self.paths.processed_dir / f"scope{i}"
                     scope_dir.mkdir(parents=True, exist_ok=True)
                     for csv_path in csvs:
+                        # 파일 잠금이 풀릴 때까지 대기 (직접 열어보는 방식)
+                        for _ in range(15):
+                            try:
+                                with open(csv_path, 'rb') as __f:
+                                    __f.read(1)
+                                break
+                            except (PermissionError, OSError):
+                                time.sleep(1.0)
                         parquet_path = scope_dir / f"{csv_path.stem}.parquet"
                         self.preprocessor.process_one(csv_path, parquet_path)
                         processed_csv[wf].add(csv_path.name)
@@ -376,6 +384,20 @@ class SRFOrchestrator:
                 time.sleep(self.system.check_interval)
         except KeyboardInterrupt:
             logger.info("Monitor stopped")
+
+    def import_to_db(self) -> int:
+        """Import merged parquet files into the WebDB database."""
+        from src.import_job import run_import
+        cfg_path = None
+        try:
+            from src.core.config import get_config_path
+            cfg_path = get_config_path()
+        except Exception:
+            pass
+        result = run_import(self.paths.merged_dir, cfg_path)
+        count = result.get('imported', 0)
+        logger.info(f"DB import: {count} imported, {result.get('skipped', 0)} skipped, {result.get('errors', 0)} errors")
+        return count
 
     def run_web_server(self):
         """Start the WebDB web server."""

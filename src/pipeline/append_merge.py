@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-append-merge.py — Preprocessor + Grouper 통합 스크립트.
+append_merge.py — Preprocessor + Grouper 통합 스크립트.
 
 3개 scope 폴더의 CSV를 전처리(Parquet)한 뒤, 같은 시각에 생성된 파일끼리
 묶어서 하나의 merged parquet 파일로 저장합니다.
 
+Location: src/pipeline/append_merge.py
+
 Usage:
-    python3 append-merge.py --input scope1 scope2 scope3 --output merged
-    python3 append-merge.py --input scope1 scope2 scope3 --output merged --limit 5
-    python3 append-merge.py -i scope1 scope2 scope3 -o merged --window 180
+    python3 -m src.pipeline.append_merge --input scope1 scope2 scope3 --output merged
+    python3 -m src.pipeline.append_merge --input scope1 scope2 scope3 --output merged --limit 5
+    python3 -m src.pipeline.append_merge -i scope1 scope2 scope3 -o merged --window 180
 """
 
 import argparse
@@ -19,8 +21,8 @@ from pathlib import Path
 from typing import List, Optional
 
 # ── 프로젝트 루트를 sys.path에 추가 (import 전에 수행) ──────
-# 이 파일: SRF_postmortem/data/append/append-merge.py
-# 루트:   SRF_postmortem/  (= data/append/../..)
+# 이 파일: SRF_postmortem/src/pipeline/append_merge.py
+# 루트:   SRF_postmortem/  (= src/pipeline/../..)
 _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent.parent)
 sys.path.insert(0, _PROJECT_ROOT)
 

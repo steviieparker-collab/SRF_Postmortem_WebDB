@@ -356,7 +356,8 @@ class Grouper:
 
         # Process each group
         for i, group in enumerate(groups):
-            print(f"Merging group [{i+1}/{len(groups)}]...", flush=True)
+            now_str = datetime.now(KST).strftime('%H:%M:%S')
+            print(f'[{now_str}] Merging group [{i+1}/{len(groups)}]...', flush=True)
             self.log.debug("Processing group", extra={"index": i + 1, "total": len(groups)})
             merged = self.merge_group(group)
             if merged is None:

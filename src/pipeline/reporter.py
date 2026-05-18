@@ -220,7 +220,7 @@ class TemplateRenderer:
     def __init__(self, template_dir: Optional[Path] = None):
         if template_dir is None:
             # Adjust path to point to SRF_postmortem/src/templates/report
-            template_dir = Path(__file__).parent.parent.parent / "templates" / "report"
+            template_dir = Path(__file__).parent.parent / "templates" / "report"
         self.template_dir = template_dir
 
         if JINJA2_AVAILABLE:

@@ -20,6 +20,7 @@ class PathsConfig(BaseModel):
     """Configuration for file system paths."""
 
     watch_folders: List[Path] = Field(default_factory=list, description="Watch folders for scope CSV files")
+    append_dirs: List[Path] = Field(default_factory=list, description="Append scope directories")
     processed_dir: Path = Field(default=Path("./data/processed"), description="Preprocessor output directory")
     merged_dir: Path = Field(default=Path("./data/merged"), description="Grouper output directory")
     results_dir: Path = Field(default=Path("./data/results"), description="Classifier output directory")
@@ -28,9 +29,9 @@ class PathsConfig(BaseModel):
     log_dir: Path = Field(default=Path("./logs"), description="Log directory")
     log_file: str = Field(default="srf_monitor.log", description="Log file name")
 
-    @field_validator("watch_folders", mode="before")
+    @field_validator("watch_folders", "append_dirs", mode="before")
     @classmethod
-    def convert_watch_folders(cls, v: Any) -> List[Path]:
+    def convert_path_list(cls, v: Any) -> List[Path]:
         if isinstance(v, list):
             return [Path(str(item)) for item in v]
         return v

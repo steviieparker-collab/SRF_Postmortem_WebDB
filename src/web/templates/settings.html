@@ -89,6 +89,16 @@
                 </div>
             </div>
         </div>
+        <div class="section-card p-3 mt-3">
+            <h6 class="mb-3"><i class="bi bi-folder-plus me-2"></i>Append Data</h6>
+            <div class="mb-2">
+                <input type="text" class="form-control form-control-sm mb-1" id="append-0" placeholder="Scope 1 (CSV 폴더 경로)">
+                <input type="text" class="form-control form-control-sm mb-1" id="append-1" placeholder="Scope 2 (CSV 폴더 경로)">
+                <input type="text" class="form-control form-control-sm mb-1" id="append-2" placeholder="Scope 3 (CSV 폴더 경로)">
+            </div>
+            <button class="btn btn-primary w-100" onclick="runAppend()" id="btn-append"><i class="bi bi-play-fill me-1"></i> Append (CSV Preprocess→Merge→Classify→Import)</button>
+            <small class="text-secondary mt-1 d-block"><i class="bi bi-info-circle"></i> 동일 이벤트 ID는 기존 DB/parquet을 덮어씁니다.</small>
+        </div>
     </div>
     <div class="col-lg-7">
         <div class="section-card p-3">
@@ -242,6 +252,42 @@ function backupDB() {
     });
 }
 
+function runAppend() {
+    const dirs = [
+        document.getElementById('append-0').value.trim(),
+        document.getElementById('append-1').value.trim(),
+        document.getElementById('append-2').value.trim()
+    ];
+    if (dirs.some(d => !d)) { alert('3개 scope 폴더를 모두 입력해주세요.'); return; }
+    const log = document.getElementById('status-log');
+    log.innerHTML = '<div class="log-entry log-running">▶ Append pipeline starting...</div>';
+    document.getElementById('btn-append').disabled = true;
+    api('/api/pipeline/append', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({input_dirs: dirs})
+    }).then(r=>r.json()).then(d => {
+        if (d.error) {
+            log.innerHTML += '<div class="log-entry log-error">✗ ' + d.error + '</div>';
+            document.getElementById('btn-append').disabled = false;
+        } else {
+            log.innerHTML += '<div class="log-entry log-ok">✓ ' + d.message + '</div>';
+            setTimeout(pollStatus, 1000);
+        }
+    }).catch(e => {
+        log.innerHTML += '<div class="log-entry log-error">✗ Network error: ' + e.message + '</div>';
+        document.getElementById('btn-append').disabled = false;
+    });
+}
+
+function loadAppendDirs() {
+    api('/api/config/append-dirs').then(r=>r.json()).then(d => {
+        if (d.append_dirs) {
+            d.append_dirs.forEach((p, i) => { if (i < 3) document.getElementById('append-' + i).value = p; });
+        }
+    }).catch(() => {});
+}
+
 function listBackups() {
     const panel = document.getElementById('restore-panel');
     const select = document.getElementById('backup-select');
@@ -314,6 +360,9 @@ function saveYamlConfig() {
 function reloadYaml() { api('/api/config').then(r=>r.json()).then(d=>{if(d.yaml)document.getElementById('config-yaml').value=d.yaml;}); }
 function resetServer() { api('/api/pipeline/reset',{method:'POST'}).then(r=>r.json()).then(d=>{const m=document.getElementById('yaml-save-msg');m.textContent=d.ok?'✅ Reloaded':'❌ '+(d.error||'');m.className=d.ok?'text-success':'text-danger';if(d.ok)setTimeout(()=>m.textContent='',3000);reloadYaml();}); }
 
-document.addEventListener('DOMContentLoaded', pollStatus);
+document.addEventListener('DOMContentLoaded', () => {
+    pollStatus();
+    loadAppendDirs();
+});
 </script>
 {% endblock %}

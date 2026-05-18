@@ -511,13 +511,16 @@ class Preprocessor:
         new_entries: Dict[str, dict] = {}
 
         for i, csv_path in enumerate(csv_files, 1):
-            print(f'Processing [{i}/{len(csv_files)}] {csv_path.name}', flush=True)
+            now_str = datetime.now(KST).strftime('%H:%M:%S')
+            print(f'[{now_str}] Processing [{i}/{len(csv_files)}] {csv_path.name}', flush=True)
             logger.info(f'Processing [{i}/{len(csv_files)}] {csv_path.name}')
 
             out_path = output_dir / f'{csv_path.stem}.parquet'
             success, reason, metadata = self.process_one(csv_path, out_path)
 
             if success:
+                now_str = datetime.now(KST).strftime('%H:%M:%S')
+                print(f'[{now_str}]   ✓ Saved to {out_path.name}', flush=True)
                 logger.info(f"  Saved to {out_path.name}")
                 self.stats["success"] += 1
                 if metadata and metadata.get("processing_time"):
@@ -530,6 +533,8 @@ class Preprocessor:
                     '날짜_시각': curr_time,
                 }
             else:
+                now_str = datetime.now(KST).strftime('%H:%M:%S')
+                print(f'[{now_str}]   ✗ Skipped: {reason}', flush=True)
                 logger.warning(f"  Skipped: {reason}")
                 self.stats["skipped"] += 1
                 self.stats["skip_reasons"][reason] += 1

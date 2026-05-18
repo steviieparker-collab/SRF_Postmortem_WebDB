@@ -1039,6 +1039,7 @@ from .pipeline_manager import (
     start_monitor,
     stop_monitor,
     stop_batch_pipeline,
+    run_append,
 )
 
 
@@ -1198,6 +1199,29 @@ async def api_pipeline_stop(request: Request):
     return {"ok": True, "message": "Pipeline stop requested"}
 
 
+@app.post("/api/pipeline/append")
+async def api_pipeline_append(request: Request):
+    """Run append pipeline (preprocess→merge→classify→import) with specified input dirs."""
+    pw = request.query_params.get("password", "")
+    if not _check_password(pw):
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+    data = await request.json()
+    input_dirs = data.get("input_dirs", [])
+    if not input_dirs or len(input_dirs) != 3:
+        return JSONResponse({"error": "Exactly 3 input directories required"}, status_code=400)
+
+    config_path = str(Path(__file__).parent.parent.parent / "config" / "config.yaml")
+    run_append(input_dirs, config_path=config_path)
+    return {"ok": True, "message": "Append pipeline started"}
+
+
+@app.get("/api/config/append-dirs")
+async def api_get_append_dirs():
+    """Get configured append directories."""
+    cfg = get_config()
+    return {"ok": True, "append_dirs": [str(d) for d in cfg.paths.append_dirs]}
+
+
 @app.post("/api/db/backup")
 async def api_db_backup(request: Request):
     pw = request.query_params.get("password", "")
@@ -1273,4 +1297,5 @@ if __name__ == "__main__":
     from ..core.config import get_config
 
     cfg = get_config()
-    uvicorn.run(app, host=cfg.web.host, port=cfg.web.port)
+    uvicorn.run(app, host=cfg.web.host, port=cfg.web.port,
+               log_level="warning", access_log=False)

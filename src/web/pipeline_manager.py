@@ -9,7 +9,7 @@ import json
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -19,6 +19,16 @@ from src.core.config import load_config, reset_config
 from src.core.logger import get_logger
 
 logger = get_logger(__name__)
+
+KST = timezone(timedelta(hours=9))
+
+
+def _ts(msg: str) -> str:
+    """Prepend timestamp [HH:MM:SS] to a status message and print to stdout."""
+    now = datetime.now(KST).strftime("%H:%M:%S")
+    ts_msg = f"[{now}] {msg}"
+    print(ts_msg, flush=True)
+    return ts_msg
 
 
 class PipelineStatus:
@@ -104,10 +114,10 @@ def run_batch_pipeline(config_path: str = "config/config.yaml", input_dirs: Opti
             from src.orchestrator import SRFOrchestrator
             orch = SRFOrchestrator(config)
 
-            _pipeline_status.update("Setting up directories...")
+            _pipeline_status.update(_ts("Setting up directories..."))
             orch.setup_directories()
 
-            _pipeline_status.update("Running preprocessor...")
+            _pipeline_status.update(_ts("Running preprocessor..."))
             if input_dirs:
                 orch.run_preprocessor([Path(d) for d in input_dirs])
             else:
@@ -117,14 +127,14 @@ def run_batch_pipeline(config_path: str = "config/config.yaml", input_dirs: Opti
                 _pipeline_status.finish({"message": "Stopped by user"})
                 return
 
-            _pipeline_status.update("Running grouper (merge)...")
+            _pipeline_status.update(_ts("Running grouper (merge)..."))
             grouper_result = orch.run_grouper()
 
             if _stop_batch.is_set():
                 _pipeline_status.finish({"message": "Stopped by user"})
                 return
 
-            _pipeline_status.update("Running classifier...")
+            _pipeline_status.update(_ts("Running classifier..."))
             if _stop_batch.is_set():
                 _pipeline_status.finish({"message": "Stopped by user"})
                 return
@@ -134,28 +144,28 @@ def run_batch_pipeline(config_path: str = "config/config.yaml", input_dirs: Opti
                 _pipeline_status.finish({"message": "Stopped by user"})
                 return
 
-            _pipeline_status.update("Generating visualizations...")
+            _pipeline_status.update(_ts("Generating visualizations..."))
             orch.run_visualizer()
 
             if _stop_batch.is_set():
                 _pipeline_status.finish({"message": "Stopped by user"})
                 return
 
-            _pipeline_status.update("Generating reports...")
+            _pipeline_status.update(_ts("Generating reports..."))
             orch.run_reporter()
 
             if _stop_batch.is_set():
                 _pipeline_status.finish({"message": "Stopped by user"})
                 return
 
-            _pipeline_status.update("Sending emails...")
+            _pipeline_status.update(_ts("Sending emails..."))
             email_results = orch.run_email_sender()
 
             if _stop_batch.is_set():
                 _pipeline_status.finish({"message": "Stopped by user"})
                 return
 
-            _pipeline_status.update("Importing to DB...")
+            _pipeline_status.update(_ts("Importing to DB..."))
             db_count = orch.import_to_db()
 
             result = {
@@ -188,9 +198,9 @@ def run_import_only(config_path: str = "config/config.yaml"):
             # config.paths.merged_dir 은 "./data/merged"
             merged_dir = (project_root / config.paths.merged_dir).resolve()
 
-            _pipeline_status.update(f"Scanning {merged_dir}...")
+            _pipeline_status.update(_ts(f"Scanning {merged_dir}..."))
             if not merged_dir.exists():
-                _pipeline_status.fail(f"Merged directory not found: {merged_dir}")
+                _pipeline_status.fail(_ts(f"Merged directory not found: {merged_dir}"))
                 return
 
             from src.import_job import run_import as do_import
@@ -203,6 +213,98 @@ def run_import_only(config_path: str = "config/config.yaml"):
     thread = threading.Thread(target=_run, daemon=True, name="pipeline-import")
     thread.start()
     return {"ok": True, "message": "Import started"}
+
+
+def run_append(dirs: list, config_path: str = "config/config.yaml"):
+    """Append: preprocess CSVs → merge → replace old parquets → import to DB.
+    
+    Accepts 3 scope directories. For each newly merged event:
+    1. Delete existing event from DB (if same event_id)
+    2. Replace parquet in data/merged/
+    3. Import new event to DB
+    """
+    if _pipeline_status.running:
+        return {"error": "Pipeline already running"}
+
+    def _run():
+        _pipeline_status.start("append")
+        try:
+            config = load_config(config_path)
+            from src.pipeline.append_merge import run_append_merge
+            import shutil
+            from pathlib import Path
+
+            project_root = Path(config_path).resolve().parent.parent
+            merged_dir = (project_root / config.paths.merged_dir).resolve()
+            merged_dir.mkdir(parents=True, exist_ok=True)
+
+            # Temp output for append-merge
+            temp_dir = merged_dir / ".append_work"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+
+            _pipeline_status.update("Preprocessing and merging...")
+            result = run_append_merge(
+                input_dirs=[Path(d) for d in dirs],
+                output_dir=temp_dir,
+                keep_parquet=False,
+            )
+
+            grouper = result.get("grouper", {})
+            merged_files = sorted(temp_dir.glob("event_*.parquet"))
+            _pipeline_status.update(f"{len(merged_files)} merged events to process...")
+
+            from src.db.schema import get_sync_connection, init_db_sync
+            from src.db.repository import delete_event, get_event
+            from src.import_job import run_import
+
+            conn = get_sync_connection()
+            replaced_count = 0
+            imported_count = 0
+
+            for fp in merged_files:
+                event_id = fp.stem.replace("event_", "", 1)  # e.g. "20260509_073032"
+
+                # 1. Delete old DB record + merged file
+                existing = get_event(conn, event_id)
+                if existing:
+                    delete_event(conn, event_id)
+                    replaced_count += 1
+
+                # 2. Delete old parquet in merged/ if exists
+                old_pq = merged_dir / fp.name
+                if old_pq.exists():
+                    old_pq.unlink()
+
+                # 3. Copy new parquet
+                shutil.copy2(fp, merged_dir / fp.name)
+
+            conn.close()
+
+            # 4. Import to DB
+            _pipeline_status.update("Importing to DB...")
+            import_result = run_import(merged_dir, config_path)
+            imported_count = import_result.get("imported", 0)
+
+            # Cleanup temp
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+
+            _pipeline_status.finish({
+                "mode": "append",
+                "matched_events": grouper.get("matched_events", 0),
+                "total_files": grouper.get("total_files", 0),
+                "replaced": replaced_count,
+                "imported": imported_count,
+            })
+
+        except Exception as e:
+            logger.exception("Append failed")
+            _pipeline_status.fail(str(e))
+
+    thread = threading.Thread(target=_run, daemon=True, name="pipeline-append")
+    thread.start()
+    return {"ok": True, "message": "Append started"}
 
 
 def start_monitor(config_path: str = "config/config.yaml"):
@@ -224,12 +326,15 @@ def start_monitor(config_path: str = "config/config.yaml"):
             orch = SRFOrchestrator(config)
             orch.setup_directories()
 
-            # Check watch folders exist
+            # ── Zone.Identifier 필터 ─────────────────────────────
+            def _is_valid_csv(fpath: Path) -> bool:
+                return fpath.suffix.lower() == ".csv" and not fpath.name.endswith(":Zone.Identifier")
+
             for wf in config.paths.watch_folders:
                 resolved = Path(wf)
                 if not resolved.exists():
                     resolved.mkdir(parents=True, exist_ok=True)
-                    _pipeline_status.update(f"Created watch folder: {resolved}")
+                    _pipeline_status.update(_ts(f"Created watch folder: {resolved}"))
 
             # Monitor loop
             processed_csv = set()        # all csv files processed (skip on re-detection)
@@ -240,29 +345,6 @@ def start_monitor(config_path: str = "config/config.yaml"):
 
             # ── Wait timeout tracking ─────────────────────────────
             wait_start: float | None = None       # time.time() when wait for all-3 started
-            pending_new_scope_files: dict = {}     # scope_idx -> set of pending parquet filenames
-
-            def do_cleanup_on_timeout() -> bool:
-                """Clean up partial scope files. Returns True if any file was cleaned."""
-                cleaned = 0
-                for i in range(1, 4):
-                    for fname in pending_new_scope_files.get(i, set()):
-                        fpath = config.paths.processed_dir / f"scope{i}" / fname
-                        try:
-                            fpath.unlink()
-                            cleaned += 1
-                        except Exception as e:
-                            logger.warning(f"Cleanup failed: {fpath.name}: {e}")
-                # Reset tracking
-                nonlocal wait_start
-                wait_start = None
-                pending_new_scope_files.clear()
-                for i in range(1, 4):
-                    sd = config.paths.processed_dir / f"scope{i}"
-                    last_pipeline_parquet[i] = set(
-                        f.name for f in sd.glob("*.parquet")
-                    ) if sd.exists() else set()
-                return cleaned > 0
 
             # ── Initial snapshot ──────────────────────────────────
             # 1) Collect ALL existing CSV files in watch folders → mark as "already tracked"
@@ -272,7 +354,7 @@ def start_monitor(config_path: str = "config/config.yaml"):
                 wf_path = Path(wf)
                 if wf_path.exists():
                     for f in wf_path.glob("*.csv"):
-                        if not f.name.endswith(':Zone.Identifier'):
+                        if _is_valid_csv(f):
                             processed_csv.add(f.name)
                             existing_csv_count += 1
 
@@ -307,8 +389,7 @@ def start_monitor(config_path: str = "config/config.yaml"):
                     scope_dir = config.paths.processed_dir / f"scope{i}"
                     scope_dir.mkdir(parents=True, exist_ok=True)
 
-                    csv_files = [f for f in wf_path.glob("*.csv")
-                                 if not f.name.endswith(':Zone.Identifier')]
+                    csv_files = [f for f in wf_path.glob("*.csv") if _is_valid_csv(f)]
                     for csv_path in csv_files:
                         # Skip if already tracked or parquet already exists
                         pqt_path = scope_dir / f"{csv_path.stem}.parquet"
@@ -317,17 +398,36 @@ def start_monitor(config_path: str = "config/config.yaml"):
                                 processed_csv.add(csv_path.name)
                             continue
 
-                        _pipeline_status.update(f"Processing {csv_path.name}... ({int(csv_path.stat().st_size / 1024)}KB)")
+                        _pipeline_status.update(_ts(f"Processing {csv_path.name}... ({int(csv_path.stat().st_size / 1024)}KB)"))
+                        # 파일 잠금이 풀릴 때까지 대기 (직접 열어보는 방식)
+                        for _wait in range(10):
+                            try:
+                                with open(csv_path, 'rb') as _f:
+                                    _f.read(1)
+                                break
+                            except (PermissionError, OSError):
+                                time.sleep(1.0)
                         try:
-                            orch.preprocessor.process_one(csv_path, pqt_path, max_retries=1)
-                            processed_csv.add(csv_path.name)
-                            newly_processed = True
+                            success, reason, metadata = orch.preprocessor.process_one(csv_path, pqt_path, max_retries=3)
+                            if success and pqt_path.exists():
+                                processed_csv.add(csv_path.name)
+                                newly_processed = True
+                                _pipeline_status.update(_ts(f"✓ {csv_path.name} → {pqt_path.name}"))
+                            else:
+                                logger.warning(f"Failed {csv_path.name}: {reason}")
+                                # I/O 에러 → 파일 문제, 무한 재시도 방지 위해 영구 skip
+                                # validation 실패 (빔전류 낮음 등) → 데이터 문제, 영구 skip
+                                processed_csv.add(csv_path.name)
+                                _pipeline_status.update(_ts(f"✗ {csv_path.name} FAILED: {reason}"))
                         except Exception as e:
                             logger.warning(f"Failed {csv_path.name}: {e}")
-                            _pipeline_status.update(f"Failed {csv_path.name}: {e}")
+                            # 예외 발생 시에도 무한 재시도 방지를 위해 영구 skip
+                            processed_csv.add(csv_path.name)
+                            _pipeline_status.update(_ts(f"✗ {csv_path.name} EXCEPTION: {e}"))
 
                 # ── Step 2: Check if all 3 scopes are ready ────────
                 wait_timeout = config.grouper.wait_timeout
+                run_pipeline = False
 
                 # Compute current new files per scope
                 current_new = {}
@@ -345,62 +445,58 @@ def start_monitor(config_path: str = "config/config.yaml"):
                     # New files detected but not all scopes present
                     if wait_start is None:
                         wait_start = time.time()
-                        pending_new_scope_files = dict(current_new)
-                    else:
-                        # Update pending files (more may have arrived during wait)
-                        for i in range(1, 4):
-                            if current_new[i]:
-                                pending_new_scope_files[i] = current_new[i]
 
                     elapsed = time.time() - wait_start
                     remaining = max(0, wait_timeout - int(elapsed))
-                    _pipeline_status.update(
+                    _pipeline_status.update(_ts(
                         f"Waiting for all 3 scopes... "
                         f"have: {[i for i in range(1, 4) if current_new[i]]}, "
                         f"missing: {[i for i in range(1, 4) if not current_new[i]]}, "
                         f"timeout in {remaining}s"
-                    )
+                    ))
 
                     if elapsed >= wait_timeout:
-                        _pipeline_status.update(
-                            f"Timeout ({wait_timeout}s) — cleaning up partial scope files..."
-                        )
-                        do_cleanup_on_timeout()
-                        _pipeline_status.update(
-                            f"Timeout — cleaned up partial files. Waiting for fresh data..."
-                        )
-                    # Continue loop (wait for more files or next cycle)
-                    time.sleep(config.system.check_interval)
-                    continue
+                        wait_start = None
+                        _pipeline_status.update(_ts(
+                            f"Timeout ({wait_timeout}s) — running pipeline with partial data..."
+                        ))
+                        run_pipeline = True
+                    else:
+                        time.sleep(config.system.check_interval)
+                        continue
 
                 elif not newly_processed and wait_start is not None:
                     # Still waiting but no new files this cycle — check timeout
                     elapsed = time.time() - wait_start
+                    _pipeline_status.update(_ts(
+                        f"Waiting for all 3 scopes... "
+                        f"have: {[i for i in range(1, 4) if current_new[i]]}, "
+                        f"missing: {[i for i in range(1, 4) if not current_new[i]]}, "
+                        f"timeout in {max(0, wait_timeout - int(elapsed))}s"
+                    ))
                     if elapsed >= wait_timeout:
-                        _pipeline_status.update(
-                            f"Timeout ({wait_timeout}s) — cleaning up partial scope files..."
-                        )
-                        do_cleanup_on_timeout()
-                        _pipeline_status.update(
-                            f"Timeout — cleaned up partial files. Waiting for fresh data..."
-                        )
-                    time.sleep(config.system.check_interval)
-                    continue
+                        wait_start = None
+                        _pipeline_status.update(_ts(
+                            f"Timeout ({wait_timeout}s) — running pipeline with partial data..."
+                        ))
+                        run_pipeline = True
+                    else:
+                        time.sleep(config.system.check_interval)
+                        continue
 
                 # ── Step 3: Pipeline execution ─────────────────────
-                # At this point: either newly_processed=True AND all_ready=True
-                #                 OR nothing happened (sleep below handles that)
-                if not newly_processed and wait_start is None:
+                # At this point: either all_ready=True, timeout forced, or nothing
+                if not newly_processed and wait_start is None and not run_pipeline:
                     # Nothing new, not waiting — just poll
                     time.sleep(config.system.check_interval)
                     continue
 
-                if not all_ready:
-                    # Should not reach here (above blocks handle non-ready cases)
+                if not all_ready and not run_pipeline:
+                    # Still missing scopes and no timeout
                     time.sleep(config.system.check_interval)
                     continue
 
-                # ── Capture NEW scope files before pipeline (for cleanup) ──
+                # ── Capture NEW scope files before pipeline (for cleanup and tracking) ──
                 new_scope_files = {}
                 for i in range(1, 4):
                     sd = config.paths.processed_dir / f"scope{i}"
@@ -410,7 +506,7 @@ def start_monitor(config_path: str = "config/config.yaml"):
 
                 # ── Run pipeline cycle ──
                 cycle_count += 1
-                _pipeline_status.update(f"[Cycle {cycle_count}] Running pipeline...")
+                _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Running pipeline..."))
                 try:
                     for step_name, step_fn in [
                         ("Grouper (merge)", orch.run_grouper),
@@ -418,7 +514,7 @@ def start_monitor(config_path: str = "config/config.yaml"):
                         ("Visualizer", orch.run_visualizer),
                         ("Reporter", orch.run_reporter),
                     ]:
-                        _pipeline_status.update(f"[Cycle {cycle_count}] {step_name}...")
+                        _pipeline_status.update(_ts(f"[Cycle {cycle_count}] {step_name}..."))
                         step_fn()
 
                     # Email: only for NEW merged files
@@ -456,15 +552,15 @@ def start_monitor(config_path: str = "config/config.yaml"):
                                             logger.warning(f"Email failed for {mf.name}: {e}")
                                     except Exception as e:
                                         logger.warning(f"Error preparing email for {mf.name}: {e}")
-                            _pipeline_status.update(f"[Cycle {cycle_count}] Emails sent: {emailed}")
+                            _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Emails sent: {emailed}"))
                             processed_merged.update(f.name for f in new_merged)
                         else:
-                            _pipeline_status.update(f"[Cycle {cycle_count}] No new merged files")
+                            _pipeline_status.update(_ts(f"[Cycle {cycle_count}] No new merged files"))
                     else:
-                        _pipeline_status.update(f"[Cycle {cycle_count}] Email sender disabled")
+                        _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Email sender disabled"))
 
                     # Import to DB
-                    _pipeline_status.update(f"[Cycle {cycle_count}] Importing to DB...")
+                    _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Importing to DB..."))
                     db_count = orch.import_to_db()
                     imported_events += db_count
 
@@ -483,12 +579,12 @@ def start_monitor(config_path: str = "config/config.yaml"):
                         sd = config.paths.processed_dir / f"scope{i}"
                         last_pipeline_parquet[i] = set(f.name for f in sd.glob("*.parquet")) if sd.exists() else set()
 
-                    _pipeline_status.update(
+                    _pipeline_status.update(_ts(
                         f"[Cycle {cycle_count}] Complete. {cleaned} scope files cleaned, {imported_events} total DB events."
-                    )
+                    ))
                 except Exception as e:
                     logger.exception("Monitor cycle failed")
-                    _pipeline_status.update(f"[Cycle {cycle_count}] Failed: {e}")
+                    _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Failed: {e}"))
 
                 time.sleep(config.system.check_interval)
 
