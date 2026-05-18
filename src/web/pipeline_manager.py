@@ -398,15 +398,22 @@ def start_monitor(config_path: str = "config/config.yaml"):
                                 processed_csv.add(csv_path.name)
                             continue
 
-                        _pipeline_status.update(_ts(f"Processing {csv_path.name}... ({int(csv_path.stat().st_size / 1024)}KB)"))
-                        # 파일 잠금이 풀릴 때까지 대기 (직접 열어보는 방식)
-                        for _wait in range(10):
+                        # 파일 안정성 확인: 크기가 변하지 않을 때까지 대기 (쓰기 완료 보장)
+                        file_size = csv_path.stat().st_size
+                        _pipeline_status.update(_ts(f"Checking {csv_path.name}... ({int(file_size / 1024)}KB)"))
+                        for _wait in range(6):
                             try:
                                 with open(csv_path, 'rb') as _f:
                                     _f.read(1)
-                                break
+                                # 크기가 안정적인지 확인 (1초 후 같은 크기면 완료된 것으로 간주)
+                                time.sleep(1.0)
+                                new_size = csv_path.stat().st_size
+                                if file_size == new_size:
+                                    break
+                                file_size = new_size
                             except (PermissionError, OSError):
                                 time.sleep(1.0)
+                        _pipeline_status.update(_ts(f"Processing {csv_path.name}... ({int(file_size / 1024)}KB)"))
                         try:
                             success, reason, metadata = orch.preprocessor.process_one(csv_path, pqt_path, max_retries=3)
                             if success and pqt_path.exists():
