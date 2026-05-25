@@ -498,7 +498,12 @@ class AcceleratorEventClassifier:
         self.logger = get_logger(__name__)
 
     def run(self, input_dir: str, output_dir: str) -> pd.DataFrame:
-        """Main entry point - processes all parquet files in input_dir."""
+        """Main entry point - processes all parquet files in input_dir.
+
+        Args:
+            input_dir: Directory containing parquet files to classify.
+            output_dir: Directory to save results.
+        """
         input_path = Path(input_dir)
         files = sorted(input_path.glob("*.parquet"))
 

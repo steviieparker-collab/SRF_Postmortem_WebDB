@@ -261,7 +261,6 @@ def run_append(dirs: list, config_path: str = "config/config.yaml"):
 
             conn = get_sync_connection()
             replaced_count = 0
-            imported_count = 0
 
             for fp in merged_files:
                 event_id = fp.stem.replace("event_", "", 1)  # e.g. "20260509_073032"
@@ -282,7 +281,23 @@ def run_append(dirs: list, config_path: str = "config/config.yaml"):
 
             conn.close()
 
-            # 4. Import to DB
+            # 4. Classify, visualize, report (only for newly appended files)
+            new_merged_paths = [merged_dir / fp.name for fp in merged_files]
+            if new_merged_paths:
+                # Orchestrator must be loaded — reuse from pipeline_manager context
+                try:
+                    from src.orchestrator import SRFOrchestrator as _Orch
+                    _orch = _Orch(config)
+                    _pipeline_status.update("Classifying...")
+                    _orch.run_classifier(merged_files=new_merged_paths)
+                    _pipeline_status.update("Visualizing...")
+                    _orch.run_visualizer(merged_files=new_merged_paths)
+                    _pipeline_status.update("Generating reports...")
+                    _orch.run_reporter(merged_files=new_merged_paths)
+                except Exception as e:
+                    logger.warning(f"Classification/visualization/report failed for appended events: {e}")
+
+            # 5. Import to DB
             _pipeline_status.update("Importing to DB...")
             import_result = run_import(merged_dir, config_path)
             imported_count = import_result.get("imported", 0)
@@ -526,21 +541,33 @@ def start_monitor(config_path: str = "config/config.yaml"):
                 cycle_count += 1
                 _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Running pipeline..."))
                 try:
-                    for step_name, step_fn in [
-                        ("Grouper (merge)", orch.run_grouper),
-                        ("Classifier", orch.run_classifier),
-                        ("Visualizer", orch.run_visualizer),
-                        ("Reporter", orch.run_reporter),
-                    ]:
-                        _pipeline_status.update(_ts(f"[Cycle {cycle_count}] {step_name}..."))
-                        step_fn()
+                    # Capture merged dir BEFORE grouper to know what's new
+                    merged_before = set(f.name for f in merged_dir.glob("*.parquet"))
 
-                    # Email: only for NEW merged files
-                    if orch.email_sender:
-                        current_merged = set(f.name for f in merged_dir.glob("*.parquet"))
-                        new_merged = [f for f in merged_dir.glob("*.parquet")
-                                      if f.name not in processed_merged]
-                        if new_merged:
+                    _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Grouper (merge)..."))
+                    orch.run_grouper()
+
+                    # Compute new merged files created by the grouper
+                    merged_after = set(f.name for f in merged_dir.glob("*.parquet"))
+                    new_merged_names = merged_after - merged_before
+                    new_merged = [merged_dir / fn for fn in sorted(new_merged_names)]
+
+                    if not new_merged:
+                        _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Grouper created no new merged files"))
+                    else:
+                        _pipeline_status.update(_ts(f"[Cycle {cycle_count}] {len(new_merged)} new merged file(s): {[f.name for f in new_merged]}"))
+
+                        _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Classifier..."))
+                        orch.run_classifier(merged_files=new_merged)
+
+                        _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Visualizer..."))
+                        orch.run_visualizer(merged_files=new_merged)
+
+                        _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Reporter..."))
+                        orch.run_reporter(merged_files=new_merged)
+
+                        # Email: only for newly merged files
+                        if orch.email_sender:
                             emailed = 0
                             import json
                             web_url = f"http://141.223.105.230:{config.web.port}"
@@ -557,7 +584,6 @@ def start_monitor(config_path: str = "config/config.yaml"):
                                         event_id = mf.stem.replace('event_', '')
                                         content = report_file.read_text(encoding='utf-8') if report_file.exists() else "No report"
                                         content += f"\n\n🔗 **View in WebDB:** {web_url}/events/{event_id}\n"
-                                        # Wrap email sending in try-except to prevent pipeline crash
                                         try:
                                             orch.email_sender.send_report(
                                                 report_content=content,
@@ -573,9 +599,7 @@ def start_monitor(config_path: str = "config/config.yaml"):
                             _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Emails sent: {emailed}"))
                             processed_merged.update(f.name for f in new_merged)
                         else:
-                            _pipeline_status.update(_ts(f"[Cycle {cycle_count}] No new merged files"))
-                    else:
-                        _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Email sender disabled"))
+                            _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Email sender disabled"))
 
                     # Import to DB
                     _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Importing to DB..."))

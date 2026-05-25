@@ -7,7 +7,10 @@ Combines:
 """
 import sys
 import json
+import sqlite3
 from pathlib import Path
+
+import pandas as pd
 
 # Add parent to path for commands
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -101,22 +104,52 @@ class SRFOrchestrator:
         logger.info(f"Grouper: {result.get('matched_events', 0)} events merged")
         return result
 
-    def run_classifier(self) -> tuple:
-        """Step 3: Classify merged events (monitoring pipeline style)."""
-        logger.info(f"Classifier: Starting classification for {len(list(self.paths.merged_dir.glob('*.parquet')))} files")
-        df = self.classifier.run(
-            input_dir=str(self.paths.merged_dir),
-            output_dir=str(self.paths.results_dir),
-        )
-        logger.info(f"Classifier: {len(df)} events classified")
+    def _resolve_merged_files(self, merged_files: Optional[list] = None) -> list:
+        """Resolve merged files: use provided list, or scan merged_dir if None."""
+        if merged_files is not None:
+            return list(merged_files)
+        return sorted(self.paths.merged_dir.glob("*.parquet"))
+
+    def run_classifier(self, merged_files: Optional[list] = None) -> tuple:
+        """Step 3: Classify merged events.
+
+        Args:
+            merged_files: Specific files to classify (None = all in merged_dir).
+        """
+        files = self._resolve_merged_files(merged_files)
+        if not files:
+            logger.info("Classifier: No files to classify — skipping")
+            return pd.DataFrame()
+
+        # 새 파일만 temp dir에 복사해서 classifier에 전달 (merged_dir 전체를 긁지 않도록)
+        import tempfile
+        import shutil
+        temp_input = Path(tempfile.mkdtemp(prefix="srf_cls_"))
+        try:
+            for f in files:
+                shutil.copy2(f, temp_input / f.name)
+            logger.info(f"Classifier: Classifying {len(files)} file(s)")
+            df = self.classifier.run(
+                input_dir=str(temp_input),
+                output_dir=str(self.paths.results_dir),
+            )
+        finally:
+            shutil.rmtree(temp_input, ignore_errors=True)
+
+        if len(df) > 0:
+            logger.info(f"Classifier: {len(df)} events classified")
         self._save_per_event_classification()
         return df
 
-    def run_visualizer(self) -> list:
-        """Step 4: Generate visualization graphs."""
-        merged_files = list(self.paths.merged_dir.glob("*.parquet"))
+    def run_visualizer(self, merged_files: Optional[list] = None) -> list:
+        """Step 4: Generate visualization graphs.
+
+        Args:
+            merged_files: Specific files to visualize (None = all in merged_dir).
+        """
+        files = self._resolve_merged_files(merged_files)
         graph_files = []
-        for merged_file in merged_files:
+        for merged_file in files:
             wide = self.paths.graphs_dir / f"{merged_file.stem}_wide_el.jpg"
             if self.visualizer.plot_single(str(merged_file), str(wide), time_range='wide', style='event_labeller'):
                 graph_files.append(str(wide))
@@ -126,11 +159,15 @@ class SRFOrchestrator:
         logger.info(f"Visualizer: {len(graph_files)} graphs generated")
         return graph_files
 
-    def run_reporter(self) -> list:
-        """Step 5: Generate text reports."""
-        merged_files = list(self.paths.merged_dir.glob("*.parquet"))
+    def run_reporter(self, merged_files: Optional[list] = None) -> list:
+        """Step 5: Generate text reports.
+
+        Args:
+            merged_files: Specific files to report (None = all in merged_dir).
+        """
+        files = self._resolve_merged_files(merged_files)
         report_files = []
-        for merged_file in merged_files:
+        for merged_file in files:
             cls_file = self.paths.results_dir / f"{merged_file.stem}_classification.json"
             if cls_file.exists():
                 report = self.reporter.generate(
@@ -143,14 +180,18 @@ class SRFOrchestrator:
         logger.info(f"Reporter: {len(report_files)} reports generated")
         return report_files
 
-    def run_email_sender(self) -> list:
-        """Step 6: Send email reports."""
+    def run_email_sender(self, merged_files: Optional[list] = None) -> list:
+        """Step 6: Send email reports.
+
+        Args:
+            merged_files: Specific files to email (None = all in merged_dir).
+        """
         if not self.email_sender:
             logger.info("Email sender not configured — skipping")
             return []
-        merged_files = list(self.paths.merged_dir.glob("*.parquet"))
+        files = self._resolve_merged_files(merged_files)
         results = []
-        for merged_file in merged_files:
+        for merged_file in files:
             graphs = list(self.paths.graphs_dir.glob(f"{merged_file.stem}_*.jpg"))
             report_file = self.paths.reports_dir / f"{merged_file.stem}_report.md"
             cls_file = self.paths.results_dir / f"{merged_file.stem}_classification.json"
@@ -158,7 +199,7 @@ class SRFOrchestrator:
             if report_file.exists() and graphs:
                 summary = "Unclassified"
                 if cls_file.exists():
-                    summary = json.load(open(cls_file)).get('description', summary)
+                    summary = json.loads(cls_file.read_text(encoding='utf-8')).get('description', summary)
                 ok = self.email_sender.send_report(
                     report_content=report_file.read_text(encoding='utf-8'),
                     report_format='markdown',
@@ -245,7 +286,28 @@ class SRFOrchestrator:
                     if f.suffix == ".parquet":
                         shutil.copy2(f, merged_dir / f.name)
                 restored.append("merged/")
-            
+
+            # Update merged_file paths in DB to point to current location
+            if src_db.exists():
+                try:
+                    cur_conn = sqlite3.connect(str(db_path))
+                    new_merged_root = str(merged_dir.resolve())
+                    cur_conn.execute(
+                        """
+                        UPDATE events
+                        SET merged_file = ? || '/' || 'event_' || id || '.parquet'
+                        WHERE merged_file IS NOT NULL
+                        """,
+                        (new_merged_root,),
+                    )
+                    updated_rows = cur_conn.rowcount
+                    cur_conn.commit()
+                    cur_conn.close()
+                    if updated_rows > 0:
+                        restored.append(f"merged_file paths updated ({updated_rows} rows)")
+                except Exception as e:
+                    logger.warning(f"Failed to update merged_file paths: {e}")
+
             # Restore attachments
             src_attachments = tmp_dir / "attachments"
             if src_attachments.exists():
@@ -270,7 +332,7 @@ class SRFOrchestrator:
         seq_file = self.paths.results_dir / "sequence_info.json"
         if not seq_file.exists():
             return
-        data = json.loads(seq_file.read_text())
+        data = json.loads(seq_file.read_text(encoding='utf-8'))
         count = 0
         for fname, info in data.items():
             cls = info.get("classification")
@@ -281,38 +343,15 @@ class SRFOrchestrator:
         if count:
             logger.info(f"Created {count} per-event classification JSON files")
 
-    def run_full_pipeline(self, input_dirs=None, incremental=False):
-        """Run the complete monitoring pipeline (Steps 1-6)."""
+    def run_batch(self, db_import=False):
+        """Batch mode: process all files and optionally import to DB."""
         self.setup_directories()
-        
-        # 1. Preprocessor (already handles skipping)
-        targets = input_dirs if input_dirs else self.config.paths.watch_folders
-        preprocessor_result = self.run_preprocessor(targets)
-        
-        # If no new files processed and incremental=True, stop early
-        if incremental and preprocessor_result['stats']['success'] == 0:
-            logger.info("Incremental pipeline: No new files to process.")
-            return
-
-        # 2. Identify new files if incremental
-        new_files = []
-        if incremental:
-            # Detect what was freshly processed
-            for i in range(1, 4):
-                scope_dir = self.paths.processed_dir / f"scope{i}"
-                # Get files processed in the last 'check_interval' or matching recent timestamps
-                # For simplicity, we filter by files that don't have a corresponding merged entry yet
-                pass # Logic to be refined
-        
+        self.run_preprocessor()
         self.run_grouper()
         self.run_classifier()
         self.run_visualizer()
         self.run_reporter()
         self.run_email_sender()
-
-    def run_batch(self, db_import=False):
-        """Batch mode: process all files and optionally import to DB."""
-        self.run_full_pipeline()
         if db_import:
             self.import_to_db()
 
