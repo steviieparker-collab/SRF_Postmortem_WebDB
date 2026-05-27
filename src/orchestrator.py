@@ -1,9 +1,15 @@
 """
 SRF Postmortem Orchestrator — bridges pipeline modules with WebDB.
 
+4 Pipeline Paths:
+1. Full Pipeline  : watch folder 3개 모든 csv → preprocess → merge → classify → visualizer → DB
+2. Restore         : 백업 tar.gz에서 DB + merged parquet 복원, 경로 재연결
+3. Append Pipeline : data/append/scope{1,2,3} csv → preprocess → merge → classify → DB
+4. Monitor Trigger : watch folder 새 csv 3개만 → preprocess → merge → classify → DB
+
 Combines:
-1. Monitoring pipeline: Preprocessor → Grouper → Classifier → Visualizer → Reporter → EmailSender
-2. WebDB pipeline: Parquet Import → DB Classification → Similarity → Web Server
+- Monitoring pipeline: Preprocessor → Grouper → Classifier → Visualizer → Reporter → EmailSender
+- WebDB pipeline: Parquet Import → DB Classification → Similarity → Web Server
 """
 import sys
 import json
@@ -35,10 +41,11 @@ class SRFOrchestrator:
     """
     Unified orchestrator for the SRF Postmortem system.
 
-    Supports two modes:
-    - batch: Process all files through full pipeline -> DB
-    - monitor: Watch folders, process new files, import to DB
-    - web: Start web server with DB
+    Four pipeline paths:
+      1. run_full_pipeline()  — 모든 watch folder csv 처리 → merge → classify → visualizer → DB
+      2. restore_database()   — 백업 복원 + merged_file 경로 재연결 + visualizer 재생성
+      3. run_append_pipeline()— data/append/scope csv 처리 → merge → classify → DB
+      4. run_monitor()        — watch folder 새 파일 감지 → 바로 처리 (기존 monitor)
     """
 
     def __init__(self, config: AppConfig):
@@ -58,6 +65,57 @@ class SRFOrchestrator:
             self.email_sender = None
 
         logger.info("SRF Orchestrator initialized")
+
+    # ── Path 1: Full Pipeline ──────────────────────────────────
+
+    def run_full_pipeline(self, db_import=True):
+        """Path 1: 모든 watch folder csv 파일을 처리 → merge → classify → visualizer → DB.
+        
+        Args:
+            db_import: DB import 여부 (기본 True)
+        """
+        logger.info("=== Path 1: Full Pipeline Start ===")
+        self.setup_directories()
+        self.run_preprocessor()
+        self.run_grouper()
+        self.run_classifier()
+        self.run_visualizer()
+        self.run_reporter()
+        self.run_email_sender()
+        if db_import:
+            self.import_to_db()
+        logger.info("=== Path 1: Full Pipeline Complete ===")
+
+    def run_batch(self, db_import=False):
+        """Legacy: run_full_pipeline alias for backward compatibility."""
+        return self.run_full_pipeline(db_import=db_import)
+
+    # ── Path 3: Append Pipeline ───────────────────────────────
+
+    def run_append_pipeline(self, append_dirs: list = None, db_import=True):
+        """Path 3: data/append/scope{1,2,3} csv 파일 → preprocess → merge → classify → DB.
+        
+        Args:
+            append_dirs: [scope1_dir, scope2_dir, scope3_dir] (None = config.paths.append_dirs)
+            db_import: DB import 여부 (기본 True)
+        """
+        logger.info("=== Path 3: Append Pipeline Start ===")
+        if append_dirs is None:
+            append_dirs = list(self.paths.append_dirs)
+        if not append_dirs or len(append_dirs) != 3:
+            raise ValueError("Exactly 3 append directories required: [scope1, scope2, scope3]")
+        self.setup_directories()
+        self.run_preprocessor(append_dirs)
+        self.run_grouper()
+        self.run_classifier()
+        self.run_visualizer()
+        self.run_reporter()
+        self.run_email_sender()
+        if db_import:
+            self.import_to_db()
+        logger.info("=== Path 3: Append Pipeline Complete ===")
+
+    # ── Common Pipeline Steps ──────────────────────────────────
 
     def setup_directories(self) -> None:
         """Create all necessary directories."""
@@ -212,14 +270,38 @@ class SRFOrchestrator:
         logger.info(f"Email sender: {sum(r['success'] for r in results)} sent")
         return results
 
-    def backup_database(self) -> str:
-        """Create a full backup of the database AND merged data."""
+    def import_to_db(self) -> int:
+        """Import merged parquet files into the WebDB database."""
+        from src.import_job import run_import
+        cfg_path = None
+        try:
+            from src.core.config import get_config_path
+            cfg_path = get_config_path()
+        except Exception:
+            pass
+        result = run_import(self.paths.merged_dir, cfg_path)
+        count = result.get('imported', 0)
+        logger.info(f"DB import: {count} imported, {result.get('skipped', 0)} skipped, {result.get('errors', 0)} errors")
+        return count
+
+    # ── Path 2: Backup & Restore ───────────────────────────────
+
+    def backup_database(self, include_graphs: bool = False, include_results: bool = False) -> str:
+        """Create a full backup of the database AND merged data.
+        
+        Args:
+            include_graphs: graphs/ 디렉토리 포함 여부 (기본 False, 용량 큼)
+            include_results: results/ 디렉토리 포함 여부 (기본 False)
+        """
         from datetime import datetime
         import shutil
         import tarfile
         
         db_path = Path(self.config.db.path)
         merged_dir = Path(self.paths.merged_dir)
+        graphs_dir = Path(self.paths.graphs_dir)
+        results_dir = Path(self.paths.results_dir)
+        reports_dir = Path(self.paths.reports_dir)
         # attachments는 projects root/data/attachments/
         attachments_dir = db_path.parent.parent / "data" / "attachments"
 
@@ -238,23 +320,37 @@ class SRFOrchestrator:
                 tar.add(merged_dir, arcname=merged_dir.name)
             if attachments_dir.exists():
                 tar.add(attachments_dir, arcname=attachments_dir.name)
+            if include_graphs and graphs_dir.exists():
+                tar.add(graphs_dir, arcname=graphs_dir.name)
+            if include_results and results_dir.exists():
+                tar.add(results_dir, arcname=results_dir.name)
+            # reports는 용량 작으므로 항상 포함
+            if reports_dir.exists():
+                tar.add(reports_dir, arcname=reports_dir.name)
 
         return str(backup_filename)
 
-    def restore_database(self, backup_file: str) -> dict:
-        """Restore from a full backup tar.gz.
+    def restore_database(self, backup_file: str, regenerate_visuals: bool = True) -> dict:
+        """Path 2: 백업 파일로 DB + merged parquet + attachments 복원.
         
-        Extracts: events.db, merged/, attachments/
-        Returns dict with status and details.
+        복원 후 merged_file 경로를 현재 프로젝트 위치로 재연결하고,
+        필요시 graphs/results를 재생성합니다.
+        
+        Args:
+            backup_file: 백업 tar.gz 경로
+            regenerate_visuals: 복원 후 visualizer/reporter 재실행 여부
         """
         import shutil
         import tarfile
         import tempfile
         
         backup_path = Path(backup_file)
-        db_path = Path(self.config.db.path)
-        merged_dir = Path(self.paths.merged_dir)
-        attachments_dir = db_path.parent.parent / "data" / "attachments"
+        db_path = Path(self.config.db.path).resolve()
+        merged_dir = Path(self.paths.merged_dir).resolve()
+        graphs_dir = Path(self.paths.graphs_dir).resolve()
+        results_dir = Path(self.paths.results_dir).resolve()
+        reports_dir = Path(self.paths.reports_dir).resolve()
+        attachments_dir = (db_path.parent.parent / "data" / "attachments").resolve()
         
         if not backup_path.exists():
             return {"ok": False, "error": f"Backup file not found: {backup_file}"}
@@ -263,55 +359,60 @@ class SRFOrchestrator:
         tmp_dir = Path(tempfile.mkdtemp(prefix="srf_restore_"))
         try:
             with tarfile.open(backup_path, "r:gz") as tar:
+                # arcname이 디렉토리 구조를 유지하도록 함
                 tar.extractall(path=tmp_dir)
             
             restored = []
             
-            # Restore DB
+            # ── 1. Restore DB ──
             src_db = tmp_dir / "events.db"
             if src_db.exists():
-                # Backup current DB first
                 current_bak = db_path.with_suffix(".db.restore_bak")
                 if db_path.exists():
                     shutil.copy2(db_path, current_bak)
+                    restored.append("backup_created")
                 shutil.copy2(src_db, db_path)
                 restored.append("events.db")
+            else:
+                # tar에 db 파일명이 다른 경우 찾기
+                db_candidates = list(tmp_dir.glob("*.db")) + list(tmp_dir.glob("*.sqlite"))
+                if db_candidates:
+                    src_db = db_candidates[0]
+                    current_bak = db_path.with_suffix(".db.restore_bak")
+                    if db_path.exists():
+                        shutil.copy2(db_path, current_bak)
+                        restored.append("backup_created")
+                    shutil.copy2(src_db, db_path)
+                    restored.append(f"events.db (from {src_db.name})")
             
-            # Restore merged parquet
+            # ── 2. Restore merged parquet ──
             src_merged = tmp_dir / "merged"
+            if not src_merged.exists():
+                # 상위 디렉토리에 있을 수도 있음
+                for d in tmp_dir.iterdir():
+                    if d.is_dir() and d.name in ("merged", "data"):
+                        inner = d / "merged" if d.name == "data" else d
+                        if inner.exists():
+                            src_merged = inner
+                            break
+
             if src_merged.exists():
                 merged_dir.mkdir(parents=True, exist_ok=True)
+                # backup의 merged 파일을 덮어쓰기
+                copied = 0
                 for f in src_merged.iterdir():
                     if f.name.endswith(":Zone.Identifier"):
                         continue
                     if f.suffix == ".parquet":
                         shutil.copy2(f, merged_dir / f.name)
-                restored.append("merged/")
-
-            # Update merged_file paths in DB to point to current location
-            if src_db.exists():
-                try:
-                    cur_conn = sqlite3.connect(str(db_path))
-                    new_merged_root = str(merged_dir.resolve())
-                    cur_conn.execute(
-                        """
-                        UPDATE events
-                        SET merged_file = ? || '/' || 'event_' || id || '.parquet'
-                        WHERE merged_file IS NOT NULL
-                        """,
-                        (new_merged_root,),
-                    )
-                    updated_rows = cur_conn.rowcount
-                    cur_conn.commit()
-                    cur_conn.close()
-                    if updated_rows > 0:
-                        restored.append(f"merged_file paths updated ({updated_rows} rows)")
-                except Exception as e:
-                    logger.warning(f"Failed to update merged_file paths: {e}")
-
-            # Restore attachments
+                        copied += 1
+                restored.append(f"merged/ ({copied} parquet files)")
+            else:
+                logger.warning("No merged parquet found in backup")
+            
+            # ── 3. Restore attachments ──
             src_attachments = tmp_dir / "attachments"
-            if src_attachments.exists():
+            if src_attachments.exists() and src_attachments.is_dir():
                 attachments_dir.mkdir(parents=True, exist_ok=True)
                 for event_dir in src_attachments.iterdir():
                     if event_dir.is_dir():
@@ -321,11 +422,96 @@ class SRFOrchestrator:
                             shutil.copy2(f, target / f.name)
                 restored.append("attachments/")
             
+            # ── 4. Restore optional dirs from backup ──
+            for src_name, dst_dir in [("graphs", graphs_dir), ("results", results_dir), ("reports", reports_dir)]:
+                src_path = tmp_dir / src_name
+                if src_path.exists() and src_path.is_dir():
+                    dst_dir.mkdir(parents=True, exist_ok=True)
+                    for f in src_path.iterdir():
+                        if not f.name.endswith(":Zone.Identifier"):
+                            shutil.copy2(f, dst_dir / f.name)
+                    restored.append(f"{src_name}/")
+
+            # ── 5. Update merged_file paths in DB ──
+            merged_paths_updated = 0
+            merged_paths_failed = 0
+            if src_db.exists() or any(tmp_dir.glob("*.db")):
+                try:
+                    # DB 커넥션: 복원된 DB 사용 (캐시 방지를 위해 직접 열기)
+                    cur_conn = sqlite3.connect(str(db_path))
+                    cur_conn.execute("PRAGMA journal_mode=DELETE")
+                    
+                    new_merged_root = str(merged_dir)
+                    cursor = cur_conn.execute(
+                        """
+                        UPDATE events
+                        SET merged_file = ? || '/' || 'event_' || id || '.parquet'
+                        WHERE merged_file IS NOT NULL
+                        """,
+                        (new_merged_root,),
+                    )
+                    merged_paths_updated = cursor.rowcount
+                    cur_conn.commit()
+                    
+                    # Verify: 존재하지 않는 merged_file이 있는지 확인
+                    cursor = cur_conn.execute(
+                        "SELECT merged_file FROM events WHERE merged_file IS NOT NULL"
+                    )
+                    missing = []
+                    for row in cursor.fetchall():
+                        if not Path(row[0]).exists():
+                            missing.append(row[0])
+                    if missing:
+                        logger.warning(f"{len(missing)} merged_file paths still unresolved after update")
+                        for m in missing[:5]:
+                            logger.warning(f"  Missing: {m}")
+                    else:
+                        restored.append(f"merged_file paths verified ({merged_paths_updated} rows)")
+                    
+                    cur_conn.close()
+                except Exception as e:
+                    merged_paths_failed = 1
+                    logger.warning(f"Failed to update merged_file paths: {e}")
+            
+            if merged_paths_updated > 0:
+                restored.append(f"merged_file paths updated ({merged_paths_updated} rows)")
+            if merged_paths_failed:
+                restored.append("merged_file path update FAILED")
+            
+            # ── 6. Regenerate visuals (graphs + classification) if requested ──
+            if regenerate_visuals:
+                merged_files = sorted(merged_dir.glob("*.parquet"))
+                if merged_files:
+                    logger.info(f"Regenerating visuals for {len(merged_files)} events...")
+                    cls_files_before = len(list(results_dir.glob("*_classification.json")))
+                    graph_files_before = len(list(graphs_dir.glob("*.jpg")))
+                    
+                    # Classification 재실행 (results/*_classification.json 있으면 skip)
+                    self.run_classifier(merged_files=merged_files)
+                    
+                    # Graphs 재생성
+                    self.run_visualizer(merged_files=merged_files)
+                    
+                    # Reports 재생성
+                    self.run_reporter(merged_files=merged_files)
+                    
+                    cls_files_after = len(list(results_dir.glob("*_classification.json")))
+                    graph_files_after = len(list(graphs_dir.glob("*.jpg")))
+                    report_files_after = len(list(reports_dir.glob("*_report.md")))
+                    
+                    restored.append(
+                        f"visuals regenerated: {cls_files_after} cls, "
+                        f"{graph_files_after} graphs, {report_files_after} reports"
+                    )
+                else:
+                    logger.warning("No merged parquet files to regenerate visuals for")
+            
             return {"ok": True, "restored": restored}
         except Exception as e:
+            import traceback
+            logger.error(f"Restore failed: {e}\n{traceback.format_exc()}")
             return {"ok": False, "error": str(e)}
         finally:
-            # Cleanup temp
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
     def _save_per_event_classification(self):
@@ -344,31 +530,19 @@ class SRFOrchestrator:
         if count:
             logger.info(f"Created {count} per-event classification JSON files")
 
-    def run_batch(self, db_import=False):
-        """Batch mode: process all files and optionally import to DB."""
-        self.setup_directories()
-        self.run_preprocessor()
-        self.run_grouper()
-        self.run_classifier()
-        self.run_visualizer()
-        self.run_reporter()
-        self.run_email_sender()
-        if db_import:
-            self.import_to_db()
+    # ── Path 4: Monitor ────────────────────────────────────────
 
     def run_monitor(self):
-        """Continuous monitoring mode (from original main.py)."""
+        """Path 4: Continuous monitoring — watch folder에 새로운 csv 3개씩 감지하여 실시간 처리."""
         self.setup_directories()
 
         import time
         from datetime import datetime
 
-        # Check watch folders exist
         for wf in self.paths.watch_folders:
             if not wf.exists():
                 raise FileNotFoundError(f"Watch folder not found: {wf}")
 
-        # Track processed files
         processed_csv = {wf: set(f.name for f in wf.glob("*.csv")) for wf in self.paths.watch_folders}
         processed_parquet = {}
         for i in range(1, 4):
@@ -380,7 +554,6 @@ class SRFOrchestrator:
 
         try:
             while True:
-                # Check for new CSV files per scope
                 for i, wf in enumerate(self.paths.watch_folders, 1):
                     csvs = [f for f in wf.glob("*.csv") if f.name not in processed_csv[wf]]
                     if not csvs:
@@ -388,7 +561,6 @@ class SRFOrchestrator:
                     scope_dir = self.paths.processed_dir / f"scope{i}"
                     scope_dir.mkdir(parents=True, exist_ok=True)
                     for csv_path in csvs:
-                        # 파일 잠금이 풀릴 때까지 대기 (직접 열어보는 방식)
                         for _ in range(15):
                             try:
                                 with open(csv_path, 'rb') as __f:
@@ -400,7 +572,6 @@ class SRFOrchestrator:
                         self.preprocessor.process_one(csv_path, parquet_path)
                         processed_csv[wf].add(csv_path.name)
 
-                # Check if all 3 scopes have new parquet files
                 all_new = True
                 for i in range(1, 4):
                     sk = f"scope{i}"
@@ -425,19 +596,7 @@ class SRFOrchestrator:
         except KeyboardInterrupt:
             logger.info("Monitor stopped")
 
-    def import_to_db(self) -> int:
-        """Import merged parquet files into the WebDB database."""
-        from src.import_job import run_import
-        cfg_path = None
-        try:
-            from src.core.config import get_config_path
-            cfg_path = get_config_path()
-        except Exception:
-            pass
-        result = run_import(self.paths.merged_dir, cfg_path)
-        count = result.get('imported', 0)
-        logger.info(f"DB import: {count} imported, {result.get('skipped', 0)} skipped, {result.get('errors', 0)} errors")
-        return count
+    # ── Web Server ─────────────────────────────────────────────
 
     def run_web_server(self):
         """Start the WebDB web server."""
@@ -453,14 +612,16 @@ class SRFOrchestrator:
         if mode is None:
             mode = self.system.mode
 
-        if mode == "batch":
-            self.run_batch(db_import=True)
+        if mode in ("batch", "full_pipeline"):
+            self.run_full_pipeline(db_import=True)
         elif mode == "monitor":
             self.run_monitor()
         elif mode == "web":
             self.run_web_server()
         elif mode == "full":
-            self.run_batch(db_import=True)
+            self.run_full_pipeline(db_import=True)
             self.run_web_server()
+        elif mode == "append":
+            self.run_append_pipeline(db_import=True)
         else:
             raise ValueError(f"Unknown mode: {mode}")
