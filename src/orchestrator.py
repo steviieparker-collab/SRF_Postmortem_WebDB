@@ -132,6 +132,7 @@ class SRFOrchestrator:
 
     def run_preprocessor(self, input_dirs=None) -> dict:
         """Step 1: Preprocess CSV files into parquet."""
+        result = {"stats": {"success": 0, "skipped": 0, "total": 0, "errors": 0}}
         if input_dirs:
             for i, input_dir in enumerate(input_dirs, 1):
                 scope_output = self.paths.processed_dir / f"scope{i}"
@@ -302,8 +303,13 @@ class SRFOrchestrator:
         graphs_dir = Path(self.paths.graphs_dir)
         results_dir = Path(self.paths.results_dir)
         reports_dir = Path(self.paths.reports_dir)
-        # attachments는 projects root/data/attachments/
-        attachments_dir = db_path.parent.parent / "data" / "attachments"
+        # attachments: project_root/data/attachments/
+        # Resolve from merged_dir: merged is at data/merged, so attachments is data/attachments/
+        project_root = merged_dir.resolve().parent.parent if merged_dir else Path(self.config.db.path).resolve().parent.parent
+        attachments_dir = project_root / "data" / "attachments"
+        if not attachments_dir.exists():
+            # Try alternate: use the same logic as web server _get_attachments_dir
+            attachments_dir = Path(__file__).resolve().parent.parent / "data" / "attachments"
 
         if not db_path.exists():
             return "Database not found"
@@ -350,7 +356,11 @@ class SRFOrchestrator:
         graphs_dir = Path(self.paths.graphs_dir).resolve()
         results_dir = Path(self.paths.results_dir).resolve()
         reports_dir = Path(self.paths.reports_dir).resolve()
-        attachments_dir = (db_path.parent.parent / "data" / "attachments").resolve()
+        # Use same resolution logic as backup_database
+        project_root = merged_dir.parent.parent if merged_dir else Path(__file__).resolve().parent.parent
+        attachments_dir = project_root / "data" / "attachments"
+        if not attachments_dir.exists():
+            attachments_dir = Path(__file__).resolve().parent.parent / "data" / "attachments"
         
         if not backup_path.exists():
             return {"ok": False, "error": f"Backup file not found: {backup_file}"}
@@ -409,7 +419,28 @@ class SRFOrchestrator:
                 restored.append(f"merged/ ({copied} parquet files)")
             else:
                 logger.warning("No merged parquet found in backup")
-            
+
+            # Update merged_file paths in DB to point to current location (quick pass)
+            if src_db.exists():
+                try:
+                    cur_conn = sqlite3.connect(str(db_path))
+                    new_merged_root = str(merged_dir.resolve())
+                    cur_conn.execute(
+                        """
+                        UPDATE events
+                        SET merged_file = ? || '/' || 'event_' || id || '.parquet'
+                        WHERE merged_file IS NOT NULL
+                        """,
+                        (new_merged_root,),
+                    )
+                    updated_rows = cur_conn.rowcount
+                    cur_conn.commit()
+                    cur_conn.close()
+                    if updated_rows > 0:
+                        restored.append(f"merged_file paths updated ({updated_rows} rows)")
+                except Exception as e:
+                    logger.warning(f"Failed to update merged_file paths: {e}")
+
             # ── 3. Restore attachments ──
             src_attachments = tmp_dir / "attachments"
             if src_attachments.exists() and src_attachments.is_dir():

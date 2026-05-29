@@ -165,9 +165,9 @@ class EventDetector:
                 if is_int_mis and new_value == 0.0:
                     continue
 
-                is_cm_channel = re.match(r'(RDY|QUEN|VAC|ARC|HE-PR)_CM\d+_FC\d+_d$', channel)
-                if is_cm_channel and new_value == 0.0:
-                    continue
+                # CM channels (RDY_CM, QUEN_CM, VAC_CM, ARC_CM, HE-PR_CM):
+                # These are normally HIGH(1)=OK, dropping to LOW(0)=fault.
+                # The 1→0 transition IS the real signal — do NOT filter it.
 
                 events.append(SignalEvent(
                     time=float(change_time),
@@ -498,12 +498,7 @@ class AcceleratorEventClassifier:
         self.logger = get_logger(__name__)
 
     def run(self, input_dir: str, output_dir: str) -> pd.DataFrame:
-        """Main entry point - processes all parquet files in input_dir.
-
-        Args:
-            input_dir: Directory containing parquet files to classify.
-            output_dir: Directory to save results.
-        """
+        """Main entry point - processes all parquet files in input_dir."""
         input_path = Path(input_dir)
         files = sorted(input_path.glob("*.parquet"))
 
@@ -581,18 +576,12 @@ class AcceleratorEventClassifier:
         self.logger.info(f"Results saved to: {out_path}")
         self.logger.info(f"Files classified: {len(results)}")
 
-        if "case_str" in result_df.columns:
-            case_counts = result_df["case"].value_counts().sort_index()
-            self.logger.info("Case Distribution:")
-            for case_int, count in case_counts.items():
-                desc = result_df[result_df["case"] == case_int]["description"].iloc[0]
-                self.logger.info(f"  Case {case_int}: {count} files - {desc}")
-        else:
-            case_counts = result_df["case"].value_counts().sort_index()
-            self.logger.info("Case Distribution:")
-            for case, count in case_counts.items():
-                desc = result_df[result_df["case"] == case]["description"].iloc[0]
-                self.logger.info(f"  Case {case}: {count} files - {desc}")
+        case_counts = result_df["case"].value_counts().sort_index()
+        self.logger.info("Case Distribution:")
+        for case_val, count in case_counts.items():
+            matching = result_df[result_df["case"] == case_val]["description"]
+            desc = matching.iloc[0] if not matching.empty else "(no description)"
+            self.logger.info(f"  Case {case_val}: {count} files - {desc}")
 
         return result_df
 

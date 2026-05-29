@@ -62,7 +62,7 @@ def _check_password(input_pw: str) -> bool:
 
 def _event_id_to_utc_file_stem(event_id: str) -> str:
     """Convert a KST event_id to UTC-based file stem for matching old merged files.
-    
+
     Event IDs are formatted as YYYYMMDD_HHMMSS in KST (UTC+9).
     Old merged files were named with UTC timestamps, so subtract 9h for fallback.
     """
@@ -77,26 +77,26 @@ def _event_id_to_utc_file_stem(event_id: str) -> str:
 
 def _cleanup_event_files(event_id: str):
     """Remove merged parquet and results files for a deleted event.
-    
+
     Tries KST-based name first, falls back to UTC-based name
     for backwards compatibility with old merged files.
     """
     try:
         cfg = get_config()
-        
+
         # Collect candidate file stems to try
         stems = [event_id]
         utc_stem = _event_id_to_utc_file_stem(event_id)
         if utc_stem and utc_stem != event_id:
             stems.append(utc_stem)
-        
+
         merged_dir = cfg.paths.merged_dir
         for stem in stems:
             merged_path = merged_dir / f"event_{stem}.parquet"
             if merged_path.exists():
                 merged_path.unlink()
                 break
-        
+
         results_dir = cfg.paths.results_dir
         for stem in stems:
             results_path = results_dir / f"event_{stem}_classification.json"
@@ -855,7 +855,25 @@ async def api_get_waveforms(event_id: str):
 
     mf = Path(event.merged_file)
     if not mf.is_file():
-        return JSONResponse({"error": f"File not found: {mf}"}, status_code=404)
+        # Fallback: find by event_id in merged_dir (handles restore from different host)
+        cfg = get_config()
+        project_root = Path(__file__).resolve().parent.parent.parent
+        path_str = str(cfg.paths.merged_dir).lstrip("./").lstrip(".\\")
+        merged_dir = (project_root / path_str).resolve()
+        alt_path = merged_dir / f"event_{event_id}.parquet"
+        if alt_path.is_file():
+            mf = alt_path
+        else:
+            # Try with KST-to-UTC fallback
+            utc_stem = _event_id_to_utc_file_stem(event_id)
+            if utc_stem:
+                alt_path2 = merged_dir / f"event_{utc_stem}.parquet"
+                if alt_path2.is_file():
+                    mf = alt_path2
+                else:
+                    return JSONResponse({"error": f"File not found: {mf}"}, status_code=404)
+            else:
+                return JSONResponse({"error": f"File not found: {mf}"}, status_code=404)
 
     try:
         df = pl.read_parquet(str(mf))
@@ -905,7 +923,7 @@ async def api_stats_histogram(
     hide_ms: Optional[str] = Query("false"),
 ):
     """Histogram data: fault type breakdown by user_beam_time.
-    
+
     Always groups by user_beam_time.
     hide_ms=true: filter out MS periods.
     """
@@ -927,9 +945,9 @@ async def api_stats_histogram(
                 params.append(user_beam_time)
         if hide_ms == "true":
             conditions.append("(user_beam_time NOT LIKE '%MS%' OR user_beam_time IS NULL OR user_beam_time = '')")
-        
+
         where_clause = "WHERE " + " AND ".join(conditions)
-        
+
         eff = "CASE WHEN user_fault_type != '' THEN user_fault_type ELSE COALESCE(fault_type, 'Unknown') END"
         cursor = conn.execute(
             f"""
@@ -941,33 +959,33 @@ async def api_stats_histogram(
             """,
             params,
         )
-        
+
         # Build matrix: period x fault_type
         rows = cursor.fetchall()
         periods = []
         ft_map = {}
         data_matrix = {}
-        
+
         for r in rows:
             period = r["period"]
             ft = r["fault_type"] or "Unknown"
             cnt = r["cnt"]
-            
+
             # Skip MS periods if hide_ms is true
             if hide_ms == "true" and " MS" in period:
                 continue
-            
+
             if period not in periods:
                 periods.append(period)
             if ft not in ft_map:
                 ft_map[ft] = len(ft_map)
-            
+
             if period not in data_matrix:
                 data_matrix[period] = {}
             data_matrix[period][ft] = cnt
-        
+
         fault_types_sorted = sorted(ft_map.keys())
-        
+
         # Sort periods: by beam time number DESC, MS first per number
         def sort_key(p):
             parts = p.split(" ")
@@ -976,9 +994,9 @@ async def api_stats_histogram(
             y, n_raw = base.split("-")
             n = "".join(c for c in n_raw if c.isdigit())
             return (int(y), int(n), 0 if is_ms else 1)
-        
+
         periods.sort(key=sort_key)
-        
+
         # Build traces
         traces = []
         for i, ft in enumerate(fault_types_sorted):
@@ -991,7 +1009,7 @@ async def api_stats_histogram(
             traces.append(trace)
     finally:
         conn.close()
-    
+
     return {"traces": traces, "periods": periods, "fault_types": fault_types_sorted}
 
 
@@ -1192,10 +1210,10 @@ async def api_pipeline_stop(request: Request):
     pw = request.query_params.get("password", "")
     if not _check_password(pw):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
-    
+
     stop_monitor()
     stop_batch_pipeline()
-    
+
     return {"ok": True, "message": "Pipeline stop requested"}
 
 
@@ -1227,7 +1245,7 @@ async def api_db_backup(request: Request):
     pw = request.query_params.get("password", "")
     if not _check_password(pw):
         return JSONResponse({"error": "Auth"}, status_code=401)
-    
+
     cfg = get_config()
     from src.orchestrator import SRFOrchestrator
     orch = SRFOrchestrator(cfg)
@@ -1241,7 +1259,7 @@ async def api_list_backups(request: Request):
     pw = request.query_params.get("password", "")
     if not _check_password(pw):
         return JSONResponse({"error": "Auth"}, status_code=401)
-    
+
     cfg = get_config()
     from pathlib import Path
     db_path = Path(cfg.db.path)
@@ -1265,12 +1283,12 @@ async def api_db_restore(request: Request):
     pw = request.query_params.get("password", "")
     if not _check_password(pw):
         return JSONResponse({"error": "Auth"}, status_code=401)
-    
+
     data = await request.json()
     backup_file = data.get("backup_file", "")
     if not backup_file:
         return JSONResponse({"error": "No backup_file specified"}, status_code=400)
-    
+
     cfg = get_config()
     from src.orchestrator import SRFOrchestrator
     orch = SRFOrchestrator(cfg)
