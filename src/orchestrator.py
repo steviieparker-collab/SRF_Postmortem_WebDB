@@ -7,6 +7,7 @@ Combines:
 """
 import sys
 import json
+import sqlite3
 from pathlib import Path
 
 # Add parent to path for commands
@@ -70,6 +71,7 @@ class SRFOrchestrator:
 
     def run_preprocessor(self, input_dirs=None) -> dict:
         """Step 1: Preprocess CSV files into parquet."""
+        result = {"stats": {"success": 0, "skipped": 0, "total": 0, "errors": 0}}
         if input_dirs:
             for i, input_dir in enumerate(input_dirs, 1):
                 scope_output = self.paths.processed_dir / f"scope{i}"
@@ -158,7 +160,7 @@ class SRFOrchestrator:
             if report_file.exists() and graphs:
                 summary = "Unclassified"
                 if cls_file.exists():
-                    summary = json.load(open(cls_file)).get('description', summary)
+                    summary = json.loads(cls_file.read_text(encoding='utf-8')).get('description', summary)
                 ok = self.email_sender.send_report(
                     report_content=report_file.read_text(encoding='utf-8'),
                     report_format='markdown',
@@ -178,8 +180,13 @@ class SRFOrchestrator:
         
         db_path = Path(self.config.db.path)
         merged_dir = Path(self.paths.merged_dir)
-        # attachments는 projects root/data/attachments/
-        attachments_dir = db_path.parent.parent / "data" / "attachments"
+        # attachments: project_root/data/attachments/
+        # Resolve from merged_dir: merged is at data/merged, so attachments is data/attachments/
+        project_root = merged_dir.resolve().parent.parent if merged_dir else Path(self.config.db.path).resolve().parent.parent
+        attachments_dir = project_root / "data" / "attachments"
+        if not attachments_dir.exists():
+            # Try alternate: use the same logic as web server _get_attachments_dir
+            attachments_dir = Path(__file__).resolve().parent.parent / "data" / "attachments"
 
         if not db_path.exists():
             return "Database not found"
@@ -212,7 +219,9 @@ class SRFOrchestrator:
         backup_path = Path(backup_file)
         db_path = Path(self.config.db.path)
         merged_dir = Path(self.paths.merged_dir)
-        attachments_dir = db_path.parent.parent / "data" / "attachments"
+        # Use same resolution logic as backup_database
+        project_root = merged_dir.resolve().parent.parent if merged_dir and merged_dir.exists() else Path(__file__).resolve().parent.parent
+        attachments_dir = project_root / "data" / "attachments"
         
         if not backup_path.exists():
             return {"ok": False, "error": f"Backup file not found: {backup_file}"}
@@ -245,7 +254,28 @@ class SRFOrchestrator:
                     if f.suffix == ".parquet":
                         shutil.copy2(f, merged_dir / f.name)
                 restored.append("merged/")
-            
+
+            # Update merged_file paths in DB to point to current location
+            if src_db.exists():
+                try:
+                    cur_conn = sqlite3.connect(str(db_path))
+                    new_merged_root = str(merged_dir.resolve())
+                    cur_conn.execute(
+                        """
+                        UPDATE events
+                        SET merged_file = ? || '/' || 'event_' || id || '.parquet'
+                        WHERE merged_file IS NOT NULL
+                        """,
+                        (new_merged_root,),
+                    )
+                    updated_rows = cur_conn.rowcount
+                    cur_conn.commit()
+                    cur_conn.close()
+                    if updated_rows > 0:
+                        restored.append(f"merged_file paths updated ({updated_rows} rows)")
+                except Exception as e:
+                    logger.warning(f"Failed to update merged_file paths: {e}")
+
             # Restore attachments
             src_attachments = tmp_dir / "attachments"
             if src_attachments.exists():
@@ -290,7 +320,7 @@ class SRFOrchestrator:
         preprocessor_result = self.run_preprocessor(targets)
         
         # If no new files processed and incremental=True, stop early
-        if incremental and preprocessor_result['stats']['success'] == 0:
+        if incremental and (preprocessor_result is None or preprocessor_result.get('stats', {}).get('success', 0) == 0):
             logger.info("Incremental pipeline: No new files to process.")
             return
 

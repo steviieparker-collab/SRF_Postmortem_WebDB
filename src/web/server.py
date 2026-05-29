@@ -855,7 +855,25 @@ async def api_get_waveforms(event_id: str):
 
     mf = Path(event.merged_file)
     if not mf.is_file():
-        return JSONResponse({"error": f"File not found: {mf}"}, status_code=404)
+        # Fallback: find by event_id in merged_dir (handles restore from different host)
+        cfg = get_config()
+        project_root = Path(__file__).resolve().parent.parent.parent
+        path_str = str(cfg.paths.merged_dir).lstrip("./").lstrip(".\\")
+        merged_dir = (project_root / path_str).resolve()
+        alt_path = merged_dir / f"event_{event_id}.parquet"
+        if alt_path.is_file():
+            mf = alt_path
+        else:
+            # Try with KST-to-UTC fallback
+            utc_stem = _event_id_to_utc_file_stem(event_id)
+            if utc_stem:
+                alt_path2 = merged_dir / f"event_{utc_stem}.parquet"
+                if alt_path2.is_file():
+                    mf = alt_path2
+                else:
+                    return JSONResponse({"error": f"File not found: {mf}"}, status_code=404)
+            else:
+                return JSONResponse({"error": f"File not found: {mf}"}, status_code=404)
 
     try:
         df = pl.read_parquet(str(mf))
