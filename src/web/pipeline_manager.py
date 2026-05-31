@@ -102,10 +102,6 @@ _stop_monitor = threading.Event()
 _watchdog_observers = []   # list of watchdog.Observer instances
 _watchdog_lock = threading.Lock()
 csv_event_queue: "queue.Queue" = queue.Queue()
-# scope_tracker tracks new parquet files detected per scope (shared state)
-# scope_tracker[scope_idx] = set of parquet filenames NEW since last pipeline
-_scope_tracker: dict = {}      # set by csv_worker, read by monitor loop
-_scope_tracker_lock = threading.Lock()
 
 
 def get_pipeline_status() -> dict:
@@ -361,9 +357,8 @@ def _is_valid_csv(fpath: Path) -> bool:
 def _start_csv_worker(config, orch, processed_csv: set, stop_event: threading.Event):
     """
     Background thread: consume csv_event_queue, wait for file completion,
-    run preprocessor, update scope_tracker.
+    run preprocessor (CSV → Parquet).
     """
-    global _scope_tracker
 
     scope_labels = {}
     for i in range(1, 4):
@@ -400,11 +395,6 @@ def _start_csv_worker(config, orch, processed_csv: set, stop_event: threading.Ev
             if success and pqt_path.exists():
                 processed_csv.add(csv_path.name)
                 _pipeline_status.update(_ts(f"(scope{scope_idx}) ✓ {csv_path.name} → {pqt_path.name}"))
-                # scope_tracker 업데이트
-                with _scope_tracker_lock:
-                    if scope_idx not in _scope_tracker:
-                        _scope_tracker[scope_idx] = set()
-                    _scope_tracker[scope_idx].add(pqt_path.name)
             else:
                 logger.warning(f"(scope{scope_idx}) Failed {csv_path.name}: {reason}")
                 processed_csv.add(csv_path.name)
@@ -444,17 +434,18 @@ def _start_watchdogs(config, stop_event: threading.Event):
 
     with _watchdog_lock:
         _watchdog_observers = []
+        paths = []
         for i in range(1, 4):
             wf_path = Path(config.paths.watch_folders[i - 1])
             if not wf_path.exists():
                 wf_path.mkdir(parents=True, exist_ok=True)
-                _pipeline_status.update(_ts(f"Created watch folder: {wf_path}"))
+            paths.append(str(wf_path))
             handler = CSVHandler(scope_idx=i)
             obs = Observer()
             obs.schedule(handler, str(wf_path), recursive=False)
             obs.start()
             _watchdog_observers.append(obs)
-            _pipeline_status.update(_ts(f"Watchdog started: {wf_path} (scope{i})"))
+        _pipeline_status.update(_ts(f"Watchdog started — scope1: {paths[0]}, scope2: {paths[1]}, scope3: {paths[2]}"))
 
 
 def _stop_watchdogs():
@@ -469,7 +460,7 @@ def _stop_watchdogs():
 
 def start_monitor(config_path: str = "config/config.yaml"):
     """Start continuous folder monitoring in background."""
-    global _monitor_thread, _stop_monitor, _scope_tracker
+    global _monitor_thread, _stop_monitor
 
     if _pipeline_status.running:
         return {"error": "Pipeline already running"}
@@ -499,8 +490,6 @@ def start_monitor(config_path: str = "config/config.yaml"):
             imported_events = 0
             cycle_count = 0
             wait_start: float | None = None
-            _scope_tracker = {}            # reset scope_tracker
-
             merged_dir = config.paths.merged_dir
 
             # ── Initial snapshot ────────────────────────────────────
@@ -538,44 +527,29 @@ def start_monitor(config_path: str = "config/config.yaml"):
             )
             csv_worker_thread.start()
 
-            # ── Main monitor loop (pipeline decision only) ──────────
+            # ── Main monitor loop ───────────────────────────────────
+            # 디렉토리 스캔 방식: processed/scope{i} 폴더에서 새 parquet 파일 감지
             while not _stop_monitor.is_set():
                 wait_timeout = config.grouper.wait_timeout
                 run_pipeline = False
 
-                # Snapshot scope_tracker
-                with _scope_tracker_lock:
-                    current_new = dict(_scope_tracker)  # copy
+                # processed/scope{i}에서 last_pipeline_parquet 이후 새 파일 감지
+                new_scopes = {}
+                for i in range(1, 4):
+                    sd = config.paths.processed_dir / f"scope{i}"
+                    current = set(f.name for f in sd.glob("*.parquet")) if sd.exists() else set()
+                    old = last_pipeline_parquet.get(i, set())
+                    new_files = current - old
+                    if new_files:
+                        new_scopes[i] = new_files
 
-                all_ready = len(current_new) >= 3
-                ready_scopes = sorted(current_new.keys())
-                missing_scopes = [i for i in range(1, 4) if i not in current_new]
+                all_ready = len(new_scopes) >= 3
+                ready_scopes = sorted(new_scopes.keys())
+                missing_scopes = [i for i in range(1, 4) if i not in new_scopes]
 
-                if current_new and not all_ready:
-                    # 파일 도착 중 — 대기 모드
+                if new_scopes and not all_ready:
                     if wait_start is None:
                         wait_start = time.time()
-
-                    elapsed = time.time() - wait_start
-                    remaining = max(0, wait_timeout - int(elapsed))
-                    _pipeline_status.update(_ts(
-                        f"Waiting for all 3 scopes... "
-                        f"have: {ready_scopes}, "
-                        f"missing: {missing_scopes}, "
-                        f"timeout in {remaining}s"
-                    ))
-
-                    if elapsed >= wait_timeout:
-                        wait_start = None
-                        _pipeline_status.update(_ts(
-                            f"Timeout ({wait_timeout}s) — running pipeline with partial data..."
-                        ))
-                        run_pipeline = True
-                    else:
-                        time.sleep(config.system.check_interval)
-                        continue
-
-                elif not current_new and wait_start is not None:
                     elapsed = time.time() - wait_start
                     remaining = max(0, wait_timeout - int(elapsed))
                     _pipeline_status.update(_ts(
@@ -594,20 +568,16 @@ def start_monitor(config_path: str = "config/config.yaml"):
                         time.sleep(config.system.check_interval)
                         continue
 
-                elif all_ready and wait_start is not None:
+                elif all_ready:
                     _pipeline_status.update(_ts("All 3 scopes ready — starting pipeline"))
                     wait_start = None
                     run_pipeline = True
 
-                elif not current_new and wait_start is None:
+                elif not new_scopes:
                     time.sleep(config.system.check_interval)
                     continue
 
-                if not current_new and not run_pipeline:
-                    time.sleep(config.system.check_interval)
-                    continue
-
-                if not all_ready and not run_pipeline:
+                if not run_pipeline:
                     time.sleep(config.system.check_interval)
                     continue
 
@@ -615,28 +585,44 @@ def start_monitor(config_path: str = "config/config.yaml"):
                 new_scope_files = {}
                 for i in range(1, 4):
                     sd = config.paths.processed_dir / f"scope{i}"
-                    current = set(f for f in sd.glob("*.parquet")) if sd.exists() else set()
+                    current = set(Path(f) for f in sd.glob("*.parquet")) if sd.exists() else set()
                     old = last_pipeline_parquet.get(i, set())
                     new_scope_files[i] = [f for f in current if f.name not in old]
+
+                # ── Capture new scope files (중복 제거됨) ──────────
 
                 # ── Pipeline execution ──────────────────────────────
                 cycle_count += 1
                 _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Running pipeline..."))
                 try:
-                    for step_name, step_fn in [
-                        ("Grouper (merge)", orch.run_grouper),
-                        ("Classifier", orch.run_classifier),
-                        ("Visualizer", orch.run_visualizer),
-                        ("Reporter", orch.run_reporter),
-                    ]:
-                        _pipeline_status.update(_ts(f"[Cycle {cycle_count}] {step_name}..."))
-                        step_fn()
+                    # 1. Grouper: 모든 scope parquet merge
+                    _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Grouper (merge)..."))
+                    # grouper 실행 전 merged 파일 목록 스냅샷
+                    merged_before = set(f.name for f in merged_dir.glob("*.parquet"))
+                    orch.run_grouper()
+                    merged_after = set(f.name for f in merged_dir.glob("*.parquet"))
+                    new_merged_files = [merged_dir / f for f in (merged_after - merged_before)]
+                    if new_merged_files:
+                        _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Grouper created {len(new_merged_files)} new merged file(s)"))
+
+                    # 2. Classifier: 새 merged 파일만
+                    if new_merged_files:
+                        _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Classifier ({len(new_merged_files)} files)..."))
+                        orch.run_classifier(merged_files=new_merged_files)
+
+                        # 3. Visualizer: 새 merged 파일만
+                        _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Visualizer ({len(new_merged_files)} files)..."))
+                        orch.run_visualizer(merged_files=new_merged_files)
+
+                        # 4. Reporter: 새 merged 파일만
+                        _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Reporter ({len(new_merged_files)} files)..."))
+                        orch.run_reporter(merged_files=new_merged_files)
+                    else:
+                        _pipeline_status.update(_ts(f"[Cycle {cycle_count}] No new merged files — skipping classifier/visualizer/reporter"))
 
                     # Email: only for NEW merged files
-                    if orch.email_sender:
-                        current_merged = set(f.name for f in merged_dir.glob("*.parquet"))
-                        new_merged = [f for f in merged_dir.glob("*.parquet")
-                                      if f.name not in processed_merged]
+                    if orch.email_sender and new_merged_files:
+                        new_merged = new_merged_files
                         if new_merged:
                             emailed = 0
                             import json
@@ -644,6 +630,8 @@ def start_monitor(config_path: str = "config/config.yaml"):
                             for mf in new_merged:
                                 cls_file = config.paths.results_dir / f"{mf.stem}_classification.json"
                                 report_file = config.paths.reports_dir / f"{mf.stem}_report.md"
+                                # 그래프 파일 (visualizer에서 생성된 이미지)
+                                graph_files = sorted(config.paths.graphs_dir.glob(f"{mf.stem}_*_el.jpg"))
                                 if cls_file.exists():
                                     summary = "Unclassified"
                                     try:
@@ -658,7 +646,7 @@ def start_monitor(config_path: str = "config/config.yaml"):
                                             orch.email_sender.send_report(
                                                 report_content=content,
                                                 report_format='markdown',
-                                                graph_files=[],
+                                                graph_files=[str(g) for g in graph_files],
                                                 classification_summary=summary,
                                             )
                                             emailed += 1
@@ -677,24 +665,21 @@ def start_monitor(config_path: str = "config/config.yaml"):
                     db_count = orch.import_to_db()
                     imported_events += db_count
 
-                    # Cleanup: delete NEW scope parquet files
+                    # Cleanup: delete processed scope parquet files (이번 사이클에 처리된)
                     cleaned = 0
                     for i in range(1, 4):
-                        for f in new_scope_files.get(i, []):
-                            try:
-                                f.unlink()
-                                cleaned += 1
-                            except Exception as e:
-                                logger.warning(f"Cleanup failed: {f.name}: {e}")
-
-                    # Update scope tracking
-                    for i in range(1, 4):
                         sd = config.paths.processed_dir / f"scope{i}"
-                        last_pipeline_parquet[i] = set(f.name for f in sd.glob("*.parquet")) if sd.exists() else set()
+                        if sd.exists():
+                            for f in sd.glob("*.parquet"):
+                                try:
+                                    f.unlink()
+                                    cleaned += 1
+                                except Exception as e:
+                                    logger.warning(f"Cleanup failed: {f.name}: {e}")
 
-                    # Reset scope_tracker
-                    with _scope_tracker_lock:
-                        _scope_tracker = {}
+                    # Update scope tracking (모든 processed 파일이 삭제되었으므로 빈 set)
+                    for i in range(1, 4):
+                        last_pipeline_parquet[i] = set()
 
                     _pipeline_status.update(_ts(
                         f"[Cycle {cycle_count}] Complete. {cleaned} scope files cleaned, {imported_events} total DB events."

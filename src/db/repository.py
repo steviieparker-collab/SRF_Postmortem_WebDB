@@ -217,7 +217,10 @@ def list_events(
         params.append(date_to)
 
     if search:
-        conditions.append("notes LIKE ?")
+        conditions.append("(notes LIKE ? OR case_description LIKE ? OR case_fault LIKE ? OR user_fault_type LIKE ?)")
+        params.append(f"%{search}%")
+        params.append(f"%{search}%")
+        params.append(f"%{search}%")
         params.append(f"%{search}%")
 
     if user_beam_time:
@@ -473,7 +476,9 @@ def get_adjacent_events(
         conditions.append("fault_type = ?")
         params.append(fault_type)
     if search:
-        conditions.append("notes LIKE ?")
+        conditions.append("(notes LIKE ? OR case_description LIKE ? OR case_fault LIKE ?)")
+        params.append(f"%{search}%")
+        params.append(f"%{search}%")
         params.append(f"%{search}%")
     if user_beam_time:
         conditions.append("user_beam_time = ?")

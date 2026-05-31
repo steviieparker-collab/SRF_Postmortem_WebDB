@@ -183,6 +183,13 @@ function api(url, o) { return fetch(_url(url), o); }
 
 function pollStatus() {
     api('/api/pipeline/status').then(r=>r.json()).then(s=>{
+        const wasRunning = window._pipelineRunning;
+        const nowRunning = s.running;
+        window._pipelineRunning = nowRunning;
+        // running→idle 전환 시 즉시 한 번 더 폴링 (마지막 메시지 수신)
+        if (wasRunning === true && nowRunning === false) {
+            setTimeout(pollStatus, 100);
+        }
         document.getElementById('status-indicator').textContent = s.running ? 'Running' : 'Idle';
         document.getElementById('status-indicator').className = s.running ? 'badge bg-primary status-badge' : 'badge bg-secondary status-badge';
         document.getElementById('status-mode').textContent = s.mode || '-';
@@ -204,7 +211,7 @@ function pollStatus() {
             } else {
                 _logAppend('<div class="log-entry log-running">' + progressMsg + '</div>');
             }
-            setTimeout(pollStatus, 2000);
+            setTimeout(pollStatus, 300);
         } else {
             ['btn-batch','btn-import','btn-monitor-start'].forEach(id=>document.getElementById(id).disabled=false);
             document.getElementById('btn-monitor-stop').disabled = true;

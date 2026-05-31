@@ -118,6 +118,20 @@ def _get_attachments_dir(event_id: str) -> Path:
 
 app = FastAPI(title="SRF Postmortem Viewer")
 
+# ── Suppress access log for pipeline status polling ────────────
+import logging
+uvicorn_access = logging.getLogger("uvicorn.access")
+uvicorn_access.disabled = True
+uvicorn_access.propagate = False
+
+@app.middleware("http")
+async def suppress_status_polling_log(request: Request, call_next):
+    """Skip access log for noisy status polling endpoints."""
+    response = await call_next(request)
+    if request.url.path in ("/api/pipeline/status", "/api/import/status"):
+        response.headers["X-Accel-Buffering"] = "no"
+    return response
+
 # ── Auth API ──────────────────────────────────────────────────
 
 @app.post("/api/verify-password")
@@ -1311,13 +1325,8 @@ async def api_pipeline_reset(request: Request):
 # ── CLI entry point ───────────────────────────────────────────
 
 if __name__ == "__main__":
-    import logging
     import uvicorn
     from ..core.config import get_config
-
-    # Suppress uvicorn access log noise (pipeline status polling floods console)
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    logging.getLogger("uvicorn").setLevel(logging.WARNING)
 
     cfg = get_config()
     uvicorn.run(app, host=cfg.web.host, port=cfg.web.port,

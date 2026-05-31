@@ -1,0 +1,13 @@
+cd SRF_postmortem
+python3 -m src.main --mode web
+
+강제 종료 방법:
+
+프로세스명으로 찾아서 죽이기:
+
+pkill -f "python3 -m src.main"      # 이름으로 kill
+
+또는 포트로 찾아서 죽이기:
+
+kill $(lsof -ti:8050)                       # 8050 포트 사용중인 PID kill
+pkill -f "uvicorn.*8050"                    # uvicorn 프로세스 kill

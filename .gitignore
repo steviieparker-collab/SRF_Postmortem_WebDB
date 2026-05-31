@@ -1,47 +1,58 @@
-# ── Generated / Runtime Data ──
-data/merged/
-data/attachments/
-data/graphs/
-data/processed/
-data/results/
-data/reports/
-data/watch/
-data/append/scope*/
-data/append/merged/
-data/append/*.txt
-data/srf_events.db
+# Workspace files
+.openclaw/
+AGENTS.md
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md
+MEMORY.md
 
-# ── Database ──
-db/*.db
-db/backups/
-
-# ── Logs ──
-logs/
-*.log
-nohup.out
-
-# ── Config (contains secrets) ──
-config/config.yaml
-!config/config.yaml.example
-
-# ── Python ──
+# Python cache
 __pycache__/
-*.pyc
-*.pyo
-.eggs/
-dist/
-build/
-*.egg-info/
+*.py[cod]
+*$py.class
 
-# ── OS / Editor ──
+# Env
+.env
+*.env
+
+# OS
 .DS_Store
 Thumbs.db
+Desktop.ini
 *:Zone.Identifier
-.vscode/
+
+# Data files
+data/
+*.csv
+*.parquet
+*.pq
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Backups
+db/backups*/
+**/backups/
+*.tar.gz
+*.zip
+*.tgz
+
+# Logs
+logs/
+*.log
+
+# Generated graphs/images
+*.jpg
+*.jpeg
+*.png
+*.gif
+
+# IDE
 .idea/
+.vscode/
 *.swp
 *.swo
-
-# ── Memory / Notes ──
-memory/
-실행방법.txt
