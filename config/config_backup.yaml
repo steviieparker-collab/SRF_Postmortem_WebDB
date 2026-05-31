@@ -7,9 +7,9 @@ paths:
   log_dir: ./logs
   log_file: srf_postmortem.log
   watch_folders:
-  - /mnt/w/
-  - /mnt/x/
-  - /mnt/y/
+  - y:/
+  - x:/
+  - w:/
   append_dirs:
   - ./data/append/scope1
   - ./data/append/scope2
@@ -18,11 +18,11 @@ paths:
 db:
   path: ./db/events.db
 access:
-  password: 'your_password_here'
+  password: "1719"
   session_ttl_minutes: 60
 web:
   host: 0.0.0.0
-  port: 50510
+  port: 8050
   title: SRF Postmortem Viewer
 system:
   mode: batch
@@ -31,7 +31,7 @@ email:
   smtp_server: smtp.gmail.com
   smtp_port: 587
   sender_email: sehwanpark@g.postech.edu
-  sender_password: 'your_app_password_here'
+  sender_password: gcykufinztyctzqy
   receiver_emails:
   - refull98@gmail.com
   subject_template: SRF Event Report - {case}
@@ -87,7 +87,7 @@ logging:
   console_enabled: true
   file_enabled: true
 monitor:
-  data_root: /home/shpark/.openclaw/code-team-workspace/SRF_postmortem/data
+  data_root: D:\24_Python\SRF_postmortem_webdb
   merged_dir: merged
   graphs_dir: graphs
   reports_dir: reports

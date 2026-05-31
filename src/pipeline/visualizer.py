@@ -484,7 +484,7 @@ class Visualizer:
             digital_bottom = start_y
 
         y_lower = min(y_min - 1, digital_bottom)
-        y_upper = max(41, y_max_analog + 5, digital_top)
+        y_upper = min(max(41, y_max_analog + 5, digital_top), 1.5)
         ax.set_ylim(y_lower, y_upper)
 
         for spine in ax.spines.values():
@@ -495,7 +495,7 @@ class Visualizer:
         if handles:
             leg = ax.legend(
                 loc='upper left',
-                bbox_to_anchor=(1.0, 1),
+                bbox_to_anchor=(0, 1),
                 borderaxespad=0,
                 frameon=True,
                 handlelength=2.0,
@@ -590,6 +590,7 @@ class Visualizer:
             ax1.legend(loc="upper right", fontsize=7, ncol=3, frameon=True)
             ax1.set_ylabel("Analog Signal (Original)", fontsize=9, color=self.theme.text_color)
 
+        ax1.set_ylim(None, 2)
         ax1.grid(True, linestyle="--", alpha=0.4, color=self.theme.grid_color)
         ax1.set_facecolor(self.theme.panel_color)
 
@@ -611,7 +612,7 @@ class Visualizer:
             y_min = -0.5
             y_max = num_dig * digital_spacing + digital_amplitude
             ax2.set_ylim(y_min, y_max)
-            ax2.legend(loc="center left", bbox_to_anchor=(1.02, 0.5),
+            ax2.legend(loc="upper left",
                       fontsize=6.5, ncol=1, frameon=False, labelspacing=0.05)
             ax2.set_ylabel("Digital Channels", fontsize=9, color=self.theme.text_color)
 

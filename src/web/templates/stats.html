@@ -334,20 +334,42 @@ function renderHistogram(data, year, bt, hideMs) {
         }
     }
     
+    const caseDescMap = {
+        0: 'Unknown', 1: 'Beam loss (low beam current)',
+        2: 'Beam loss (beam dump)', 3: 'RF Interlock',
+        4: 'MIS', 5: 'PSI', 6: 'Multi interlock',
+        7: 'Multi interlock (timing)', 8: 'Cavity blip',
+        9: 'Cavity quench', 10: 'RF path (forward)',
+        11: 'RF path (reflected)', 12: 'Cavity detune',
+        13: 'RF source fault',
+    };
+
     const traces = data.traces.map((t) => {
+        const caseId = extractCaseId(t.name);
+        const shortDesc = caseDescMap[caseId] || (t.name || '').replace(/^Case \d+:\s*/, '');
         const text = t.y.map((v, j) => {
             const total = periodTotals[t.x[j]] || 1;
             return v > 0 ? v + '(' + ((v / total) * 100).toFixed(1) + '%)' : '';
         });
+        const hoverTexts = t.y.map((v) => {
+            if (v === 0) return '';
+            const ftName = t.name || '';
+            // '2026-01차' 접두사가 이미 상단에 나오므로 Case명만 표시
+            const caseLabel = ftName.replace(/^Case (\d+):\s*/, 'Case $1_');
+            return v + ' events of ' + caseLabel;
+        });
         return {
             ...t,
-            marker: { color: caseColor(extractCaseId(t.name)) },
+            marker: { color: caseColor(caseId) },
             text: text,
             textposition: 'inside',
             textfont: { size: 9, color: '#fff' },
-            hovertemplate: '%{x}<br>%{y} events<extra></extra>',
+            customdata: hoverTexts,
+            hovertemplate: '%{customdata}<extra></extra>',
         };
     });
+    // hovermode 변경: 'x unified'는 유지하되, 빈 customdata는 표시 안 함
+    layout.hovermode = 'x unified';
 
     Plotly.newPlot('chart-histogram', traces, layout, { responsive: true, displaylogo: false });
 }
