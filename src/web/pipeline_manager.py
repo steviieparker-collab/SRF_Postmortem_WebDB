@@ -343,17 +343,57 @@ def _is_valid_csv(fpath: Path) -> bool:
     return fpath.suffix.lower() == ".csv" and not fpath.name.endswith(":Zone.Identifier")
 
 
+def _get_scope_csv_path(config, scope_idx: int) -> Path:
+    """Get the watch folder path for a given scope index (1-indexed)."""
+    return Path(config.paths.watch_folders[scope_idx - 1])
+
+
+def _get_scope_parquet_dir(config, scope_idx: int) -> Path:
+    """Get the processed/parquet output directory for a scope."""
+    return config.paths.processed_dir / f"scope{scope_idx}"
+
+
+def _run_preprocessor_for_csv(config, orch, csv_path: Path, scope_idx: int) -> Optional[str]:
+    """
+    Run preprocessor for a single CSV and return the resulting parquet filename.
+    Returns the parquet filename (e.g. 'tek1047.parquet') or None on failure.
+    """
+    scope_dir = _get_scope_parquet_dir(config, scope_idx)
+    scope_dir.mkdir(parents=True, exist_ok=True)
+    pqt_path = scope_dir / f"{csv_path.stem}.parquet"
+
+    # Skip if parquet already exists
+    if pqt_path.exists():
+        return pqt_path.name
+
+    # Wait for file write to complete
+    file_size = _wait_for_file_complete(csv_path, timeout=120)
+    if file_size <= 0:
+        logger.warning(f"(scope{scope_idx}) {csv_path.name}: file not ready (size={file_size})")
+        return None
+
+    _pipeline_status.update(_ts(f"(scope{scope_idx}) Processing {csv_path.name}... ({int(file_size / 1024)}KB)"))
+
+    try:
+        success, reason, metadata = orch.preprocessor.process_one(csv_path, pqt_path, max_retries=3)
+        if success and pqt_path.exists():
+            _pipeline_status.update(_ts(f"(scope{scope_idx}) ✓ {csv_path.name} → {pqt_path.name}"))
+            return pqt_path.name
+        else:
+            logger.warning(f"(scope{scope_idx}) Failed {csv_path.name}: {reason}")
+            _pipeline_status.update(_ts(f"(scope{scope_idx}) ✗ {csv_path.name} FAILED: {reason}"))
+            return None
+    except Exception as e:
+        logger.warning(f"(scope{scope_idx}) Exception {csv_path.name}: {e}")
+        return None
+
+
 def _start_csv_worker(config, orch, processed_csv: set, stop_event: threading.Event):
     """
     Background thread: consume csv_event_queue, wait for file completion,
-    run preprocessor, update scope_tracker.
+    store ready CSV file paths in scope_tracker (NO preprocessor yet).
     """
     global _scope_tracker
-
-    scope_labels = {}
-    for i in range(1, 4):
-        wf = Path(config.paths.watch_folders[i - 1]) if i <= len(config.paths.watch_folders) else None
-        scope_labels[i] = config.paths.processed_dir / f"scope{i}"
 
     while not stop_event.is_set():
         try:
@@ -361,44 +401,31 @@ def _start_csv_worker(config, orch, processed_csv: set, stop_event: threading.Ev
         except queue.Empty:
             continue
 
-        scope_dir = scope_labels.get(scope_idx)
-        if scope_dir is None:
-            csv_event_queue.task_done()
-            continue
-
-        scope_dir.mkdir(parents=True, exist_ok=True)
+        scope_dir = _get_scope_parquet_dir(config, scope_idx)
         pqt_path = scope_dir / f"{csv_path.stem}.parquet"
 
-        # 중복 방지 (이미 처리됨)
+        # 중복 방지
         if csv_path.name in processed_csv or pqt_path.exists():
             if csv_path.name not in processed_csv:
                 processed_csv.add(csv_path.name)
             csv_event_queue.task_done()
             continue
 
-        # 파일 쓰기 완료 대기
-        file_size = _wait_for_file_complete(csv_path)
-        _pipeline_status.update(_ts(f"(scope{scope_idx}) Processing {csv_path.name}... ({int(file_size / 1024)}KB)"))
-
-        try:
-            success, reason, metadata = orch.preprocessor.process_one(csv_path, pqt_path, max_retries=3)
-            if success and pqt_path.exists():
-                processed_csv.add(csv_path.name)
-                _pipeline_status.update(_ts(f"(scope{scope_idx}) ✓ {csv_path.name} → {pqt_path.name}"))
-                # scope_tracker 업데이트
-                with _scope_tracker_lock:
-                    if scope_idx not in _scope_tracker:
-                        _scope_tracker[scope_idx] = set()
-                    _scope_tracker[scope_idx].add(pqt_path.name)
-            else:
-                logger.warning(f"(scope{scope_idx}) Failed {csv_path.name}: {reason}")
-                processed_csv.add(csv_path.name)
-                _pipeline_status.update(_ts(f"(scope{scope_idx}) ✗ {csv_path.name} FAILED: {reason}"))
-        except Exception as e:
-            logger.warning(f"(scope{scope_idx}) Failed {csv_path.name}: {e}")
+        # 파일 쓰기 완료만 확인하고, ready 상태로 scope_tracker에 등록
+        file_size = _wait_for_file_complete(csv_path, timeout=120)
+        if file_size <= 0:
+            logger.warning(f"(scope{scope_idx}) {csv_path.name}: file not ready, skipping")
             processed_csv.add(csv_path.name)
-            _pipeline_status.update(_ts(f"(scope{scope_idx}) ✗ {csv_path.name} EXCEPTION: {e}"))
+            csv_event_queue.task_done()
+            continue
 
+        with _scope_tracker_lock:
+            if scope_idx not in _scope_tracker:
+                _scope_tracker[scope_idx] = set()
+            _scope_tracker[scope_idx].add(str(csv_path))
+
+        processed_csv.add(csv_path.name)
+        _pipeline_status.update(_ts(f"(scope{scope_idx}) ✓ {csv_path.name} ready ({int(file_size/1024)}KB), awaiting all scopes"))
         csv_event_queue.task_done()
 
 
@@ -596,7 +623,23 @@ def start_monitor(config_path: str = "config/config.yaml"):
                     time.sleep(config.system.check_interval)
                     continue
 
-                # ── Capture new scope files ─────────────────────────
+                # ── Consume scope_tracker: run preprocessor on ready CSVs ──
+                with _scope_tracker_lock:
+                    ready_csvs = dict(_scope_tracker)  # scope_idx -> set of csv_path strings
+                    _scope_tracker = {}
+
+                preprocessed_parquets = []  # (scope_idx, parquet_filename)
+                for scope_idx in sorted(ready_csvs.keys()):
+                    csv_paths = [Path(p) for p in ready_csvs[scope_idx]]
+                    for csv_path in csv_paths:
+                        if not csv_path.exists():
+                            _pipeline_status.update(_ts(f"(scope{scope_idx}) {csv_path.name} disappeared, skipping"))
+                            continue
+                        pq_name = _run_preprocessor_for_csv(config, orch, csv_path, scope_idx)
+                        if pq_name:
+                            preprocessed_parquets.append((scope_idx, pq_name))
+
+                # Capture new scope files for cleanup tracking
                 new_scope_files = {}
                 for i in range(1, 4):
                     sd = config.paths.processed_dir / f"scope{i}"
@@ -606,7 +649,7 @@ def start_monitor(config_path: str = "config/config.yaml"):
 
                 # ── Pipeline execution ──────────────────────────────
                 cycle_count += 1
-                _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Running pipeline..."))
+                _pipeline_status.update(_ts(f"[Cycle {cycle_count}] Running pipeline (from {len(preprocessed_parquets)} scope parquets)..."))
                 try:
                     for step_name, step_fn in [
                         ("Grouper (merge)", orch.run_grouper),
@@ -676,10 +719,6 @@ def start_monitor(config_path: str = "config/config.yaml"):
                     for i in range(1, 4):
                         sd = config.paths.processed_dir / f"scope{i}"
                         last_pipeline_parquet[i] = set(f.name for f in sd.glob("*.parquet")) if sd.exists() else set()
-
-                    # Reset scope_tracker
-                    with _scope_tracker_lock:
-                        _scope_tracker = {}
 
                     _pipeline_status.update(_ts(
                         f"[Cycle {cycle_count}] Complete. {cleaned} scope files cleaned, {imported_events} total DB events."
