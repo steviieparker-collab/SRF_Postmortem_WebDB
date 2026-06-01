@@ -497,10 +497,15 @@ class AcceleratorEventClassifier:
         self.grouper = EventGrouper()
         self.logger = get_logger(__name__)
 
-    def run(self, input_dir: str, output_dir: str) -> pd.DataFrame:
-        """Main entry point - processes all parquet files in input_dir."""
+    def run(self, input_dir: str, output_dir: str, input_files: list[str] | None = None) -> pd.DataFrame:
+        """Main entry point - processes all parquet files in input_dir.
+        If input_files provided, only process those (instead of scanning input_dir).
+        """
         input_path = Path(input_dir)
-        files = sorted(input_path.glob("*.parquet"))
+        if input_files:
+            files = sorted(Path(f) for f in input_files if Path(f).exists())
+        else:
+            files = sorted(input_path.glob("*.parquet"))
 
         if not files:
             self.logger.error("No parquet files found.")

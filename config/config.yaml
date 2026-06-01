@@ -91,3 +91,4 @@ monitor:
   merged_dir: merged
   graphs_dir: graphs
   reports_dir: reports
+  scope_timeout: 120

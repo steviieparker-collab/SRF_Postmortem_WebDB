@@ -224,6 +224,7 @@ class MonitorPathsConfig(BaseModel):
     merged_dir: str = "merged"
     graphs_dir: str = "graphs"
     reports_dir: str = "reports"
+    scope_timeout: int = 120
 
 
 # ── Main unified configuration model ─────────────────────────

@@ -86,6 +86,7 @@
                 <button class="btn btn-success" onclick="runPipeline('import')" id="btn-import"><i class="bi bi-database-fill-add me-1"></i> Import to DB</button>
                 <div class="btn-group">
                     <button class="btn btn-warning" onclick="runPipeline('monitor-start')" id="btn-monitor-start"><i class="bi bi-eye-fill me-1"></i> Start Monitor</button>
+                    <button class="btn btn-info" onclick="runPipeline('watchdog-start')" id="btn-watchdog-start"><i class="bi bi-camera-fill me-1"></i> Watchdog Only (graph)</button>
                     <button class="btn btn-danger" onclick="runPipeline('monitor-stop')" id="btn-monitor-stop"><i class="bi bi-stop-fill me-1"></i> Stop Monitor</button>
                     <button class="btn btn-danger" onclick="runPipeline('stop')" id="btn-stop-all"><i class="bi bi-x-circle-fill me-1"></i> Stop All</button>
                 </div>
@@ -251,7 +252,7 @@ function runPipeline(a) {
     const el = document.getElementById('status-log');
     el.innerHTML += '<div class="log-entry log-running">▶ Starting ' + a + '...</div>';
     el.scrollTop = el.scrollHeight;
-    const m = {batch:'/api/pipeline/batch',import:'/api/pipeline/import','monitor-start':'/api/pipeline/monitor/start','monitor-stop':'/api/pipeline/monitor/stop'};
+    const m = {batch:'/api/pipeline/batch',import:'/api/pipeline/import','monitor-start':'/api/pipeline/monitor/start','monitor-stop':'/api/pipeline/monitor/stop','watchdog-start':'/api/pipeline/watchdog/start'};
     api(m[a],{method:'POST'}).then(r=>r.json()).then(d=>{
         if (d.error) el.innerHTML += '<div class="log-entry log-error">✗ ' + d.error + '</div>';
         else el.innerHTML += '<div class="log-entry log-ok">✓ ' + d.message + '</div>';

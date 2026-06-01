@@ -89,60 +89,101 @@ class SRFOrchestrator:
         return result
 
     def run_grouper(self) -> dict:
-        """Step 2: Group events from scopes into merged parquet files."""
+        """Step 2: Group events from scopes into merged parquet files.
+        Writes to merged/temp/ so pipeline_manager can detect new files.
+        """
+        temp_dir = self.paths.merged_dir / "temp"
+        temp_dir.mkdir(parents=True, exist_ok=True)
         grouper = Grouper(
             input_dirs=[
                 self.paths.processed_dir / "scope1",
                 self.paths.processed_dir / "scope2",
                 self.paths.processed_dir / "scope3",
             ],
-            output_dir=self.paths.merged_dir,
+            output_dir=temp_dir,
             window_s=self.config.grouper.window_s,
         )
         result = grouper.run()
-        logger.info(f"Grouper: {result.get('matched_events', 0)} events merged")
+        logger.info(f"Grouper: {result.get('matched_events', 0)} events merged -> temp/")
         return result
 
-    def run_classifier(self) -> tuple:
-        """Step 3: Classify merged events (monitoring pipeline style)."""
-        logger.info(f"Classifier: Starting classification for {len(list(self.paths.merged_dir.glob('*.parquet')))} files")
+    def run_classifier(self, merged_files: list | None = None) -> tuple:
+        """Step 3: Classify merged events.
+        If merged_files provided, only classify those. Otherwise scan merged_dir.
+        Skips files that already have a classification JSON.
+        """
+        if merged_files is None:
+            all_files = sorted(self.paths.merged_dir.glob("*.parquet"))
+        else:
+            all_files = [Path(f) if isinstance(f, str) else f for f in merged_files]
+
+        # Filter: only classify files WITHOUT existing results
+        unclassified = []
+        for mf in all_files:
+            cls_json = self.paths.results_dir / f"{mf.stem}_classification.json"
+            if not cls_json.exists():
+                unclassified.append(mf)
+
+        if not unclassified:
+            logger.info("Classifier: All files already classified. Skipping.")
+            return tuple()
+
+        logger.info(f"Classifier: Classifying {len(unclassified)} new files (out of {len(all_files)} total)")
         df = self.classifier.run(
             input_dir=str(self.paths.merged_dir),
             output_dir=str(self.paths.results_dir),
+            input_files=[str(f) for f in unclassified],
         )
         logger.info(f"Classifier: {len(df)} events classified")
         self._save_per_event_classification()
         return df
 
-    def run_visualizer(self) -> list:
-        """Step 4: Generate visualization graphs."""
-        merged_files = list(self.paths.merged_dir.glob("*.parquet"))
+    def run_visualizer(self, merged_files: list | None = None) -> list:
+        """Step 4: Generate visualization graphs.
+        Skips files that already have graph images.
+        """
+        if merged_files is None:
+            all_files = list(self.paths.merged_dir.glob("*.parquet"))
+        else:
+            all_files = [Path(f) if isinstance(f, str) else f for f in merged_files]
+
         graph_files = []
-        for merged_file in merged_files:
+        for merged_file in all_files:
             wide = self.paths.graphs_dir / f"{merged_file.stem}_wide_el.jpg"
+            narrow = self.paths.graphs_dir / f"{merged_file.stem}_narrow_el.jpg"
+            if wide.exists() and narrow.exists():
+                continue  # skip already processed
             if self.visualizer.plot_single(str(merged_file), str(wide), time_range='wide', style='event_labeller'):
                 graph_files.append(str(wide))
-            narrow = self.paths.graphs_dir / f"{merged_file.stem}_narrow_el.jpg"
             if self.visualizer.plot_single(str(merged_file), str(narrow), time_range='narrow', style='event_labeller'):
                 graph_files.append(str(narrow))
-        logger.info(f"Visualizer: {len(graph_files)} graphs generated")
+        logger.info(f"Visualizer: {len(graph_files)} new graphs generated")
         return graph_files
 
-    def run_reporter(self) -> list:
-        """Step 5: Generate text reports."""
-        merged_files = list(self.paths.merged_dir.glob("*.parquet"))
+    def run_reporter(self, merged_files: list | None = None) -> list:
+        """Step 5: Generate text reports.
+        Skips files that already have a report.
+        """
+        if merged_files is None:
+            all_files = list(self.paths.merged_dir.glob("*.parquet"))
+        else:
+            all_files = [Path(f) if isinstance(f, str) else f for f in merged_files]
+
         report_files = []
-        for merged_file in merged_files:
+        for merged_file in all_files:
+            report_path = self.paths.reports_dir / f"{merged_file.stem}_report.md"
+            if report_path.exists():
+                continue  # skip already processed
             cls_file = self.paths.results_dir / f"{merged_file.stem}_classification.json"
             if cls_file.exists():
                 report = self.reporter.generate(
                     parquet_file=merged_file,
                     classification_file=cls_file,
                     output_format='markdown',
-                    output_path=self.paths.reports_dir / f"{merged_file.stem}_report.md",
+                    output_path=report_path,
                 )
                 report_files.append(str(report))
-        logger.info(f"Reporter: {len(report_files)} reports generated")
+        logger.info(f"Reporter: {len(report_files)} new reports generated")
         return report_files
 
     def run_email_sender(self) -> list:
@@ -300,7 +341,8 @@ class SRFOrchestrator:
         seq_file = self.paths.results_dir / "sequence_info.json"
         if not seq_file.exists():
             return
-        data = json.loads(seq_file.read_text())
+        # Read with explicit UTF-8 (Windows cp949 fallback issue)
+        data = json.loads(seq_file.read_text(encoding='utf-8'))
         count = 0
         for fname, info in data.items():
             cls = info.get("classification")

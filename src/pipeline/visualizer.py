@@ -112,10 +112,11 @@ class Visualizer:
             'grid.linestyle': '--',
             'grid.linewidth': 0.6,
             'grid.alpha': 0.8,
-            'legend.facecolor': '#1e2130',
-            'legend.edgecolor': '#3a3d50',
-            'legend.framealpha': 0.9,
+            'legend.facecolor': self.theme.panel_color,
+            'legend.edgecolor': self.theme.grid_color,
+            'legend.framealpha': 0.95,
             'legend.fontsize': 9,
+            'legend.labelcolor': 'white',
         })
 
     def load_data(self, filepath: Union[str, Path]) -> pd.DataFrame:
@@ -319,8 +320,7 @@ class Visualizer:
 
         self._decorate_plot(ax, df_range, time_col, analog_cols, digital_cols, output_path, start_s, end_s, title_suffix)
 
-        plt.tight_layout(pad=1.8)
-        fig.subplots_adjust(right=0.82)
+        fig.subplots_adjust(left=0.05, right=0.78, top=0.92, bottom=0.08)
         plt.savefig(output_path, dpi=self.dpi, facecolor=self.theme.bg_color)
         plt.close()
 
@@ -495,15 +495,245 @@ class Visualizer:
         if handles:
             leg = ax.legend(
                 loc='upper left',
-                bbox_to_anchor=(0, 1),
+                bbox_to_anchor=(1.02, 1),
                 borderaxespad=0,
                 frameon=True,
                 handlelength=2.0,
                 handleheight=1.2,
                 labelspacing=0.6,
             )
+            leg.get_frame().set_facecolor(self.theme.panel_color)
+            leg.get_frame().set_edgecolor(self.theme.grid_color)
+            leg.get_frame().set_alpha(0.95)
             for text in leg.get_texts():
-                text.set_color(self.theme.text_color)
+                text.set_color('white')
+
+    def plot_combined(
+        self,
+        input_path: Union[str, Path],
+        output_path: Union[str, Path],
+        classification: Optional[Dict[str, Any]] = None,
+        event_markers: Optional[List[Dict[str, Any]]] = None,
+    ) -> bool:
+        """
+        Generate a combined dark-theme plot with TWO time ranges (wide + narrow)
+        in a single figure, replicating the main_v0.4 dark-mode plot style.
+
+        Dark theme constants:
+            BG_COLOR = '#0f1117'
+            PANEL_COLOR = '#1a1d27'
+            GRID_COLOR = '#2a2d3e'
+            TEXT_COLOR = '#e0e0e0'
+            TITLE_COLOR = '#ffffff'
+            ACCENT_COLOR = '#4fc3f7'
+            ANALOG_COLORS = {'B': '#FFE033', 'C': '#00D4FF', 'D': '#FF1E6B', 'E': '#96D800'}
+
+        Analog scaling: B:x7/2, C/D/E:x35
+        Digital: 16-color palette + step plot + initial value triangle markers
+
+        Returns True on success.
+        """
+        import matplotlib.gridspec as gridspec
+
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        df = self.load_data(input_path)
+        time_col, analog_cols, digital_cols = self.infer_channel_columns(df)
+
+        # Styling constants (dark theme)
+        BG_COLOR = '#0f1117'
+        PANEL_COLOR = '#1a1d27'
+        TEXT_COLOR = '#e0e0e0'
+        TITLE_COLOR = '#ffffff'
+        GRID_COLOR = '#2a2d3e'
+
+        # Define two time ranges
+        time_ranges = [
+            {"name": "wide",   "start_ms": -50,   "end_ms": 50,   "suffix": "_range1"},
+            {"name": "narrow", "start_ms": -1,    "end_ms": 1,    "suffix": "_range2"},
+        ]
+
+        fig = plt.figure(figsize=(16, 10))
+        fig.patch.set_facecolor(BG_COLOR)
+
+        gs = gridspec.GridSpec(
+            2, 1, height_ratios=[1, 1], hspace=0.35,
+            left=0.06, right=0.88, top=0.92, bottom=0.07,
+        )
+
+        # ── Scaling map ────────────────────────────────────────────
+        scaling_map = {
+            'B': lambda v: (v / 2.0) * 7,
+            'C': lambda v: v * 35,
+            'D': lambda v: v * 35,
+            'E': lambda v: v * 35,
+        }
+        digital_palette = [
+            "#7986CB", "#4DB6AC", "#FFB74D", "#E57373",
+            "#BA68C8", "#4DD0E1", "#AED581", "#F06292",
+            "#64B5F6", "#A1887F", "#90A4AE", "#FFF176",
+            "#80CBC4", "#CE93D8", "#FFCC02", "#80DEEA",
+        ]
+
+        for idx, tr in enumerate(time_ranges):
+            ax = fig.add_subplot(gs[idx])
+            ax.set_facecolor(PANEL_COLOR)
+
+            start_s = tr["start_ms"] / 1000.0
+            end_s = tr["end_ms"] / 1000.0
+
+            df_range = df[(df[time_col] >= start_s) & (df[time_col] <= end_s)].copy()
+            if df_range.empty:
+                logger.warning(f"No data in {tr['name']} range for {input_path}")
+                continue
+
+            time_vals = df_range[time_col] * 1000  # convert to ms
+            x_left = time_vals.iloc[0]
+
+            # ── Y-axis breaks: analog (bottom) vs digital (top) ──
+            MAX_ANALOG_Y = 2.0 if tr["name"] == "narrow" else 3.0
+
+            # Plot analog channels
+            scaled_analog_data = []
+            for col in analog_cols:
+                key = col
+                if key not in self.analog_colors:
+                    color = self.analog_colors.get(key, '#AAAAAA')
+                else:
+                    color = self.analog_colors[key]
+
+                if key.startswith('CH'):
+                    scale_fn = lambda v: v * 35
+                else:
+                    scale_fn = scaling_map.get(key, lambda v: v)
+
+                scaled = scale_fn(df_range[col].values)
+                scaled_analog_data.append((col, scaled))
+
+                ax.plot(time_vals, scaled, color=color, linewidth=2.2,
+                        alpha=0.85, label=col, solid_capstyle='round', zorder=3)
+                ax.plot(time_vals, scaled, color=color, linewidth=0.7,
+                        alpha=1.0, label='_nolegend_', zorder=3)
+
+                # Initial value triangle marker
+                init_val = scaled[0]
+                ax.plot(x_left, init_val,
+                        marker='<', markersize=11,
+                        markerfacecolor=color, markeredgecolor='white',
+                        markeredgewidth=1.2,
+                        zorder=6, clip_on=False, label='_nolegend_')
+                try:
+                    val_str = f'{df_range[col].iloc[0]:.3f}'
+                except (TypeError, ValueError):
+                    val_str = str(df_range[col].iloc[0])
+                ax.annotate(val_str,
+                            xy=(x_left, init_val),
+                            xytext=(6, 0), textcoords='offset points',
+                            fontsize=7.5, color=color, alpha=0.85,
+                            va='center')
+
+            # ── Digital channels ───────────────────────────────────
+            gap = 1.2
+            start_y = MAX_ANALOG_Y + 1.0 if MAX_ANALOG_Y > 2.0 else MAX_ANALOG_Y + 0.5
+            label_x = time_vals.iloc[0]
+
+            for i, col in enumerate(digital_cols):
+                y = df_range[col].fillna(0).values
+                y_base = start_y + (len(digital_cols) - 1 - i) * gap
+                color = digital_palette[i % len(digital_palette)]
+
+                ax.axhspan(y_base - 0.05, y_base + 1.1,
+                           alpha=0.04, color=color, zorder=0)
+                ax.step(time_vals, y + y_base, where='post',
+                        color=color, linewidth=1.1,
+                        alpha=0.9, label='_nolegend_', zorder=2)
+                ax.text(label_x, y_base + 0.25, col,
+                        fontsize=7.5, color=color,
+                        ha='left', va='bottom',
+                        bbox=dict(boxstyle='round,pad=0.15',
+                                  facecolor=PANEL_COLOR,
+                                  edgecolor=color,
+                                  alpha=0.7,
+                                  linewidth=0.6))
+
+            # ── Finalize axes ──────────────────────────────────────
+            ax.set_xlim(time_vals.iloc[0], time_vals.iloc[-1])
+
+            # Y-limit: cover analog + digital
+            top_digital_y = start_y + len(digital_cols) * gap + 0.5 if digital_cols else MAX_ANALOG_Y + 2.0
+            ax.set_ylim(-1.5, top_digital_y)
+
+            ax.set_xlabel("Time (ms)", fontsize=11, color=TEXT_COLOR, labelpad=6)
+            ax.set_ylabel("Amplitude (a.u.)", fontsize=11, color=TEXT_COLOR, labelpad=6)
+
+            ax.grid(True, which='major', color=GRID_COLOR, linestyle='--',
+                    linewidth=0.6, alpha=0.8, zorder=1)
+            for spine in ax.spines.values():
+                spine.set_edgecolor(GRID_COLOR)
+                spine.set_linewidth(0.8)
+
+            ax.tick_params(colors=TEXT_COLOR, labelsize=10)
+
+            # Sub-title for this time range
+            time_str = f"{tr['start_ms']:.0f} ms  ~  {tr['end_ms']:+3.0f} ms"
+            ax.set_title(
+                f"[{tr['name'].upper()}]  {time_str}",
+                color=TITLE_COLOR, fontsize=12, fontweight='bold', pad=8,
+            )
+
+            # Legend (analog only)
+            handles, labels = ax.get_legend_handles_labels()
+            if handles:
+                leg = ax.legend(
+                    loc='upper left',
+                    bbox_to_anchor=(1.02, 1.0),
+                    borderaxespad=0,
+                    frameon=True,
+                    handlelength=2.0,
+                    handleheight=1.2,
+                    labelspacing=0.6,
+                )
+                leg.get_frame().set_facecolor(PANEL_COLOR)
+                leg.get_frame().set_edgecolor(GRID_COLOR)
+                leg.get_frame().set_alpha(0.95)
+                for text in leg.get_texts():
+                    text.set_color('white')
+
+        # ── Main title ─────────────────────────────────────────────
+        folder_name = output_path.parent.name
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        fig.suptitle(
+            f"SRF Postmortem Waveform  |  {folder_name}",
+            fontsize=14, color=TITLE_COLOR, fontweight='bold', y=0.97,
+        )
+
+        # Classification overlay (if available)
+        if classification:
+            case = classification.get('case', 'N/A')
+            fault_desc = classification.get('fault_description', '')
+            groups = classification.get('groups', [])
+            lines = [f"Case {case}"]
+            if fault_desc:
+                lines.append(fault_desc)
+            if groups:
+                lines.append(f"Groups: {', '.join(groups)}")
+            text = '\n'.join(lines)
+            # Place above the right side
+            fig.text(
+                0.98, 0.94, text,
+                fontsize=9, color='#4fc3f7',
+                ha='right', va='top',
+                bbox=dict(boxstyle='round,pad=0.3',
+                          facecolor=BG_COLOR,
+                          edgecolor='#4fc3f7',
+                          alpha=0.7),
+            )
+
+        plt.savefig(output_path, dpi=self.dpi, facecolor=BG_COLOR)
+        plt.close()
+        logger.info(f"Saved combined dark-theme plot to {output_path}")
+        return True
 
     def generate_plots(
         self,
@@ -587,7 +817,11 @@ class Visualizer:
             ax1.plot(time_vals, signal_values, label=col, linewidth=1.5, alpha=0.8, color=color)
 
         if analog_cols:
-            ax1.legend(loc="upper right", fontsize=7, ncol=3, frameon=True)
+            leg1 = ax1.legend(loc="upper right", fontsize=7, ncol=3, frameon=True,
+                facecolor=self.theme.panel_color, edgecolor=self.theme.grid_color)
+            leg1.get_frame().set_alpha(0.95)
+            for t in leg1.get_texts():
+                t.set_color('white')
             ax1.set_ylabel("Analog Signal (Original)", fontsize=9, color=self.theme.text_color)
 
         ax1.set_ylim(None, 2)
@@ -612,8 +846,10 @@ class Visualizer:
             y_min = -0.5
             y_max = num_dig * digital_spacing + digital_amplitude
             ax2.set_ylim(y_min, y_max)
-            ax2.legend(loc="upper left",
+            leg2 = ax2.legend(loc="upper left",
                       fontsize=6.5, ncol=1, frameon=False, labelspacing=0.05)
+            for t in leg2.get_texts():
+                t.set_color('white')
             ax2.set_ylabel("Digital Channels", fontsize=9, color=self.theme.text_color)
 
         ax2.set_xlabel("Time (ms)", fontsize=9, color=self.theme.text_color)
