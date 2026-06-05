@@ -1072,7 +1072,7 @@ from .pipeline_manager import (
     stop_monitor,
     stop_batch_pipeline,
     run_append,
-    start_watchdog_only,
+
 )
 
 
@@ -1202,16 +1202,6 @@ async def api_monitor_start(request: Request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
     config_path = str(Path(__file__).parent.parent.parent / "config" / "config.yaml")
     return start_monitor(config_path=config_path)
-
-
-@app.post("/api/pipeline/watchdog/start")
-async def api_watchdog_start(request: Request):
-    """Start watchdog-only (graph generation, NO pipeline). Like main_v0.4."""
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
-        return JSONResponse({"error": "Authentication required"}, status_code=401)
-    config_path = str(Path(__file__).parent.parent.parent / "config" / "config.yaml")
-    return start_watchdog_only(config_path=config_path)
 
 
 @app.post("/api/pipeline/monitor/stop")

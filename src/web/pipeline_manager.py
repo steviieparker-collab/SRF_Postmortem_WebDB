@@ -40,6 +40,16 @@ def _ts(msg: str) -> str:
     return ts_msg
 
 
+def _drain_queue(q):
+    """Remove all remaining items from queue."""
+    while True:
+        try:
+            q.get_nowait()
+            q.task_done()
+        except queue.Empty:
+            break
+
+
 class PipelineStatus:
     """Shared status object for pipeline operations."""
 
@@ -452,12 +462,7 @@ def _start_watchdogs(config, stop_event: threading.Event):
                 if _is_valid_csv(path):
                     csv_event_queue.put((self.scope_idx, path))
 
-            def on_modified(self, event):
-                if event.is_directory:
-                    return
-                path = Path(event.src_path)
-                if _is_valid_csv(path):
-                    csv_event_queue.put((self.scope_idx, path))
+
 
         with _watchdog_lock:
             _watchdog_observers = []
@@ -662,11 +667,13 @@ def start_watchdog_only(config_path: str = "config/config.yaml"):
     """
     Full pipeline: watchdog detect CSV &#8594; graphs &#8594; parquet &#8594; grouper &#8594; classifier &#8594; visualizer &#8594; reporter &#8594; email &#8594; DB.
     """
-    global _watchdog_observers, _scope_parquet_tracker, _monitor_start_time
+    global _watchdog_observers, _scope_parquet_tracker, _monitor_start_time, _stop_monitor
 
     if _pipeline_status.running:
         return {"error": "Pipeline already running"}
 
+    # Reset stop event in case of previous stop
+    _stop_monitor = threading.Event()
     _pipeline_status.start("monitor")
 
     try:
@@ -679,21 +686,35 @@ def start_watchdog_only(config_path: str = "config/config.yaml"):
         _pipeline_status.fail(str(e))
         return {"error": str(e)}
 
-    _processed_watchdog = set()
-    _first_csv_time = 0
-    _all_csvs_arrived = False
+    _reset_pending_called = False
     _pending_scopes: dict[int, Path] = {}
+    _first_csv_time: float = 0
+    _all_csvs_arrived: bool = False
+    _narrow_graph_paths: dict[int, str] = {}  # scope_idx -> narrow graph file path
+
+    def _reset_pending():
+        nonlocal _pending_scopes, _first_csv_time, _all_csvs_arrived, _narrow_graph_paths
+        _pending_scopes.clear()
+        _narrow_graph_paths.clear()
+        _first_csv_time = 0
+        _all_csvs_arrived = False
 
     def _full_worker():
-        """Queue consumer: collect all 3 CSVs first, THEN process sequentially."""
-        nonlocal _processed_watchdog, _first_csv_time, _all_csvs_arrived, _pending_scopes
+        """
+        v2: Queue consumer that collects exactly 3 CSVs, then processes full pipeline.
+        - No dedup (_processed_watchdog removed)
+        - 3/3 collected -> 60s wait -> beam check (all 3, <3V = fail+IDLE)
+        - Individual scope processing (graph + parquet), fail stops all
+        - 3 parquet check -> grouper -> classifier -> visualizer -> reporter -> email -> DB -> IDLE
+        """
+        nonlocal _pending_scopes, _first_csv_time, _all_csvs_arrived
         output_dir = Path(config_path).parent.parent / "data" / "graph_only"
         output_dir.mkdir(parents=True, exist_ok=True)
         merged_dir = config.paths.merged_dir
         merged_dir.mkdir(parents=True, exist_ok=True)
+        processed_dir = config.paths.processed_dir
 
         # Clean processed scope parquets from previous run
-        processed_dir = config.paths.processed_dir
         for si in range(1, 4):
             sd = processed_dir / f"scope{si}"
             if sd.exists():
@@ -701,23 +722,26 @@ def start_watchdog_only(config_path: str = "config/config.yaml"):
                     try: f.unlink()
                     except: pass
 
-        while True:
+        while not _stop_monitor.is_set():
             try:
                 scope_idx, csv_path = csv_event_queue.get(timeout=1.0)
             except queue.Empty:
-                # Check if we're waiting with partial data + timeout
+                if _stop_monitor.is_set():
+                    break
+                # Timeout check: 120s since first CSV with no 3/3
                 if _first_csv_time > 0 and not _all_csvs_arrived:
                     elapsed = time.time() - _first_csv_time
-                    if elapsed >= 120:  # 120s total timeout from first CSV
-                        _ts(f"Timeout: only {len(_pending_scopes)} CSVs arrived in 120s. Processing what we have...")
-                        _all_csvs_arrived = True
+                    if elapsed >= 120:
+                        _pipeline_status.update(_ts(f"[FAIL] 120s timeout: only {len(_pending_scopes)} CSVs arrived. Returning to IDLE."))
+                        _reset_pending()
+                        _ts("Drained stale CSV events from queue")
+                        _drain_queue(csv_event_queue)
                 continue
 
-            if str(csv_path) in _processed_watchdog:
-                continue  # already seen, skip silently
-            _processed_watchdog.add(str(csv_path))
+            if _stop_monitor.is_set():
+                break
 
-            # Collect CSV: store in pending, don't process yet
+            # Collect CSV (no dedup, _processed_watchdog removed)
             _pending_scopes[scope_idx] = csv_path
             _ts(f"CSV arrived: {Path(csv_path).parent.name}/{csv_path.name} (scope{scope_idx}) — {len(_pending_scopes)}/3 collected")
 
@@ -725,98 +749,148 @@ def start_watchdog_only(config_path: str = "config/config.yaml"):
             if _first_csv_time == 0:
                 _first_csv_time = time.time()
 
-            # Check if all 3 arrived
-            if len(_pending_scopes) >= 3:
-                _all_csvs_arrived = True
-                _ts(f"All 3 CSVs collected. Waiting 60s for file writes to complete...")
-                time.sleep(60)
-
-            if not _all_csvs_arrived:
+            # 3/3 not yet — continue waiting
+            if len(_pending_scopes) < 3:
                 continue
 
-            # ── ALL 3 CSVs ready. Process each sequentially ────────
+            if _stop_monitor.is_set():
+                break
+
+            # ── 3/3 collected ────
+            _all_csvs_arrived = True
+            _ts(f"All 3 CSVs collected. Waiting 60s for file writes to complete...")
+            time.sleep(60)
+
+            if _stop_monitor.is_set():
+                break
+
+            # ── Beam check: all 3 scopes at once ──
+            _ts("Checking beam current for all 3 scopes...")
+            beam_fail = False
+            for sidx in sorted(_pending_scopes.keys()):
+                csv_path = _pending_scopes[sidx]
+                try:
+                    with open(csv_path, 'r', encoding='utf-8') as f:
+                        lines_for_beam = f.readlines()
+                    beam_val_str = lines_for_beam[21].split(',')[1].strip()
+                    beam_val = float(beam_val_str)
+                    if beam_val < 3:
+                        _pipeline_status.update(_ts(f"[FAIL] Low beam: (scope{sidx}) beam current {beam_val}V < 3V. Returning to IDLE."))
+                        beam_fail = True
+                    else:
+                        _ts(f"  (scope{sidx}) beam current {beam_val}V ✓")
+                except Exception as e:
+                    _pipeline_status.update(_ts(f"[FAIL] (scope{sidx}) beam check error: {e}. Returning to IDLE."))
+                    beam_fail = True
+
+            if beam_fail:
+                _reset_pending()
+                _ts("Drained stale CSV events from queue")
+                _drain_queue(csv_event_queue)
+                continue
+
+            # ── Process individual scopes: graph + parquet ──
+            all_parquet_ok = True
             for sidx in sorted(_pending_scopes.keys()):
                 scope_idx = sidx
                 csv_path = _pending_scopes[sidx]
 
+                if _stop_monitor.is_set():
+                    break
+
                 # Quick read check
                 try:
-                    with open(csv_path, 'rb') as f: f.read(1)
+                    with open(csv_path, 'rb') as f:
+                        f.read(1)
                     file_size = os.path.getsize(csv_path)
                 except:
-                    _ts(f"(scope{scope_idx}) Cannot read: {csv_path.name}"); continue
+                    _pipeline_status.update(_ts(f"[FAIL] preprocessor error: (scope{scope_idx}) Cannot read: {csv_path.name}. Returning to IDLE."))
+                    all_parquet_ok = False
+                    break
                 if file_size <= 0:
-                    _ts(f"(scope{scope_idx}) Empty: {csv_path.name}"); continue
+                    _pipeline_status.update(_ts(f"[FAIL] preprocessor error: (scope{scope_idx}) Empty: {csv_path.name}. Returning to IDLE."))
+                    all_parquet_ok = False
+                    break
 
                 _ts(f"(scope{scope_idx}) Processing {csv_path.name} ({int(file_size/1024)}KB)...")
 
                 try:
-                    import io, pandas as pd
+                    import io
+                    import pandas as pd
                     from matplotlib import pyplot as plt
                     import numpy as np
 
-                    scope_label = {1:'W:',2:'X:',3:'Y:'}.get(scope_idx,f'scope{scope_idx}')
+                    scope_label = {1: 'W:', 2: 'X:', 3: 'Y:'}.get(scope_idx, f'scope{scope_idx}')
                     folder_out = output_dir / scope_label.replace(':', '')
                     folder_out.mkdir(parents=True, exist_ok=True)
 
-                    with open(csv_path, 'r', encoding='utf-8') as f: lines = f.readlines()
+                    with open(csv_path, 'r', encoding='utf-8') as f:
+                        lines = f.readlines()
                     labels = lines[19].strip().split(',')
                     df = pd.read_csv(io.StringIO(''.join(lines[21:])), header=None)
-                    if len(labels) > 6: labels.pop(6)
-                    if df.shape[1] > 6: df.drop(columns=[6], inplace=True)
+                    if len(labels) > 6:
+                        labels.pop(6)
+                    if df.shape[1] > 6:
+                        df.drop(columns=[6], inplace=True)
                     df.columns = labels
                     time_col = labels[0]
 
-                    # Beam current filter
-                    try:
-                        if float(df.iloc[0, 1]) < 3:
-                            _ts(f"(scope{scope_idx}) Beam low, skip: {csv_path.name}")
-                            continue
-                    except: pass
-
                     stem = csv_path.stem
-                    BG='#0f1117'; PANEL='#1a1d27'; GRID='#2a2d3a'; TXT='#e0e0e0'; TITLE='#ffffff'
-                    ACOL={'B':'#FFE033','C':'#00D4FF','D':'#FF1E6B','E':'#96D800'}
-                    DPAL=['#7986CB','#4DB6AC','#FFB74D','#E57373','#BA68C8','#4DD0E1','#AED581','#F06292',
-                          '#64B5F6','#A1887F','#90A4AE','#FFF176','#80CBC4','#CE93D8','#FFCC02','#80DEEA']
+                    BG = '#0f1117'
+                    PANEL = '#1a1d27'
+                    GRID = '#2a2d3a'
+                    TXT = '#e0e0e0'
+                    TITLE = '#ffffff'
+                    ACOL = {'B': '#FFE033', 'C': '#00D4FF', 'D': '#FF1E6B', 'E': '#96D800'}
+                    DPAL = ['#7986CB', '#4DB6AC', '#FFB74D', '#E57373', '#BA68C8', '#4DD0E1', '#AED581', '#F06292',
+                            '#64B5F6', '#A1887F', '#90A4AE', '#FFF176', '#80CBC4', '#CE93D8', '#FFCC02', '#80DEEA']
 
                     def make_plot(tmin, tmax, suffix):
-                        mask = (df[time_col]>=tmin)&(df[time_col]<=tmax)
+                        mask = (df[time_col] >= tmin) & (df[time_col] <= tmax)
                         dd = df[mask].reset_index(drop=True)
                         sp = folder_out / f"{stem}_{suffix}.jpg"
-                        plt.rcParams.update({'font.family':'DejaVu Sans','font.size':10,
-                            'axes.facecolor':PANEL,'figure.facecolor':BG,'axes.edgecolor':GRID,
-                            'axes.labelcolor':TXT,'xtick.color':TXT,'ytick.color':TXT,'text.color':TXT,
-                            'grid.color':GRID,'grid.linestyle':'--','grid.linewidth':0.6,'grid.alpha':0.8})
-                        fig, ax = plt.subplots(figsize=(15,8)); fig.patch.set_facecolor(BG)
-                        bcol,ccol,dcol,ecol = labels[1],labels[2],labels[3],labels[4]
+                        plt.rcParams.update({'font.family': 'DejaVu Sans', 'font.size': 10,
+                            'axes.facecolor': PANEL, 'figure.facecolor': BG, 'axes.edgecolor': GRID,
+                            'axes.labelcolor': TXT, 'xtick.color': TXT, 'ytick.color': TXT, 'text.color': TXT,
+                            'grid.color': GRID, 'grid.linestyle': '--', 'grid.linewidth': 0.6, 'grid.alpha': 0.8})
+                        fig, ax = plt.subplots(figsize=(15, 8))
+                        fig.patch.set_facecolor(BG)
+                        bcol, ccol, dcol, ecol = labels[1], labels[2], labels[3], labels[4]
                         dig_cols = dd.columns[6:22]
                         ana_cols = [c for c in dd.columns if c not in dig_cols and c != time_col]
-                        tv = dd[time_col].values*1000; xl = tmin*1000
-                        cmap = {bcol:('B',lambda v:v/2.0*7),ccol:('C',lambda v:v*35),
-                                dcol:('D',lambda v:v*35),ecol:('E',lambda v:v*35)}
+                        tv = dd[time_col].values * 1000
+                        xl = tmin * 1000
+                        cmap = {bcol: ('B', lambda v: v / 2.0 * 7), ccol: ('C', lambda v: v * 35),
+                                dcol: ('D', lambda v: v * 35), ecol: ('E', lambda v: v * 35)}
                         for c in ana_cols:
-                            if c not in cmap: continue
-                            k,fn = cmap[c]; cl=ACOL[k]; sv = fn(dd[c].values)
-                            ax.plot(tv,sv,color=cl,lw=2.2,alpha=0.85,label=c)
-                            ax.plot(tv,sv,color=cl,lw=0.7,alpha=1.0,label='_nolegend_')
-                            iy=float(fn(df[c].iloc[0]))
-                            ax.plot(xl,iy,marker='<',ms=11,mfc=cl,mec='white',mew=1.2,zorder=6,clip_on=False)
-                            ax.annotate(f'{df[c].iloc[0]:.3f}',(xl,iy),xytext=(6,0),textcoords='offset points',fontsize=7.5,color=cl,alpha=0.85,va='center')
-                        gap,sy = 1.2,38
-                        for i,c in enumerate(dig_cols):
-                            yv = dd[c].fillna(0).values; yb = sy-i*gap; dc=DPAL[i%len(DPAL)]
-                            ax.axhspan(yb-0.05,yb+1.1,alpha=0.04,color=dc,zorder=0)
-                            ax.step(tv,yv+yb,where='post',color=dc,lw=1.1,alpha=0.9)
-                            ax.text(tv[0],yb+0.25,c,fontsize=8,color=dc,ha='left',va='bottom',
-                                bbox=dict(boxstyle='round,pad=0.15',fc=PANEL,ec=dc,alpha=0.7,lw=0.6))
-                        ax.set_xlabel("Time (ms)",color=TXT); ax.set_ylabel("Amplitude (a.u.)",color=TXT)
-                        ax.set_title(f"SRF Postmortem | {scope_label} | {tmin*1000:.1f}~{tmax*1000:+.1f}ms",fontsize=12,color=TITLE,fontweight='bold')
-                        ax.set_ylim(dd[ana_cols].min().min()-1 if not dd[ana_cols].empty else -1,41)
-                        ax.set_xlim(tv[0],tv[-1]); ax.grid(True)
-                        for s in ax.spines.values(): s.set_edgecolor(GRID)
-                        # Legend: 배경=그래프 배경, 글자=흰색
-                        leg = ax.legend(loc='upper left', bbox_to_anchor=(1.02,1),
+                            if c not in cmap:
+                                continue
+                            k, fn = cmap[c]
+                            cl = ACOL[k]
+                            sv = fn(dd[c].values)
+                            ax.plot(tv, sv, color=cl, lw=2.2, alpha=0.85, label=c)
+                            ax.plot(tv, sv, color=cl, lw=0.7, alpha=1.0, label='_nolegend_')
+                            iy = float(fn(df[c].iloc[0]))
+                            ax.plot(xl, iy, marker='<', ms=11, mfc=cl, mec='white', mew=1.2, zorder=6, clip_on=False)
+                            ax.annotate(f'{df[c].iloc[0]:.3f}', (xl, iy), xytext=(6, 0), textcoords='offset points', fontsize=7.5, color=cl, alpha=0.85, va='center')
+                        gap, sy = 1.2, 38
+                        for i, c in enumerate(dig_cols):
+                            yv = dd[c].fillna(0).values
+                            yb = sy - i * gap
+                            dc = DPAL[i % len(DPAL)]
+                            ax.axhspan(yb - 0.05, yb + 1.1, alpha=0.04, color=dc, zorder=0)
+                            ax.step(tv, yv + yb, where='post', color=dc, lw=1.1, alpha=0.9)
+                            ax.text(tv[0], yb + 0.25, c, fontsize=8, color=dc, ha='left', va='bottom',
+                                bbox=dict(boxstyle='round,pad=0.15', fc=PANEL, ec=dc, alpha=0.7, lw=0.6))
+                        ax.set_xlabel("Time (ms)", color=TXT)
+                        ax.set_ylabel("Amplitude (a.u.)", color=TXT)
+                        ax.set_title(f"SRF Postmortem | {scope_label} | {tmin * 1000:.1f}~{tmax * 1000:+.1f}ms", fontsize=12, color=TITLE, fontweight='bold')
+                        ax.set_ylim(dd[ana_cols].min().min() - 1 if not dd[ana_cols].empty else -1, 41)
+                        ax.set_xlim(tv[0], tv[-1])
+                        ax.grid(True)
+                        for s in ax.spines.values():
+                            s.set_edgecolor(GRID)
+                        leg = ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1),
                             frameon=True, handlelength=2.0, handleheight=1.2, labelspacing=0.6)
                         leg.get_frame().set_facecolor(PANEL)
                         leg.get_frame().set_edgecolor(GRID)
@@ -824,11 +898,14 @@ def start_watchdog_only(config_path: str = "config/config.yaml"):
                         for t in leg.get_texts():
                             t.set_color('white')
                         fig.subplots_adjust(left=0.05, right=0.78, top=0.92, bottom=0.08)
-                        plt.savefig(str(sp),dpi=150,bbox_inches='tight',facecolor=BG); plt.close()
-                        plt.rcParams.update(plt.rcParamsDefault); return sp
+                        plt.savefig(str(sp), dpi=150, bbox_inches='tight', facecolor=BG)
+                        plt.close()
+                        plt.rcParams.update(plt.rcParamsDefault)
+                        return sp
 
+                    # Track narrow graph path for email attachment (3 scope images)
+                    _narrow_graph_paths[sidx] = str(make_plot(-0.001, 0.001, "narrow"))
                     make_plot(-0.05, 0.05, "wide")
-                    make_plot(-0.001, 0.001, "narrow")
                     _ts(f"(scope{scope_idx}) ✓ {csv_path.name} -> graphs saved")
 
                     # ── Convert to parquet ──
@@ -840,116 +917,136 @@ def start_watchdog_only(config_path: str = "config/config.yaml"):
                             success, reason, _ = orch.preprocessor.process_one(csv_path, pqt_path, max_retries=2)
                             if success:
                                 _ts(f"(scope{scope_idx}) ✓ {csv_path.name} -> parquet")
-                                time.sleep(2.0)
                             else:
-                                _ts(f"(scope{scope_idx}) ✗ parquet fail: {reason}")
+                                _pipeline_status.update(_ts(f"[FAIL] preprocessor error: (scope{scope_idx}) ✗ parquet fail: {reason}. Returning to IDLE."))
+                                all_parquet_ok = False
+                                break
                         except Exception as e:
-                            _ts(f"(scope{scope_idx}) ✗ parquet error: {e}")
+                            _pipeline_status.update(_ts(f"[FAIL] preprocessor error: (scope{scope_idx}) ✗ parquet error: {e}. Returning to IDLE."))
+                            all_parquet_ok = False
+                            break
+
+                    if _stop_monitor.is_set():
+                        break
+
+                    # 2s sleep between scopes
+                    time.sleep(2.0)
 
                 except Exception as e:
-                    _ts(f"(scope{scope_idx}) ✗ {csv_path.name} error: {e}")
+                    _pipeline_status.update(_ts(f"[FAIL] preprocessor error: (scope{scope_idx}) ✗ {csv_path.name} error: {e}. Returning to IDLE."))
+                    all_parquet_ok = False
+                    break
 
-            # ── All 3 CSVs processed. Run grouper + pipeline ──
-            time.sleep(3.0)  # ensure all parquets are written
+            if _stop_monitor.is_set():
+                break
+
+            if not all_parquet_ok:
+                _reset_pending()
+                _ts("Drained stale CSV events from queue")
+                _drain_queue(csv_event_queue)
+                continue
+
+            # ── Verify 3 parquets exist ──
             scopes_with_parquet = []
             for si in range(1, 4):
                 sd = processed_dir / f"scope{si}"
                 if sd.exists() and list(sd.glob("*.parquet")):
                     scopes_with_parquet.append(si)
 
-            if len(scopes_with_parquet) >= 3:
-                _pipeline_status.update(_ts("All 3 scopes ready. Running grouper..."))
-                try:
-                    orch.run_grouper()
+            if len(scopes_with_parquet) < 3:
+                _pipeline_status.update(_ts(f"[FAIL] parquet incomplete: Only {len(scopes_with_parquet)} scopes have parquets (need 3). Returning to IDLE."))
+                _reset_pending()
+                _ts("Drained stale CSV events from queue")
+                _drain_queue(csv_event_queue)
+                continue
 
-                    temp_dir = merged_dir / "temp"
-                    temp_files = sorted(temp_dir.glob("*.parquet"))
+            # ── ALL 3 parquets ready — run pipeline ──
+            _pipeline_status.update(_ts("All 3 scopes ready. Running grouper..."))
+            try:
+                orch.run_grouper()
 
-                    if temp_files:
-                        _pipeline_status.update(_ts(f"Grouper: {len(temp_files)} new files in temp/. Moving to merged/..."))
-                        new_paths = []
-                        for f in temp_files:
-                            dest = merged_dir / f.name
-                            import shutil
-                            shutil.move(str(f), str(dest))
-                            new_paths.append(str(dest))
+                temp_dir = merged_dir / "temp"
+                temp_files = sorted(temp_dir.glob("*.parquet"))
 
-                        _pipeline_status.update(_ts(f"Running classifier/visualizer/reporter on {len(new_paths)} new files..."))
-                        orch.run_classifier(merged_files=new_paths)
-                        _pipeline_status.update(_ts("Classifier done."))
-                        orch.run_visualizer(merged_files=new_paths)
-                        _pipeline_status.update(_ts("Visualizer done."))
-                        orch.run_reporter(merged_files=new_paths)
-                        _pipeline_status.update(_ts("Reporter done."))
-                    else:
-                        _pipeline_status.update(_ts("No new merged files from grouper. Skipping classifier/visualizer/reporter."))
+                if temp_files:
+                    _pipeline_status.update(_ts(f"Grouper: {len(temp_files)} new files in temp/. Moving to merged/..."))
+                    new_paths = []
+                    for f in temp_files:
+                        dest = merged_dir / f.name
+                        import shutil
+                        shutil.move(str(f), str(dest))
+                        new_paths.append(str(dest))
 
-                    _pipeline_status.update(_ts("Sending email reports with graphs + WebDB link..."))
-                    emailed = 0
-                    if orch.email_sender:
-                        web_port = getattr(config.web, 'port', 8050)
-                        web_url = f"http://141.223.105.230:{web_port}"
-                        for mf in [Path(p) for p in new_paths]:
-                            cls_file = orch.config.paths.results_dir / f"{mf.stem}_classification.json"
-                            report_file = orch.config.paths.reports_dir / f"{mf.stem}_report.md"
-                            event_id = mf.stem.replace('event_', '')
-                            summary = "Unclassified"
-                            if cls_file.exists():
-                                try:
-                                    summary = json.loads(cls_file.read_text(encoding='utf-8')).get('description', summary)
-                                except: pass
+                    _pipeline_status.update(_ts(f"Running classifier/visualizer/reporter on {len(new_paths)} new files..."))
+                    orch.run_classifier(merged_files=new_paths)
+                    _pipeline_status.update(_ts("Classifier done."))
+                    orch.run_visualizer(merged_files=new_paths)
+                    _pipeline_status.update(_ts("Visualizer done."))
+                    orch.run_reporter(merged_files=new_paths)
+                    _pipeline_status.update(_ts("Reporter done."))
+                else:
+                    _pipeline_status.update(_ts("No new merged files from grouper. Skipping classifier/visualizer/reporter."))
+
+                _pipeline_status.update(_ts("Sending email reports with graphs + WebDB link..."))
+                emailed = 0
+                if orch.email_sender:
+                    web_port = getattr(config.web, 'port', 8050)
+                    web_url = f"http://141.223.105.230:{web_port}"
+                    for mf in [Path(p) for p in new_paths]:
+                        cls_file = orch.config.paths.results_dir / f"{mf.stem}_classification.json"
+                        report_file = orch.config.paths.reports_dir / f"{mf.stem}_report.md"
+                        event_id = mf.stem.replace('event_', '')
+                        summary = "Unclassified"
+                        if cls_file.exists():
                             try:
-                                content = report_file.read_text(encoding='utf-8') if report_file.exists() else ""
-                                content += f"\n\n🔗 **View in WebDB:** {web_url}/events/{event_id}\n"
-                                # Use graph_only narrow images (dark theme) instead of graphs/ old style
-                                graph_only_dir = Path(config_path).parent.parent / "data" / "graph_only"
-                                graph_files = []
-                                for scope_label in ['W', 'X', 'Y']:
-                                    gf = graph_only_dir / scope_label / f"{event_id}_narrow.jpg"
-                                    if not gf.exists():
-                                        # Try with stem pattern: the scope CSVs have different stems
-                                        pass
-                                # If no graph_only images, fall back to graphs/
-                                if not graph_files:
-                                    graphs_dir = orch.config.paths.graphs_dir
-                                    for suffix in ['_wide_el.jpg', '_narrow_el.jpg']:
-                                        gf = graphs_dir / f"{mf.stem}{suffix}"
-                                        if gf.exists():
-                                            graph_files.append(str(gf))
-                                orch.email_sender.send_report(
-                                    report_content=content, report_format='markdown',
-                                    graph_files=graph_files if graph_files else None,
-                                    classification_summary=summary,
-                                )
-                                emailed += 1
-                            except Exception as e:
-                                _ts(f"Email failed for {mf.name}: {e}")
+                                summary = json.loads(cls_file.read_text(encoding='utf-8')).get('description', summary)
+                            except:
+                                pass
+                        try:
+                            content = report_file.read_text(encoding='utf-8') if report_file.exists() else ""
+                            content += f"\n\n🔗 **View in WebDB:** {web_url}/events/{event_id}\n"
+                            # Attach 3 scope narrow graphs separately
+                            graph_files = list(_narrow_graph_paths.values())
+                            orch.email_sender.send_report(
+                                report_content=content, report_format='markdown',
+                                graph_files=graph_files if graph_files else None,
+                                classification_summary=summary,
+                            )
+                            emailed += 1
+                        except Exception as e:
+                            _ts(f"Email failed for {mf.name}: {e}")
                     _pipeline_status.update(_ts(f"Emails sent: {emailed}"))
 
-                    _pipeline_status.update(_ts("Importing to DB..."))
-                    db_count = orch.import_to_db()
-                    _pipeline_status.update(_ts(f"Pipeline complete. DB imported: {db_count}"))
+                _pipeline_status.update(_ts("Importing to DB..."))
+                db_count = orch.import_to_db()
+                _pipeline_status.update(_ts(f"Pipeline complete. DB imported: {db_count}"))
 
-                    # Cleanup processed scope parquets
-                    for si in range(1, 4):
-                        sd = processed_dir / f"scope{si}"
-                        if sd.exists():
-                            for f in sd.glob("*.parquet"):
-                                try: f.unlink()
-                                except: pass
-                except Exception as e:
-                    _pipeline_status.update(_ts(f"Pipeline failed: {e}"))
+                # Cleanup processed scope parquets
+                for si in range(1, 4):
+                    sd = processed_dir / f"scope{si}"
+                    if sd.exists():
+                        for f in sd.glob("*.parquet"):
+                            try:
+                                f.unlink()
+                            except:
+                                pass
+            except Exception as e:
+                _pipeline_status.update(_ts(f"[FAIL] pipeline error: {e}"))
 
-            # task_done for all collected CSVs (once per CSV)
+            # task_done + reset pending — return to IDLE
             for _ in range(len(_pending_scopes)):
                 csv_event_queue.task_done()
-
-            # Reset for next cycle — stay in monitor mode, don't finish
-            _pending_scopes.clear()
-            _first_csv_time = 0
-            _all_csvs_arrived = False
-
+            _reset_pending()
+            _ts("Drained stale CSV events from queue")
+            _drain_queue(csv_event_queue)
             _pipeline_status.update("Monitoring for next batch of CSVs...")
+
+        # while loop exited (user stop request)
+        _ts("Stopped by user")
+        _reset_pending()
+        _ts("Drained stale CSV events from queue")
+        _drain_queue(csv_event_queue)
+        _pipeline_status.finish({"message": "Stopped by user"})
 
     worker = threading.Thread(target=_full_worker, daemon=True, name="full-pipeline-worker")
     worker.start()
@@ -961,7 +1058,9 @@ def stop_monitor():
     global _stop_monitor
     _stop_monitor.set()
     _stop_watchdogs()
-    return {"ok": True, "message": "Monitor stop requested"}
+    # Immediately mark as finished so Start Monitor can be re-pressed
+    _pipeline_status.finish({"message": "Stopped by user"})
+    return {"ok": True, "message": "Stopped by user"}
 
 
 def stop_batch_pipeline():
