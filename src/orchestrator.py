@@ -337,7 +337,11 @@ class SRFOrchestrator:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
     def _save_per_event_classification(self):
-        """Extract per-event classification JSON from sequence_info.json."""
+        """Extract per-event classification JSON from sequence_info.json.
+
+        Also includes time_groups (first/second/third event sequences)
+        so that the DB import step can store them for the web UI.
+        """
         seq_file = self.paths.results_dir / "sequence_info.json"
         if not seq_file.exists():
             return
@@ -347,11 +351,30 @@ class SRFOrchestrator:
         for fname, info in data.items():
             cls = info.get("classification")
             if cls:
+                enriched = dict(cls)
+                # Include time_groups so DB import gets event sequence data
+                def _build_time_group(g: list, name: str) -> dict:
+                    events = []
+                    for e in g:
+                        events.append({
+                            "channel": e["channel"],
+                            "event_type": e.get("type", "unknown"),
+                            "time_s": e.get("time_raw", 0.0),
+                            "effective_time_s": e.get("time_effective", e.get("time_raw", 0.0)),
+                            "value": e.get("value", 0.0),
+                        })
+                    start = events[0]["effective_time_s"] if events else 0.0
+                    return {"name": name, "start_time_s": start, "events": events}
+                enriched["time_groups"] = {
+                    "first": _build_time_group(info.get("first_events", []), "FIRST"),
+                    "second": _build_time_group(info.get("second_events", []), "SECOND"),
+                    "third": _build_time_group(info.get("third_events", []), "THIRD"),
+                }
                 out = self.paths.results_dir / f"{Path(fname).stem}_classification.json"
-                out.write_text(json.dumps(cls, indent=2))
+                out.write_text(json.dumps(enriched, indent=2))
                 count += 1
         if count:
-            logger.info(f"Created {count} per-event classification JSON files")
+            logger.info(f"Created {count} per-event classification JSON files (with time_groups)")
 
     def run_full_pipeline(self, input_dirs=None, incremental=False):
         """Run the complete monitoring pipeline (Steps 1-6)."""
@@ -458,15 +481,53 @@ class SRFOrchestrator:
             logger.info("Monitor stopped")
 
     def import_to_db(self) -> int:
-        """Import merged parquet files into the WebDB database."""
-        from src.import_job import run_import
+        """Import merged parquet files into the WebDB database.
+
+        Uses pipeline classification results (JSON files in results_dir/)
+        instead of re-running the classifier. Falls back to on-the-fly
+        classification if no pipeline results exist.
+        """
+        from src.import_job import run_import, run_import_with_classifications
         cfg_path = None
         try:
             from src.core.config import get_config_path
             cfg_path = get_config_path()
         except Exception:
             pass
-        result = run_import(self.paths.merged_dir, cfg_path)
+
+        # Collect pipeline classification results from per-event JSONs
+        classifications: dict[str, dict] = {}
+        cls_files = list(self.paths.results_dir.glob("*_classification.json"))
+        for cls_file in cls_files:
+            try:
+                data = json.loads(cls_file.read_text(encoding='utf-8'))
+                # Determine event_id from the parquet filename
+                # cls_file name pattern: {parquet_stem}_classification.json
+                # parquet_stem is usually event_YYYYMMDD_HHMMSS
+                parquet_stem = cls_file.stem.replace("_classification", "")
+                # Find the matching parquet file to extract event_id
+                parquet_path = self.paths.merged_dir / f"{parquet_stem}.parquet"
+                if not parquet_path.exists():
+                    continue
+                from src.import_job import _extract_event_id
+                event_id, _ = _extract_event_id(parquet_path)
+                classifications[event_id] = {
+                    "case": data.get("case", 0),
+                    "case_description": data.get("description", ""),
+                    "case_fault": data.get("fault", ""),
+                    "case_confidence": data.get("confidence", 0.0),
+                    "time_groups": data.get("time_groups"),
+                }
+            except Exception as e:
+                logger.warning(f"Failed to read classification file {cls_file.name}: {e}")
+
+        if classifications:
+            logger.info(f"DB import: Using {len(classifications)} pre-computed pipeline classifications")
+            result = run_import_with_classifications(self.paths.merged_dir, classifications, cfg_path)
+        else:
+            logger.info("DB import: No pipeline classifications found, falling back to on-the-fly classification")
+            result = run_import(self.paths.merged_dir, cfg_path)
+
         count = result.get('imported', 0)
         logger.info(f"DB import: {count} imported, {result.get('skipped', 0)} skipped, {result.get('errors', 0)} errors")
         return count

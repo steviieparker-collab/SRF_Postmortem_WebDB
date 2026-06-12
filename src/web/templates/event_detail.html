@@ -176,7 +176,7 @@
                         <select class="form-select form-select-sm" id="user-fault-type-select">
                             <option value="">— Classifier result: {{ event.fault_type or 'Unknown' }} —</option>
                             {% for cid, cname in case_fault_types.items() %}
-                            {% if cid > 0 %}
+                            {% if cid >= 14 or (cid >= 1 and cid <= 13) %}
                             <option value="{{ cname }}" {% if display_fault == cname and is_user_set %}selected{% endif %}>
                                 {{ cname }}
                             </option>
@@ -194,10 +194,14 @@
                             {% endif %}
                         </div>
                         <small class="text-secondary">
+                            {% if event.fault_type %}
                             <span class="badge case-badge-{{ event.fault_type|extract_case_id }} me-1">
-                                {{ event.fault_type or 'Unknown' }}
+                                {{ event.fault_type }}
                             </span>
                             {{ "%.0f"|format(event.fault_confidence * 100) }}% confidence
+                            {% else %}
+                            <span class="badge case-badge-0 me-1">Unknown</span>
+                            {% endif %}
                             {% if is_user_set %}
                             <span class="ms-2 text-info"><i class="bi bi-pencil"></i> User override</span>
                             {% endif %}

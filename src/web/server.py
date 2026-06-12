@@ -30,6 +30,7 @@ from ..db.repository import (
     list_fault_types,
     get_fault_type,
     update_event,
+    create_event,
     get_adjacent_events,
     create_attachment,
     list_attachments_by_event,
@@ -39,6 +40,7 @@ from ..db.repository import (
 )
 from ..db.similarity import update_similarity_links, update_all_similarity_links
 from ..import_job import run_import, CASE_TO_FAULT
+from ..db.models import EventCreate
 
 import threading
 import yaml
@@ -267,6 +269,7 @@ async def index(
             "hide_ms": hide_ms,
             "year": year or "",
             "years": years,
+            "case_fault_types": CASE_TO_FAULT,
         },
     )
 
@@ -708,6 +711,64 @@ async def api_batch_beamtime(request: Request):
         conn.close()
 
 
+@app.post("/api/events/manual-create")
+async def api_manual_create_event(request: Request):
+    """Create a manual event without CSV/waveform data."""
+    data = await request.json()
+    pw = request.query_params.get("password", "") or data.get("password", "")
+    if not _check_password(pw):
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+
+    timestamp = data.get("timestamp", "")
+    fault_type = data.get("fault_type", "Case 14: Utility")
+    user_beam_time = data.get("user_beam_time", "")
+    notes = data.get("notes", "")
+
+    if not timestamp:
+        return JSONResponse({"error": "timestamp is required"}, status_code=400)
+
+    # Build event_id from timestamp: strip non-digit chars
+    digits = re.sub(r"\D", "", timestamp)[:14]
+    if len(digits) < 8:
+        return JSONResponse({"error": "Invalid timestamp format"}, status_code=400)
+    event_id = f"{digits[:8]}_{digits[8:14] or '000000'}"
+
+    conn = get_sync_connection()
+    try:
+        # Duplicate check
+        existing = get_event(conn, event_id)
+        if existing:
+            return JSONResponse({
+                "error": f"Event already exists at this timestamp: {event_id}",
+                "event_id": event_id,
+            }, status_code=409)
+
+        # ISO timestamp
+        try:
+            ts = datetime.strptime(event_id, "%Y%m%d_%H%M%S")
+            iso_ts = ts.strftime("%Y-%m-%dT%H:%M:%S")
+        except ValueError:
+            iso_ts = timestamp
+
+        event = EventCreate(
+            id=event_id,
+            timestamp=iso_ts,
+            fault_type=fault_type,
+            fault_confidence=0.0,
+            user_beam_time=user_beam_time,
+            notes=notes,
+            user_fault_type=fault_type,
+            case_id=extract_case_id(fault_type),
+            case_description="Manually created event",
+            case_fault="",
+            report_md=f"# Manual Event\n- Timestamp: {iso_ts}\n- Fault type: {fault_type}\n- Beam time: {user_beam_time}\n- Notes: {notes}\n",
+        )
+        created = create_event(conn, event)
+        return {"ok": True, "event_id": event_id}
+    finally:
+        conn.close()
+
+
 @app.post("/api/events/{event_id}/user-fault-type")
 async def api_set_user_fault_type(event_id: str, request: Request):
     """Update user_fault_type for an event."""
@@ -762,7 +823,7 @@ async def api_stats_cases(
 
     try:
         # Use user_fault_type if set, otherwise fault_type
-        eff = "CASE WHEN user_fault_type != '' THEN user_fault_type ELSE COALESCE(fault_type, 'Unknown') END"
+        eff = "CASE WHEN user_fault_type != '' THEN user_fault_type WHEN fault_type IS NOT NULL THEN fault_type ELSE 'Unknown' END"
 
         # Case/fault distribution (using effective fault type)
         cursor = conn.execute(f"""
@@ -962,7 +1023,7 @@ async def api_stats_histogram(
 
         where_clause = "WHERE " + " AND ".join(conditions)
 
-        eff = "CASE WHEN user_fault_type != '' THEN user_fault_type ELSE COALESCE(fault_type, 'Unknown') END"
+        eff = "CASE WHEN user_fault_type != '' THEN user_fault_type WHEN fault_type IS NOT NULL THEN fault_type ELSE 'Unknown' END"
         cursor = conn.execute(
             f"""
             SELECT user_beam_time as period, {eff} as fault_type, COUNT(*) as cnt

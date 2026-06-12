@@ -132,6 +132,9 @@ body {
 .case-badge-11 { background-color: #6b8e8e; }  /* plotly teal-gray */
 .case-badge-12 { background-color: #c4b0a0; color: #000; }  /* plotly tan */
 .case-badge-13 { background-color: #a1c9f4; color: #000; }  /* plotly light blue */
+.case-badge-14 { background-color: #7c7c7c; }  /* Utility: gray */
+.case-badge-15 { background-color: #d3d3d3; color: #000; }  /* Others: light gray */
+.case-badge-16 { background-color: #50c878; }  /* Beam line: emerald green */
 
 /* Mobile adjustments */
 @media (max-width: 768px) {

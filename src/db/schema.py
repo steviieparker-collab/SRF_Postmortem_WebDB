@@ -142,6 +142,7 @@ async def init_db_async() -> aiosqlite.Connection:
 # ── Seed Default Fault Types ────────────────────────────────
 
 CASE_FAULT_TYPES = [
+    ("Case 0: Unknown", "Unclassified by classifier."),
     ("Case 1: Beam_loss", "Beam loss, check other systems like MPS, feedback system."),
     ("Case 2: Beam_loss", "Beam loss, check other systems like MPS, feedback system."),
     ("Case 3: RF_Interlock", '"the first digital interlock" is the fault'),
@@ -155,6 +156,9 @@ CASE_FAULT_TYPES = [
     ("Case 11: RF_path_Cavity", "RF station# moved first. Check RF station# path"),
     ("Case 12: Cavity_detune", "The Cavity# was detuned. Check RF path of Cavity#."),
     ("Case 13: RF_source_fault", "All RF station moved together. Check common RF source like master oscillator,..."),
+    ("Case 14: Utility", "Utility event: vacuum leak, cooling water, power supply, manual entry, etc."),
+    ("Case 15: Others", "Other miscellaneous events."),
+    ("Case 16: Beam line", "Beam line related event: beam dump, shutter, valve, etc."),
 ]
 
 

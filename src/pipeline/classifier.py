@@ -59,7 +59,7 @@ class EventDetector:
 
     def detect_analog_events(self, df: pd.DataFrame, channel: str, t: np.ndarray) -> List[SignalEvent]:
         """
-        Detect low, lowlow, highhigh events in analog channel.
+        Detect low, lowlow, high, highhigh events in analog channel.
         REFLECT channels are excluded (per logic diagram).
         """
         if channel.startswith("Reflect"):
@@ -94,6 +94,17 @@ class EventDetector:
                 time=float(window_t[first_idx]),
                 channel=channel,
                 event_type="low",
+                value=float(window_vals[first_idx])
+            ))
+
+        # Find high (high_threshold < high < highhigh_threshold)
+        high_mask = (window_vals > self.config.high_threshold) & (window_vals < self.config.highhigh_threshold)
+        if np.any(high_mask):
+            first_idx = np.argmax(high_mask)
+            events.append(SignalEvent(
+                time=float(window_t[first_idx]),
+                channel=channel,
+                event_type="high",
                 value=float(window_vals[first_idx])
             ))
 
@@ -459,7 +470,10 @@ class _InternalRuleEngine:
             return {"case": 11, "description": desc, "fault": f"'{cn}' → {fm}", "confidence": 0.75}
 
         # Rule 12: Cavity high
-        hi_channels = get_channels_with_event(first, "Cavity_SRF", "highhigh")
+        hi_channels = (
+            get_channels_with_event(first, "Cavity_SRF", "high") +
+            get_channels_with_event(first, "Cavity_SRF", "highhigh")
+        )
         if hi_channels:
             cn = format_channel_names(hi_channels)
             desc = f"{cn} is high" if len(hi_channels) == 1 else f"{cn} are high"

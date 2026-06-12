@@ -32,7 +32,7 @@ TIME_COL = "t_rel_s"
 
 # Signal variation thresholds
 HIGHHIGH_THRESH = 1.4       # highhigh > 1.4
-HIGH_THRESH = 1.1           # high > 1.1 (above nominal, indicates detuning)
+HIGH_THRESH = 1.2           # high > 1.2 (above nominal, indicates detuning)
 LOW_THRESH = 0.9            # 0.5 < low < 0.9
 LOWLOW_THRESH = 0.5         # lowlow < 0.5
 

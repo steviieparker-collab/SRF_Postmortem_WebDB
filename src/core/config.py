@@ -81,6 +81,7 @@ class ClassificationConfig(BaseModel):
     digital_min_persistence_ms: float = Field(default=0.01, description="0.01ms persistence for digital signals")
     digital_delay_compensation_ms: float = Field(default=0.4, description="Digital delay compensation")
     simultaneous_window_ms: float = Field(default=0.01, description="Events within 0.01ms are simultaneous")
+    high_threshold: float = Field(default=1.2, description="high > 1.2 (above nominal, indicates detuning)")
     highhigh_threshold: float = Field(default=1.4, description="highhigh > 1.4")
     low_threshold: float = Field(default=0.9, description="0.5 < low < 0.9")
     lowlow_threshold: float = Field(default=0.5, description="lowlow < 0.5")

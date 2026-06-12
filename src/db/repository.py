@@ -107,8 +107,9 @@ def create_event(conn: sqlite3.Connection, data: EventCreate) -> Event:
             analog_metrics, digital_pattern, time_groups,
             graphs_path, report_path, report_md,
             case_id, case_description, case_fault, user_beam_time,
+            notes, user_fault_type,
             created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             data.id,
@@ -131,6 +132,8 @@ def create_event(conn: sqlite3.Connection, data: EventCreate) -> Event:
             data.case_description,
             data.case_fault,
             data.user_beam_time,
+            data.notes,
+            data.user_fault_type,
             now,
         ),
     )

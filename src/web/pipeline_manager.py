@@ -322,9 +322,30 @@ def run_append(dirs: list, config_path: str = "config/config.yaml"):
 
             conn.close()
 
-            # 4. Import to DB
+            # 4. Run classifier ONLY on NEW merged files to update sequence_info.json
+            _pipeline_status.update("Running classifier on new merged files only...")
+            try:
+                from src.pipeline.classifier import AcceleratorEventClassifier
+                clf = AcceleratorEventClassifier()
+                # Only pass new files — NOT the entire merged_dir
+                new_files = [str(merged_dir / fp.name) for fp in merged_files]
+                if new_files:
+                    clf.run(str(merged_dir), str(config.paths.results_dir), input_files=new_files)
+                    _pipeline_status.update(f"Classifier done: {len(new_files)} files.")
+                else:
+                    _pipeline_status.update("No new files to classify.")
+            except Exception as clf_err:
+                _pipeline_status.update(f"Classifier step warning: {clf_err}")
+
+            # 5. Import to DB — use pre-computed classifications from sequence_info.json
             _pipeline_status.update("Importing to DB...")
-            import_result = run_import(merged_dir, config_path)
+            from src.import_job import _load_sequence_info_classifications
+            classifications = _load_sequence_info_classifications(merged_dir, config.paths.results_dir)
+            if classifications:
+                from src.import_job import run_import_with_classifications
+                import_result = run_import_with_classifications(merged_dir, classifications, config_path)
+            else:
+                import_result = run_import(merged_dir, config_path)
             imported_count = import_result.get("imported", 0)
 
             # Cleanup temp
