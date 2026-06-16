@@ -199,7 +199,9 @@ class Grouper:
                 return None
             dfs.append(df)
 
-        # Full join on t_rel_s
+        # Inner join on t_rel_s: 모든 scope는 동일 신호를 분기 측정하므로
+        # 시간축이 완전히 일치해야 정상. full join 시 scope 간 미세 시간축 차이로
+        # event_timestamp가 NaT가 되는 문제를 방지.
         merged = dfs[0]
         existing_cols = set(merged.columns)
 
@@ -210,18 +212,24 @@ class Grouper:
             ]
             merged = (
                 merged
-                .join(next_df.select(cols_to_add), on="t_rel_s", how="full", coalesce=True)
+                .join(next_df.select(cols_to_add), on="t_rel_s", how="inner", coalesce=True)
                 .sort("t_rel_s")
             )
             existing_cols.update(cols_to_add)
 
-        # Null handling
-        merged = self._handle_null_values(merged)
+        # event_timestamp를 첫 번째 scope의 mtime으로 통일 (모든 행 동일 상수)
+        base_ts_datetime = datetime.fromtimestamp(group[0]["ts"], tz=KST)
+        n_rows = len(merged)
+        merged = merged.with_columns(
+            pl.Series("event_timestamp", [base_ts_datetime] * n_rows, dtype=pl.Datetime("ms", "Asia/Seoul"))
+        )
+
         return merged
 
     def _handle_null_values(self, df: pl.DataFrame) -> pl.DataFrame:
         """
         Apply null handling strategies per column type.
+        (inner join으로 null이 거의 발생하지 않으나 방어용 유지)
 
         Args:
             df: DataFrame with possible nulls.
@@ -229,7 +237,7 @@ class Grouper:
         Returns:
             DataFrame with nulls filled.
         """
-        # Split columns
+        # Split columns (event_timestamp는 상수라 제외)
         bstd_cols, other_cols = split_baseline_std_cols(df.columns)
         analog_cols, digital_cols = classify_columns_polars(other_cols)
 

@@ -104,10 +104,12 @@ class DataExtractor:
         timestamp = None
         if "event_timestamp" in df.columns:
             ts_val = df["event_timestamp"].iloc[0]
-            if hasattr(ts_val, "timestamp"):
-                timestamp = datetime.fromtimestamp(ts_val.timestamp())
-            elif isinstance(ts_val, (int, float)):
-                timestamp = datetime.fromtimestamp(ts_val)
+            # NaT 방어: NaT는 timestamp() 호출 시 crash
+            if not isinstance(ts_val, pd._libs.NaTType):
+                if hasattr(ts_val, "timestamp"):
+                    timestamp = datetime.fromtimestamp(ts_val.timestamp())
+                elif isinstance(ts_val, (int, float)):
+                    timestamp = datetime.fromtimestamp(ts_val)
 
         analog_stats = {}
         baseline_values = {}
