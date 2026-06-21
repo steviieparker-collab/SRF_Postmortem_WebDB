@@ -74,6 +74,14 @@ CREATE TABLE IF NOT EXISTS event_attachments (
     uploaded_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_attachments_event_id ON event_attachments(event_id);
+
+CREATE TABLE IF NOT EXISTS page_views (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    date    TEXT NOT NULL,               -- '2026-06-21'
+    path    TEXT NOT NULL,               -- '/'  '/events/xxx'
+    count   INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(date, path)
+);
 """
 
 

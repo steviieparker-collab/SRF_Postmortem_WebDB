@@ -17,6 +17,11 @@
                 <strong>SRF Postmortem WebDB</strong>
             </a>
             <div class="d-flex align-items-center gap-2">
+                <!-- 오늘 조회수 -->
+                <span id="today-views-badge" class="badge bg-dark d-flex align-items-center gap-1" style="font-weight:400;font-size:.72rem;border:1px solid #30363d;">
+                    <i class="bi bi-eye" style="font-size:.75rem;"></i>
+                    <span id="today-views-count">{{ today_views }}</span>
+                </span>
                 <span id="pipeline-status" class="badge bg-secondary d-flex align-items-center gap-1" style="font-weight:400;font-size:.72rem;">
                     <span id="status-dot" style="width:8px;height:8px;border-radius:50%;background:#666;"></span>
                     <span id="status-label">Idle</span>
@@ -82,6 +87,15 @@
                 document.getElementById('status-label').textContent = 'Error';
             });
     }, 5000);
+
+    // Today views poller (every 30s)
+    setInterval(function() {
+        fetch('/api/stats/views')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                document.getElementById('today-views-count').textContent = d.total;
+            });
+    }, 30000);
     </script>
 </body>
 </html>

@@ -127,12 +127,55 @@ uvicorn_access.disabled = True
 uvicorn_access.propagate = False
 
 @app.middleware("http")
-async def suppress_status_polling_log(request: Request, call_next):
-    """Skip access log for noisy status polling endpoints."""
+async def page_view_middleware(request: Request, call_next):
+    """Count page views + suppress polling logs."""
     response = await call_next(request)
-    if request.url.path in ("/api/pipeline/status", "/api/import/status"):
+    path = request.url.path
+    # /api/*와 /static/* 제외, HTML 페이지만 카운트
+    if not path.startswith("/api/") and not path.startswith("/static/"):
+        _count_page_view(path)
+    if path in ("/api/pipeline/status", "/api/import/status"):
         response.headers["X-Accel-Buffering"] = "no"
     return response
+
+# ── Page view counter ────────────────────────────────────────
+
+def _count_page_view(path: str):
+    """Increment page view count for today."""
+    try:
+        conn = get_sync_connection()
+        today = datetime.now().strftime("%Y-%m-%d")
+        conn.execute(
+            """INSERT INTO page_views (date, path, count) VALUES (?, ?, 1)
+               ON CONFLICT(date, path) DO UPDATE SET count = count + 1""",
+            (today, path)
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def _get_today_views() -> int:
+    """Get total page views for today."""
+    try:
+        conn = get_sync_connection()
+        today = datetime.now().strftime("%Y-%m-%d")
+        row = conn.execute(
+            "SELECT COALESCE(SUM(count), 0) FROM page_views WHERE date = ?",
+            (today,)
+        ).fetchone()
+        conn.close()
+        return row[0]
+    except Exception:
+        return 0
+
+
+@app.get("/api/stats/views")
+async def api_today_views():
+    """JSON API: 오늘 페이지뷰 합계"""
+    return {"date": datetime.now().strftime("%Y-%m-%d"), "total": _get_today_views()}
+
 
 # ── Auth API ──────────────────────────────────────────────────
 
@@ -270,6 +313,7 @@ async def index(
             "year": year or "",
             "years": years,
             "case_fault_types": CASE_TO_FAULT,
+            "today_views": _get_today_views(),
         },
     )
 
@@ -364,6 +408,7 @@ async def event_detail(
             "fault_types": ft_list,
             "case_fault_types": CASE_TO_FAULT,
             "user_beam_times": user_beam_times,
+            "today_views": _get_today_views(),
         },
     )
 
