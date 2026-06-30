@@ -13,6 +13,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Config (contains passwords, emails, API keys)
+config/config.yaml
+
 # Env
 .env
 *.env

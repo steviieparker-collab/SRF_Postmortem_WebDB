@@ -22,18 +22,19 @@ access:
   session_ttl_minutes: 60
 web:
   host: 0.0.0.0
-  port: 50510
+  port: 8050
   title: SRF Postmortem Viewer
+  url_base: 'https://postmortem.pls-srf.org'
 system:
   mode: batch
   check_interval: 1.0
 email:
   smtp_server: smtp.gmail.com
   smtp_port: 587
-  sender_email: sehwanpark@g.postech.edu
+  sender_email: your_email@gmail.com
   sender_password: 'your_app_password_here'
   receiver_emails:
-  - refull98@gmail.com
+  - recipient@example.com
   subject_template: SRF Event Report - {case}
 classification:
   beam_min_v: 2.0
@@ -41,6 +42,7 @@ classification:
   digital_min_persistence_ms: 0.01
   digital_delay_compensation_ms: 0.4
   simultaneous_window_ms: 0.01
+  high_threshold: 1.2
   highhigh_threshold: 1.4
   low_threshold: 0.9
   lowlow_threshold: 0.5
@@ -87,7 +89,8 @@ logging:
   console_enabled: true
   file_enabled: true
 monitor:
-  data_root: /home/shpark/.openclaw/code-team-workspace/SRF_postmortem/data
+  data_root: /path/to/data
   merged_dir: merged
   graphs_dir: graphs
   reports_dir: reports
+  scope_timeout: 120
