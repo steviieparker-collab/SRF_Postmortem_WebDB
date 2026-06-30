@@ -218,6 +218,7 @@ class WebConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8050
     title: str = "SRF Postmortem Viewer"
+    url_base: str = ""
 
 
 class MonitorPathsConfig(BaseModel):

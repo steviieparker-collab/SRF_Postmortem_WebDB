@@ -1011,8 +1011,7 @@ def start_watchdog_only(config_path: str = "config/config.yaml"):
                 _pipeline_status.update(_ts("Sending email reports with graphs + WebDB link..."))
                 emailed = 0
                 if orch.email_sender:
-                    web_port = getattr(config.web, 'port', 8050)
-                    web_url = f"http://141.223.105.230:{web_port}"
+                    url_base = getattr(config.web, 'url_base', '')
                     for mf in [Path(p) for p in new_paths]:
                         cls_file = orch.config.paths.results_dir / f"{mf.stem}_classification.json"
                         report_file = orch.config.paths.reports_dir / f"{mf.stem}_report.md"
@@ -1025,13 +1024,15 @@ def start_watchdog_only(config_path: str = "config/config.yaml"):
                                 pass
                         try:
                             content = report_file.read_text(encoding='utf-8') if report_file.exists() else ""
-                            content += f"\n\n🔗 **View in WebDB:** {web_url}/events/{event_id}\n"
+                            # Build event_url: public (Cloudflare) only
+                            event_url = f"{url_base.rstrip('/')}/events/{event_id}" if url_base else None
                             # Attach 3 scope narrow graphs separately
                             graph_files = list(_narrow_graph_paths.values())
                             orch.email_sender.send_report(
                                 report_content=content, report_format='markdown',
                                 graph_files=graph_files if graph_files else None,
                                 classification_summary=summary,
+                                event_url=event_url,
                             )
                             emailed += 1
                         except Exception as e:

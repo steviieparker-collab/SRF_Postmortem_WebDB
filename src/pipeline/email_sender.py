@@ -20,6 +20,24 @@ from email.utils import formatdate, make_msgid
 from pathlib import Path
 from typing import List, Optional, Union
 
+
+# ── Public base URL for event page links ─────────────────
+
+def get_event_url(event_id: str) -> str:
+    """Build absolute event page URL from config.
+
+    Falls back to empty string if url_base is not configured.
+    """
+    try:
+        from ..core.config import get_config
+        cfg = get_config()
+        base = cfg.web.url_base
+        if not base:
+            return ""
+        return f"{base.rstrip('/')}/events/{event_id}"
+    except Exception:
+        return ""
+
 from ..core.config import get_config, EmailConfig
 from ..core.exceptions import EmailError
 from ..core.logger import get_logger
@@ -191,8 +209,14 @@ class EmailSender:
         classification_summary: Optional[str] = None,
         to: Optional[List[str]] = None,
         subject_template: Optional[str] = None,
+        event_url: Optional[str] = None,
     ) -> bool:
-        """Send an email with a generated report."""
+        """Send an email with a generated report.
+
+        Args:
+            event_url: Absolute URL to the event detail page.
+                       When set, prepends a link bar to the message body.
+        """
         if subject_template is None:
             subject_template = self.config.subject_template
 
@@ -203,17 +227,30 @@ class EmailSender:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             subject = subject.replace("{timestamp}", timestamp)
 
+        # ── Prepend event page link if available ─────────────
+        link_prefix = ""
+        if event_url:
+            link_prefix = (
+                f"🔗 이벤트 상세 페이지: {event_url}\n\n"
+                "---\n\n"
+            )
+
         body_html = None
         body_plain = None
 
         if report_format == "html":
-            body_html = report_content
+            html_link = (
+                f'<p><a href="{event_url.split(chr(10))[0]}">🔗 이벤트 상세 페이지</a></p>'
+                f'<p style="font-size:0.9em;color:#888;">{event_url}</p>'
+                f'<hr>'
+            ) if event_url else ""
+            body_html = html_link + report_content
             import re
-            body_plain = re.sub(r'<[^>]+>', '', report_content)
+            body_plain = link_prefix + re.sub(r'<[^>]+>', '', report_content)
         elif report_format == "markdown":
-            body_plain = report_content
+            body_plain = link_prefix + report_content
         else:
-            body_plain = report_content
+            body_plain = link_prefix + report_content
 
         attachments = []
         if graph_files:

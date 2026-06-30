@@ -187,16 +187,26 @@ class SRFOrchestrator:
         return report_files
 
     def run_email_sender(self) -> list:
-        """Step 6: Send email reports."""
+        """Step 6: Send email reports with event page links."""
         if not self.email_sender:
             logger.info("Email sender not configured — skipping")
             return []
+
+        # Build base URL once
+        url_base = self.config.web.url_base
+
         merged_files = list(self.paths.merged_dir.glob("*.parquet"))
         results = []
         for merged_file in merged_files:
             graphs = list(self.paths.graphs_dir.glob(f"{merged_file.stem}_*.jpg"))
             report_file = self.paths.reports_dir / f"{merged_file.stem}_report.md"
             cls_file = self.paths.results_dir / f"{merged_file.stem}_classification.json"
+
+            # Extract event_id from merged file stem: "event_20250601_123456" → "20250601_123456"
+            event_id = merged_file.stem.replace("event_", "", 1) if merged_file.stem.startswith("event_") else merged_file.stem
+
+            # Public URL via Cloudflare
+            event_url = f"{url_base.rstrip('/')}/events/{event_id}" if url_base else None
 
             if report_file.exists() and graphs:
                 summary = "Unclassified"
@@ -208,6 +218,7 @@ class SRFOrchestrator:
                     graph_files=[str(g) for g in graphs],
                     classification_summary=summary,
                     to=self.config.email.receiver_emails,
+                    event_url=event_url,
                 )
                 results.append({"event": merged_file.name, "success": ok})
         logger.info(f"Email sender: {sum(r['success'] for r in results)} sent")
