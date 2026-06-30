@@ -59,8 +59,8 @@ system_tray = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/srf-postmortem"
-Repository = "https://github.com/your-org/srf-postmortem.git"
+Homepage = "https://github.com/steviieparker-collab/SRF_Postmortem_WebDB"
+Repository = "https://github.com/steviieparker-collab/SRF_Postmortem_WebDB.git"
 
 [project.scripts]
 srf-postmortem = "src.main:main"
