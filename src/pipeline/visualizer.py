@@ -73,6 +73,7 @@ class Visualizer:
         else:
             self.theme = dark_theme
         self.analog_colors = self.config.analog_colors
+        self.analog_styles = getattr(self.config, 'analog_styles', {}) or {}
         self.digital_palette = self.config.digital_palette
         self.figure_size = tuple(self.config.figure_size)
         self.dpi = self.config.dpi
@@ -326,6 +327,44 @@ class Visualizer:
 
         logger.info(f"Saved plot to {output_path}")
 
+    def _analog_style(self, col, analog_cols):
+        """Resolve style dict {color, linestyle, linewidth} for an analog column.
+        Priority: analog_styles[col] > analog_colors legacy > digital palette fallback.
+        Server-rendered baseline line width is 2.2; use raw linewidth if provided,
+        else scale 2.2 by linewidth_multiplier."""
+        SERVER_BASE_LW = 2.2
+        if col in self.analog_styles:
+            s = self.analog_styles[col]
+            if hasattr(s, 'dict'):
+                s = s.dict()
+            if s.get('linewidth', None) is not None:
+                lw = float(s['linewidth'])
+            else:
+                lw = SERVER_BASE_LW * float(s.get('linewidth_multiplier', 1.0))
+            ls = s.get('linestyle', '-')
+            # Map Plotly-style dash values to matplotlib linestyles.
+            mpl_map = {'longdash': '--', 'longdashdot': '-.', 'dot': ':',
+                       'dotted': ':', 'dash': '--', 'dashdot': '-.',
+                       'solid': '-'}
+            ls = mpl_map.get(ls, ls) if isinstance(ls, str) else ls
+            return {
+                'color': s.get('color', '#AAAAAA'),
+                'linestyle': ls,
+                'linewidth': lw,
+            }
+        if col in self.analog_colors:
+            return {
+                'color': self.analog_colors[col],
+                'linestyle': '-',
+                'linewidth': SERVER_BASE_LW,
+            }
+        idx = analog_cols.index(col) % len(self.digital_palette)
+        return {
+            'color': self.digital_palette[idx],
+            'linestyle': '-',
+            'linewidth': SERVER_BASE_LW,
+        }
+
     def _plot_analog(self, ax, df, time_col, analog_cols):
         """Plot analog channels with scaling and initial markers."""
         scaling_map = {
@@ -339,11 +378,10 @@ class Visualizer:
 
         for col in analog_cols:
             key = col
-            if key not in self.analog_colors:
-                idx = analog_cols.index(col) % len(self.digital_palette)
-                color = self.digital_palette[idx]
-            else:
-                color = self.analog_colors[key]
+            style = self._analog_style(col, analog_cols)
+            color = style['color']
+            linestyle = style['linestyle']
+            linewidth = style['linewidth']
 
             if key.startswith('CH'):
                 scale_fn = lambda v: v * 35
@@ -352,9 +390,9 @@ class Visualizer:
 
             scaled = scale_fn(df[col])
 
-            ax.plot(time_vals, scaled, color=color, linewidth=2.2,
+            ax.plot(time_vals, scaled, color=color, linestyle=linestyle, linewidth=linewidth,
                     alpha=0.85, label=col, solid_capstyle='round')
-            ax.plot(time_vals, scaled, color=color, linewidth=0.7,
+            ax.plot(time_vals, scaled, color=color, linewidth=0.7, linestyle='-',
                     alpha=1.0, label='_nolegend_')
 
             init_val = scaled.iloc[0]
@@ -598,10 +636,10 @@ class Visualizer:
             scaled_analog_data = []
             for col in analog_cols:
                 key = col
-                if key not in self.analog_colors:
-                    color = self.analog_colors.get(key, '#AAAAAA')
-                else:
-                    color = self.analog_colors[key]
+                style = self._analog_style(col, analog_cols)
+                color = style['color']
+                linestyle = style['linestyle']
+                linewidth = style['linewidth']
 
                 if key.startswith('CH'):
                     scale_fn = lambda v: v * 35
@@ -611,9 +649,9 @@ class Visualizer:
                 scaled = scale_fn(df_range[col].values)
                 scaled_analog_data.append((col, scaled))
 
-                ax.plot(time_vals, scaled, color=color, linewidth=2.2,
+                ax.plot(time_vals, scaled, color=color, linestyle=linestyle, linewidth=linewidth,
                         alpha=0.85, label=col, solid_capstyle='round', zorder=3)
-                ax.plot(time_vals, scaled, color=color, linewidth=0.7,
+                ax.plot(time_vals, scaled, color=color, linewidth=0.7, linestyle='-',
                         alpha=1.0, label='_nolegend_', zorder=3)
 
                 # Initial value triangle marker

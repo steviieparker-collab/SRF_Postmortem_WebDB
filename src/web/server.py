@@ -377,6 +377,28 @@ async def event_detail(
 
     merged_filename = os.path.basename(event.merged_file) if event.merged_file else ""
 
+    # Serialize per-signal waveform styles from config for the dynamic web viewer
+    # Web renderer baseline width is 1.5; scale by linewidth_multiplier.
+    WEB_BASE_LW = 1.5
+    _raw_styles = getattr(cfg.visualization, "analog_styles", {}) or {}
+    analog_styles = {}
+    for _name, _st in _raw_styles.items():
+        if hasattr(_st, "dict"):
+            _d = _st.dict()
+        elif isinstance(_st, dict):
+            _d = _st
+        else:
+            _d = {}
+        if _d.get("linewidth", None) is not None:
+            _lw = float(_d["linewidth"])
+        else:
+            _lw = WEB_BASE_LW * float(_d.get("linewidth_multiplier", 1.0))
+        analog_styles[_name] = {
+            "color": _d.get("color", "#AAAAAA"),
+            "linestyle": _d.get("linestyle", "-"),
+            "linewidth": _lw,
+        }
+
     # Build filter query string for prev/next and back links
     filter_parts = {}
     if fault_type:
@@ -396,6 +418,7 @@ async def event_detail(
         {
             "event": event,
             "analog_metrics": analog_metrics,
+            "analog_styles": analog_styles,
             "digital_pattern": digital_pattern,
             "time_groups": time_groups,
             "similar": similar,

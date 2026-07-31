@@ -724,7 +724,7 @@ def start_watchdog_only(config_path: str = "config/config.yaml"):
         """
         v2: Queue consumer that collects exactly 3 CSVs, then processes full pipeline.
         - No dedup (_processed_watchdog removed)
-        - 3/3 collected -> 60s wait -> beam check (all 3, <3V = fail+IDLE)
+        - 3/3 collected -> 60s wait -> beam check (all 3, <beam_min_v = fail+IDLE)
         - Individual scope processing (graph + parquet), fail stops all
         - 3 parquet check -> grouper -> classifier -> visualizer -> reporter -> email -> DB -> IDLE
         """
@@ -795,8 +795,9 @@ def start_watchdog_only(config_path: str = "config/config.yaml"):
                         lines_for_beam = f.readlines()
                     beam_val_str = lines_for_beam[21].split(',')[1].strip()
                     beam_val = float(beam_val_str)
-                    if beam_val < 3:
-                        _pipeline_status.update(_ts(f"[FAIL] Low beam: (scope{sidx}) beam current {beam_val}V < 3V. Returning to IDLE."))
+                    beam_min_v = config.classification.beam_min_v
+                    if beam_val < beam_min_v:
+                        _pipeline_status.update(_ts(f"[FAIL] Low beam: (scope{sidx}) beam current {beam_val}V < {beam_min_v}V. Returning to IDLE."))
                         beam_fail = True
                     else:
                         _ts(f"  (scope{sidx}) beam current {beam_val}V ✓")

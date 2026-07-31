@@ -121,11 +121,21 @@ class TimeRange(BaseModel):
     suffix: str
 
 
+class AnalogStyle(BaseModel):
+    color: str = Field(default="#AAAAAA", description="Line color")
+    linestyle: str = Field(default="-", description="Line style (matplotlib)")
+    linewidth_multiplier: float = Field(default=1.0, description="Line width multiplier relative to renderer baseline (server 2.2, web 1.5)")
+
+
 class VisualizationConfig(BaseModel):
     dark_theme: DarkThemeConfig = Field(default_factory=DarkThemeConfig)
     analog_colors: Dict[str, str] = Field(
         default={"B": "#FFE033", "C": "#00D4FF", "D": "#FF1E6B", "E": "#96D800"},
-        description="Analog channel colors"
+        description="[deprecated] Analog channel colors (use analog_styles)"
+    )
+    analog_styles: Dict[str, AnalogStyle] = Field(
+        default_factory=dict,
+        description="Per-signal analog waveform styles: {signal_name: {color, linestyle, linewidth}}"
     )
     digital_palette: List[str] = Field(
         default_factory=lambda: [

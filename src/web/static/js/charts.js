@@ -19,6 +19,37 @@ const ANALOG_COLORS = [
     '#9467bd', '#8c564b', '#e377c2', '#7f7f7f',
     '#bcbd22', '#17becf',
 ];
+
+// Per-signal waveform style from server config (analogStyles).
+// Returns { color, width, dash } for a signal name, falling back to
+// index-based palette, then global ANALOG_STYLE_DEFAULTS.
+const ANALOG_STYLE_DEFAULTS = { color: '#AAAAAA', width: 1.5, dash: 'solid' };
+function analogLineStyle(name, idx) {
+    // Browser waveform uses label keys (e.g. "BeamCurrent", no _v suffix) while
+    // config analog_styles uses raw column names (e.g. "BeamCurrent_v").
+    // Try exact, then append _v, then strip _v for lookup.
+    let st = (analogStyles && analogStyles[name]) || null;
+    if (!st && analogStyles && (name + '_v') in analogStyles) st = analogStyles[name + '_v'];
+    if (!st && analogStyles && name.endsWith('_v') && (name.slice(0, -2)) in analogStyles) st = analogStyles[name.slice(0, -2)];
+    if (st) {
+        let dash = st.linestyle || 'solid';
+        if (dash === ':' || dash === 'dotted') dash = 'dot';
+        else if (dash === '--' || dash === 'dashed') dash = 'dash';
+        else if (dash === '-.') dash = 'dashdot';
+        // longdash / longdashdot / solid pass through as-is for Plotly
+        return {
+            color: st.color || ANALOG_STYLE_DEFAULTS.color,
+            width: (st.linewidth != null ? Number(st.linewidth) : 2.2),
+            dash: dash,
+        };
+    }
+    // Fallback: palette by index
+    return {
+        color: ANALOG_COLORS[(idx || 0) % ANALOG_COLORS.length],
+        width: 1.5,
+        dash: 'solid',
+    };
+}
 const DIGITAL_COLORS = [
     '#ff6b6b',  // red (0°)
     '#ff922b',  // orange (30°)
@@ -74,7 +105,10 @@ function buildDigitalLegend(channelNames, containerId) {
 }
 
 // ── Main entry ────────────────────────────────────────
-async function renderWaveform(containerId, eventData, analogMetrics, digitalPattern) {
+let analogStyles = {};  // per-signal {name: {color, linestyle, linewidth}} from server config
+
+async function renderWaveform(containerId, eventData, analogMetrics, digitalPattern, styles) {
+    analogStyles = (styles && typeof styles === 'object') ? styles : {};
     currentFilename = eventData.filename || '';
     const plotDiv = document.getElementById(containerId);
     if (!plotDiv) return;
@@ -129,6 +163,7 @@ function renderRealData(containerId) {
             y: chData.value.filter((_, i) => mask[i]),
         };
         // Keep Reflect_SRF at original amplitude (no scaling)
+        const ls = analogLineStyle(name, chIdx);
         traces.push({
             x: filtered.x,
             y: filtered.y,
@@ -136,7 +171,7 @@ function renderRealData(containerId) {
             mode: 'lines',
             name: name,
             legendgroup: 'analog',
-            line: { color: ANALOG_COLORS[chIdx % ANALOG_COLORS.length], width: 1.5 },
+            line: { color: ls.color, width: ls.width, dash: ls.dash },
             hovertemplate: `${name}<br>t=%{x:.4f} ms<br>V=%{y:.4f}<extra></extra>`,
             xaxis: 'x',
             yaxis: 'y',
@@ -279,13 +314,14 @@ function renderSynthetic(containerId, analogMetrics, digitalPattern) {
             const t = Array.from({ length: n }, (_, i) => (i / sampleRate) - timeWindow / 2);
             const sigma = width / 2.355;
             const y = t.map(ti => peak * Math.exp(-0.5 * (ti / sigma) ** 2));
+            const ls = analogLineStyle(ch, chIdx);
 
             traces.push({
                 x: t, y,
                 type: 'scatter', mode: 'lines',
                 name: ch,
                 legendgroup: 'analog',
-                line: { color: ANALOG_COLORS[chIdx % ANALOG_COLORS.length], width: 1.5 },
+                line: { color: ls.color, width: ls.width, dash: ls.dash },
                 hovertemplate: `${ch}<br>t=%{x:.4f}ms<br>V=%{y:.4f}<extra></extra>`,
                 xaxis: 'x',
                 yaxis: 'y',

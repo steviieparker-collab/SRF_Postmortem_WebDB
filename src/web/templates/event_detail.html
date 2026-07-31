@@ -8,7 +8,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css" rel="stylesheet">
     <link href="/static/css/style.css?v=9" rel="stylesheet">
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <script src="/static/js/charts.js?v=6"></script>
+    <script src="/static/js/charts.js?v=11"></script>
     <style>
         body { background: #0d1117; color: #e6edf3; font-size: .9rem; }
         .card { background: #161b22; border-color: #30363d; }
@@ -556,13 +556,14 @@ document.addEventListener('DOMContentLoaded', () => {
     {% else %}
     const digitalPattern = null;
     {% endif %}
+    const waveformStyles = {{ analog_styles | tojson | safe }};
     const eventData = { 
         id: '{{ event.id }}', 
         filename: '{{ merged_filename }}' 
     };
 
     if (typeof renderWaveform === 'function') {
-        renderWaveform('waveform-plot', eventData, analogMetrics, digitalPattern);
+        renderWaveform('waveform-plot', eventData, analogMetrics, digitalPattern, waveformStyles);
     }
     
     // Load attachments
