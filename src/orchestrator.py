@@ -23,7 +23,6 @@ from src.pipeline.reporter import ReportGenerator
 from src.pipeline.email_sender import EmailSender
 from src.db.schema import init_db_sync, get_sync_connection
 from src.db.repository import create_event, get_event, list_events
-from src.classifier.classifier import classify_event
 
 logger = get_logger(__name__)
 

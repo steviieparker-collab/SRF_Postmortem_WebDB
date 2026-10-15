@@ -51,6 +51,37 @@ classification:
   baseline_clip_v: 0.01
   search_start_s: -0.045
   search_end_s: 0.05
+  # 인터록 극성: fault 는 '전이'이고, 어느 방향이 fault 인지는 채널마다 다르다.
+  #   active_low  : 평상시 1(OK) -> 0 으로 떨어질 때 fault
+  #   active_high : 평상시 0(OK) -> 1 로 올라갈 때 fault
+  # 두 목록에 없는 채널은 active_high 로 간주하고 경고 로그를 남긴다.
+  digital_active_low:
+  - RDY_CM3_FC3_d
+  - RDY_CM2_FC2_d
+  - RDY_CM1_FC1_d
+  - HE-PR_CM3_FC3_d
+  - HE-PR_CM2_FC2_d
+  - HE-PR_CM1_FC1_d
+  - ARC_CM3_FC3_d
+  - ARC_CM2_FC2_d
+  - ARC_CM1_FC1_d
+  - QUEN_CM3_FC3_d
+  - QUEN_CM2_FC2_d
+  - QUEN_CM1_FC1_d
+  - VAC_CM3_FC3_d
+  - VAC_CM2_FC2_d
+  - VAC_CM1_FC1_d
+  - INT_IN_FC3_d
+  - INT_IC_FC2_d
+  - INT_IC_FC1_d
+  digital_active_high:
+  - INT_MIS1_IC_d
+  - INT_MIS2_IC_d
+  - INT_PSI2_IC_d
+  - INT_PSI1_IC_d
+  - RDY_KSU3_IC_d
+  - RDY_KSU2_IC_d
+  - RDY_KSU1_IC_d
 preprocessor:
   segment_pre_s: 0.05
   segment_post_s: 0.05

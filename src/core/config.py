@@ -91,6 +91,33 @@ class ClassificationConfig(BaseModel):
     search_start_s: float = Field(default=-0.045, description="-45ms")
     search_end_s: float = Field(default=0.050, description="+50ms")
 
+    # ── Digital interlock polarity ──────────────────────────────────────────
+    # Two kinds of interlock exist in the machine. The fault is the *transition*,
+    # and which transition counts differs per channel:
+    #   active_low : sits at 1 (OK) and drops to 0 on fault  -> fault edge = 1->0
+    #   active_high: sits at 0 (OK) and rises to 1 on fault  -> fault edge = 0->1
+    # A channel missing from both lists is treated as active_high (legacy
+    # behaviour) and logged as a warning.
+    digital_active_low: List[str] = Field(
+        default_factory=lambda: [
+            "RDY_CM3_FC3_d", "RDY_CM2_FC2_d", "RDY_CM1_FC1_d",
+            "HE-PR_CM3_FC3_d", "HE-PR_CM2_FC2_d", "HE-PR_CM1_FC1_d",
+            "ARC_CM3_FC3_d", "ARC_CM2_FC2_d", "ARC_CM1_FC1_d",
+            "QUEN_CM3_FC3_d", "QUEN_CM2_FC2_d", "QUEN_CM1_FC1_d",
+            "VAC_CM3_FC3_d", "VAC_CM2_FC2_d", "VAC_CM1_FC1_d",
+            "INT_IN_FC3_d", "INT_IC_FC2_d", "INT_IC_FC1_d",
+        ],
+        description="Interlocks that sit at 1 and drop to 0 on fault (fault edge = 1->0)",
+    )
+    digital_active_high: List[str] = Field(
+        default_factory=lambda: [
+            "INT_MIS1_IC_d", "INT_MIS2_IC_d",
+            "INT_PSI2_IC_d", "INT_PSI1_IC_d",
+            "RDY_KSU3_IC_d", "RDY_KSU2_IC_d", "RDY_KSU1_IC_d",
+        ],
+        description="Interlocks that sit at 0 and rise to 1 on fault (fault edge = 0->1)",
+    )
+
 
 class PreprocessorConfig(BaseModel):
     segment_pre_s: float = Field(default=0.05, description="Pre-zero segment (s)")

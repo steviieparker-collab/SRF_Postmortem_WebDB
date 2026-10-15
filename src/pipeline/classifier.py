@@ -4,9 +4,8 @@ SRF Event Classifier Module (Monitoring Pipeline).
 Rule-based classification of SRF events into 13 cases based on expert logic diagram.
 Uses configuration for thresholds, integrates with core modules (config, logger, utils).
 
-NOTE: This is the PIPELINE classifier (AcceleratorEventClassifier) — separate from
-the WebDB classifier in src/classifier/classifier.py. This one runs on parquet files
-and produces classification JSON + overlay data for visualizer/reporter/email.
+NOTE: This is THE classifier for the project. It runs on parquet files and produces
+classification JSON + overlay data for visualizer/reporter/email.
 """
 
 from __future__ import annotations
@@ -44,6 +43,55 @@ def get_classification_config():
 
 # Time column name (should be consistent across data)
 TIME_COL = "t_rel_s"
+
+
+# -----------------------------------------------------------------------------
+# Digital interlock polarity
+# -----------------------------------------------------------------------------
+# 인터록은 두 종류가 있고, fault 는 '전이'다. 어느 방향이 fault 인지는 채널마다
+# 다르므로 config 의 digital_active_low / digital_active_high 로 판정한다.
+#   active_low  : 평상시 1(OK) -> 0 으로 떨어질 때가 fault  (fault value = 0.0)
+#   active_high : 평상시 0(OK) -> 1 로 올라갈 때가 fault   (fault value = 1.0)
+# 두 목록에 없는 채널은 active_high 로 간주하고 경고를 남긴다(구 동작 유지).
+
+_POLARITY_CACHE: Dict[str, float] = {}
+_POLARITY_WARNED: set = set()
+
+
+def reset_polarity_cache() -> None:
+    """config 를 다시 읽어야 할 때(테스트 등) 캐시를 비운다."""
+    _POLARITY_CACHE.clear()
+    _POLARITY_WARNED.clear()
+
+
+def fault_value(channel: str) -> float:
+    """인터록이 '걸린(asserted)' 상태일 때 그 채널이 갖는 값."""
+    if not _POLARITY_CACHE:
+        try:
+            cfg = get_classification_config()
+            for ch in cfg.digital_active_low:
+                _POLARITY_CACHE[ch] = 0.0
+            for ch in cfg.digital_active_high:
+                _POLARITY_CACHE[ch] = 1.0
+        except Exception:  # config 없이 쓰이는 경우(단위 테스트 등)
+            pass
+    v = _POLARITY_CACHE.get(channel)
+    if v is None:
+        if channel not in _POLARITY_WARNED:
+            _POLARITY_WARNED.add(channel)
+            logging.getLogger(__name__).warning(
+                "digital channel %s is missing from digital_active_low/high; "
+                "assuming active_high (fault edge = 0->1)", channel)
+        v = _POLARITY_CACHE[channel] = 1.0
+    return v
+
+
+def is_fault_event(e) -> bool:
+    """디지털 이벤트가 인터록 '걸림(assert)' 전이인가.
+
+    해제(release) 전이는 False 다 — 그룹핑과 규칙 매칭에서 제외된다.
+    """
+    return e.event_type == "digital" and e.value == fault_value(e.channel)
 
 # -----------------------------------------------------------------------------
 # Event detection
@@ -167,19 +215,13 @@ class EventDetector:
                 consecutive_samples = next_change_idx - change_idx
 
             if consecutive_samples >= min_samples_needed:
-                import re
-                is_int_fc = re.match(r'INT_(IC|IN)_FC\d+_d$', channel)
-                if is_int_fc and new_value == 0.0:
-                    continue
-
-                is_int_mis = re.match(r'INT_MIS(1|2)_IC_d$', channel)
-                if is_int_mis and new_value == 0.0:
-                    continue
-
-                # CM channels (RDY_CM, QUEN_CM, VAC_CM, ARC_CM, HE-PR_CM):
-                # These are normally HIGH(1)=OK, dropping to LOW(0)=fault.
-                # The 1→0 transition IS the real signal — do NOT filter it.
-
+                # 전이 '방향'으로 노이즈를 거르지 않는다. 노이즈성 글리치는 위의
+                # persistence 검사(기본 0.01ms)가 이미 제거한다 — 실측에서 노이즈
+                # dip 은 4µs, 실제 인터록 전이는 10ms 급으로 명확히 갈렸다.
+                # 남은 전이는 모두 실제 전이이고, 어느 방향이 fault 인지는
+                # 채널 극성(config digital_active_low/high)이 is_fault_event() 로
+                # 판정한다. (구버전은 INT_FC/INT_MIS 의 1→0 을 무조건 버려서
+                #  active_low 인 INT_FC 의 진짜 fault 전이를 잃고 있었다)
                 events.append(SignalEvent(
                     time=float(change_time),
                     channel=channel,
@@ -209,7 +251,14 @@ class EventGrouper:
         2. Events within simultaneous_window_ms of the first event are also FIRST
         3. THIRD is BeamCurrent_lowlow (always exists, scope trigger)
         4. Events between FIRST and THIRD are SECOND
+
+        인터록 '해제(release)' 전이는 그룹핑에서 제외한다. 해제 에지가 FIRST 를
+        차지하면 실제 fault 가 SECOND 로 밀려나 규칙이 볼 수 없게 되기 때문이다
+        (예: 4µs 노이즈 dip 의 복귀 에지가 FIRST 가 되어 진짜 인터록을 가림).
+        해제 에지 자체는 sequence_info 에 그대로 남는다.
         """
+        events = [e for e in events if e.event_type != "digital" or is_fault_event(e)]
+
         if not events:
             return TimeGroup("FIRST"), TimeGroup("SECOND"), TimeGroup("THIRD")
 
@@ -284,7 +333,7 @@ class _InternalRuleEngine:
             for e in group.events:
                 if e.channel == channel:
                     if event_type is None or e.event_type == event_type:
-                        if event_type == "digital" and e.value != 1.0:
+                        if event_type == "digital" and not is_fault_event(e):
                             continue
                         return True
             return False
@@ -294,7 +343,7 @@ class _InternalRuleEngine:
             for e in group.events:
                 if e.channel.startswith(channel_prefix):
                     if event_type is None or e.event_type == event_type:
-                        if event_type == "digital" and e.value != 1.0:
+                        if event_type == "digital" and not is_fault_event(e):
                             continue
                         channels.append(e.channel)
             return channels
@@ -334,18 +383,17 @@ class _InternalRuleEngine:
                 fault_msg = fault_msg.replace("station" + numbers_str, "stations " + numbers_str)
             return fault_msg
 
-        # Rule 1: BeamCurrent low in FIRST
-        if has_in_group(first, "BeamCurrent_v", "low"):
+        # Rule 1: BeamCurrent low 또는 lowlow in FIRST
+        # (구 Rule 1/2 를 통합 — 두 경우 모두 원인/대응이 동일하다)
+        if has_in_group(first, "BeamCurrent_v", "low") or \
+           has_in_group(first, "BeamCurrent_v", "lowlow"):
             return {"case": 1, "description": "BeamCurrent is low",
                     "fault": "Beam loss, check other systems like MPS, feedback system", "confidence": 0.95}
 
-        # Rule 2: BeamCurrent lowlow in FIRST
-        if has_in_group(first, "BeamCurrent_v", "lowlow"):
-            return {"case": 2, "description": "BeamCurrent is lowlow",
-                    "fault": "Beam loss, check other systems like MPS, feedback system", "confidence": 0.95}
-
         # Rule 3: Any single digital in FIRST (excluding INT_MIS/INT_PSI)
-        digital_in_first = [e for e in first.events if e.event_type == "digital" and e.value == 1.0]
+        # 극성 인식: active_low(ARC_CM 등)의 1->0 도, active_high(INT_MIS 등)의 0->1 도
+        # 모두 is_fault_event() 를 통과한다.
+        digital_in_first = [e for e in first.events if is_fault_event(e)]
         if len(digital_in_first) == 1:
             dc = digital_in_first[0].channel
             if not re.match(r'INT_MIS(1|2)_IC_d$', dc) and not re.match(r'INT_PSI(1|2)_IC_d$', dc):
@@ -354,11 +402,11 @@ class _InternalRuleEngine:
                         "fault": f"\"{sn}\" is the fault", "confidence": 0.90}
 
         # Rule 4: INT_MIS in FIRST
-        mis_channels = [e.channel for e in first.events if e.event_type == "digital" and e.value == 1.0
+        mis_channels = [e.channel for e in first.events if is_fault_event(e)
                        and re.match(r'INT_MIS(1|2)_IC_d$', e.channel)]
         if mis_channels:
             other_digital = any(
-                e.event_type == "digital" and e.value == 1.0
+                is_fault_event(e)
                 and not re.match(r'INT_MIS(1|2)_IC_d$', e.channel)
                 for e in first.events
             )
@@ -367,11 +415,11 @@ class _InternalRuleEngine:
                         "fault": "INT_MIS_IC is the fault.", "confidence": 0.85}
 
         # Rule 5: INT_PSI in FIRST
-        psi_channels = [e.channel for e in first.events if e.event_type == "digital" and e.value == 1.0
+        psi_channels = [e.channel for e in first.events if is_fault_event(e)
                        and re.match(r'INT_PSI(1|2)_IC_d$', e.channel)]
         if psi_channels:
             other_digital = any(
-                e.event_type == "digital" and e.value == 1.0
+                is_fault_event(e)
                 and not re.match(r'INT_PSI(1|2)_IC_d$', e.channel)
                 for e in first.events
             )
@@ -380,7 +428,7 @@ class _InternalRuleEngine:
                         "fault": "INT_PSI_IC is the fault.", "confidence": 0.85}
 
         # Rule 6: Multi-digital same group
-        rdy_channels = [e.channel for e in first.events if e.event_type == "digital" and e.value == 1.0
+        rdy_channels = [e.channel for e in first.events if is_fault_event(e)
                        and re.match(r'RDY_KSU\d+_IC_d$', e.channel)]
         rdy_nums = set()
         for c in rdy_channels:
@@ -391,7 +439,7 @@ class _InternalRuleEngine:
             return {"case": 6, "description": ", ".join(sorted(c.replace("_IC_d","") for c in rdy_channels)),
                     "fault": f"\"{'/'.join(sorted(c.replace('_IC_d','') for c in rdy_channels))}\" came together. Check common source.", "confidence": 0.85}
 
-        int_fc_channels = [e.channel for e in first.events if e.event_type == "digital" and e.value == 1.0
+        int_fc_channels = [e.channel for e in first.events if is_fault_event(e)
                           and re.match(r'INT_(IC|IN)_FC\d+_d$', e.channel)]
         fc_nums = set()
         for c in int_fc_channels:
@@ -403,7 +451,7 @@ class _InternalRuleEngine:
                     "fault": "Same group interlocks came together.", "confidence": 0.85}
 
         # Rule 7: Multi-digital different group
-        digital_events = [e for e in first.events if e.event_type == "digital" and e.value == 1.0]
+        digital_events = [e for e in first.events if is_fault_event(e)]
         if len(digital_events) >= 2:
             channel_groups = {}
             for e in digital_events:
