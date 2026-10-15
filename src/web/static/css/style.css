@@ -96,10 +96,10 @@ body {
 
 /* Plotly legend: reduce line height for digital items */
 /* Custom digital legend box */
+/* Offset, width limit and max-height are set inline by charts.js so the box
+   tracks the digital panel in the stacked layout. */
 .digital-legend-box {
     position: absolute;
-    bottom: 110px;
-    left: 70px;
     background: transparent;
     border: none;
     padding: 0;
@@ -107,14 +107,13 @@ body {
     line-height: 1.1;
     z-index: 10;
     pointer-events: none;
-    max-height: 50%;
     overflow-y: auto;
 }
 .digital-legend-item {
     white-space: nowrap;
     padding: 0;
     margin: 0;
-    line-height: 1.2;
+    line-height: 1.244;
 }
 
 /* Case badge colors (matching stats chart palette) */
