@@ -409,6 +409,120 @@ def _is_valid_csv(fpath: Path) -> bool:
     return fpath.suffix.lower() == ".csv" and not fpath.name.endswith(":Zone.Identifier")
 
 
+# ── CSV enqueue (shared by watchdog and poller) ─────────────────────
+
+_CSV_ENQUEUE_DEBOUNCE_S = 3.0
+_recent_enqueued: dict[str, float] = {}
+_enqueue_lock = threading.Lock()
+
+
+def _enqueue_csv(scope_idx: int, path: Path) -> bool:
+    """Put a CSV on the detection queue, debouncing duplicate watchers.
+
+    Watchdog and poller can both spot the same file; without this the queue
+    would receive it twice and the worker might start an extra cycle.
+    """
+    key = str(path)
+    now = time.time()
+    with _enqueue_lock:
+        if now - _recent_enqueued.get(key, 0.0) < _CSV_ENQUEUE_DEBOUNCE_S:
+            return False
+        _recent_enqueued[key] = now
+    csv_event_queue.put((scope_idx, path))
+    return True
+
+
+def _start_csv_poller(config, stop_event: threading.Event,
+                      interval: float = 2.0, settle: float = 2.0):
+    """Poll watch folders for CSVs and enqueue new/changed files.
+
+    inotify events are *not* delivered for files created on CIFS/SMB or NFS
+    mounts, so watchdog alone never sees them. This poller is the primary
+    detector for such mounts; watchdog stays as a fast path for local disks.
+
+    A file is enqueued once its (size, mtime) has been unchanged for `settle`
+    seconds, so partially-written files are not picked up. Files already
+    present when monitoring starts are recorded as baseline and skipped.
+    """
+    folders = [Path(p) for p in config.paths.watch_folders]
+
+    def _sig(path: Path):
+        try:
+            st = path.stat()
+        except OSError:
+            return None
+        return (st.st_size, st.st_mtime)
+
+    baseline: dict[str, tuple[int, float]] = {}
+    pending: dict[str, tuple[tuple[int, float], float]] = {}
+
+    # Record existing files so old CSVs are not reprocessed on startup
+    for wf in folders:
+        if not wf.exists():
+            continue
+        try:
+            for f in wf.glob("*.csv"):
+                if _is_valid_csv(f):
+                    sig = _sig(f)
+                    if sig is not None:
+                        baseline[str(f)] = sig
+        except OSError:
+            continue
+
+    _pipeline_status.update(_ts(
+        "CSV poller started: " + ", ".join(str(p) for p in folders)
+    ))
+
+    while not stop_event.is_set():
+        seen_this_scan: set[str] = set()
+        try:
+            for i, wf in enumerate(folders, 1):
+                if not wf.exists():
+                    continue
+                for f in wf.glob("*.csv"):
+                    if not _is_valid_csv(f):
+                        continue
+                    sig = _sig(f)
+                    if sig is None:
+                        continue
+                    key = str(f)
+                    seen_this_scan.add(key)
+                    if baseline.get(key) == sig:
+                        continue
+                    prev = pending.get(key)
+                    if prev is None or prev[0] != sig:
+                        pending[key] = (sig, time.time())
+                        continue
+                    if time.time() - prev[1] >= settle:
+                        baseline[key] = sig
+                        pending.pop(key, None)
+                        if _enqueue_csv(i, f):
+                            _pipeline_status.update(_ts(
+                                f"CSV detected by poller: "
+                                f"{f.parent.name}/{f.name} (scope{i})"
+                            ))
+        except Exception as e:
+            logger.warning(f"CSV poller scan failed: {e}")
+
+        # Forget vanished files so a re-created same-name file is detected
+        for key in list(baseline):
+            if key not in seen_this_scan:
+                baseline.pop(key, None)
+        for key in list(pending):
+            if key not in seen_this_scan:
+                pending.pop(key, None)
+
+        # Keep the debounce table small over long-running monitors
+        if len(_recent_enqueued) > 256:
+            cutoff = time.time() - 60.0
+            with _enqueue_lock:
+                for key, t0 in list(_recent_enqueued.items()):
+                    if t0 < cutoff:
+                        _recent_enqueued.pop(key, None)
+
+        stop_event.wait(interval)
+
+
 # ── CSV Detector: detect & wait for file, NO preprocessing ──
 
 def _start_csv_worker(config, orch, processed_csv: set, stop_event: threading.Event):
@@ -462,7 +576,7 @@ def _start_csv_worker(config, orch, processed_csv: set, stop_event: threading.Ev
 # ── Watchdog setup ────────────────────────────────────
 
 def _start_watchdogs(config, stop_event: threading.Event):
-    """Start watchdog observers on all 3 watch folders.
+    r"""Start watchdog observers on all 3 watch folders.
     Network drives (W:\) may not trigger watchdog reliably,
     so this is kept as best-effort supplement — the poller does the real work.
     """
@@ -481,7 +595,16 @@ def _start_watchdogs(config, stop_event: threading.Event):
                     return
                 path = Path(event.src_path)
                 if _is_valid_csv(path):
-                    csv_event_queue.put((self.scope_idx, path))
+                    _enqueue_csv(self.scope_idx, path)
+
+            def on_moved(self, event):
+                # Copy operations often land as temp-file -> rename rather than
+                # a bare create; without this the final .csv is missed.
+                if event.is_directory:
+                    return
+                path = Path(event.dest_path)
+                if _is_valid_csv(path):
+                    _enqueue_csv(self.scope_idx, path)
 
 
 
@@ -703,6 +826,19 @@ def start_watchdog_only(config_path: str = "config/config.yaml"):
         orch = SRFOrchestrator(config)
 
         _start_watchdogs(config, threading.Event())
+
+        # CIFS/NFS mounts never emit inotify events, so watchdog cannot see
+        # files created by the remote side. The poller is the reliable detector
+        # there and a harmless supplement on local disks.
+        with _enqueue_lock:
+            _recent_enqueued.clear()
+        poller = threading.Thread(
+            target=_start_csv_poller,
+            args=(config, _stop_monitor),
+            daemon=True,
+            name="csv-poller",
+        )
+        poller.start()
     except Exception as e:
         _pipeline_status.fail(str(e))
         return {"error": str(e)}
