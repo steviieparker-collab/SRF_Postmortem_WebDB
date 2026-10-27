@@ -1080,15 +1080,21 @@ async def api_stats_histogram(
     user_beam_time: Optional[str] = Query(None),
     hide_ms: Optional[str] = Query("false"),
 ):
-    """Histogram data: fault type breakdown by user_beam_time.
+    """Histogram data: fault type breakdown over time.
 
-    Always groups by user_beam_time.
+    With no year filter (all years): groups by year.
+    With a year filter: groups by user_beam_time within that year.
     hide_ms=true: filter out MS periods.
     """
     conn = get_sync_connection()
     try:
         conditions = ["user_beam_time != ''"]
         params = []
+        # All years → aggregate by year; a specific year → keep beam-time detail.
+        by_year = not year
+        period_expr = "SUBSTR(timestamp,1,4)" if by_year else "user_beam_time"
+        if by_year:
+            conditions.append("timestamp IS NOT NULL AND SUBSTR(timestamp,1,4) != ''")
         if year:
             conditions.append("SUBSTR(timestamp,1,4) = ?")
             params.append(year)
@@ -1109,11 +1115,11 @@ async def api_stats_histogram(
         eff = "CASE WHEN user_fault_type != '' THEN user_fault_type WHEN fault_type IS NOT NULL THEN fault_type ELSE 'Unknown' END"
         cursor = conn.execute(
             f"""
-            SELECT user_beam_time as period, {eff} as fault_type, COUNT(*) as cnt
+            SELECT {period_expr} as period, {eff} as fault_type, COUNT(*) as cnt
             FROM events
             {where_clause}
-            GROUP BY user_beam_time, fault_type
-            ORDER BY user_beam_time, fault_type
+            GROUP BY {period_expr}, fault_type
+            ORDER BY period, fault_type
             """,
             params,
         )
@@ -1144,7 +1150,7 @@ async def api_stats_histogram(
 
         fault_types_sorted = sorted(ft_map.keys())
 
-        # Sort periods: by beam time number DESC, MS first per number
+        # Sort periods: years ascending, or by beam time number DESC with MS first
         def sort_key(p):
             parts = p.split(" ")
             base = parts[0]
@@ -1153,7 +1159,7 @@ async def api_stats_histogram(
             n = "".join(c for c in n_raw if c.isdigit())
             return (int(y), int(n), 0 if is_ms else 1)
 
-        periods.sort(key=sort_key)
+        periods.sort(key=sort_key if not by_year else str)
 
         # Build traces
         traces = []

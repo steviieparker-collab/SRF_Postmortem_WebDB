@@ -289,7 +289,7 @@ function renderHistogram(data, year, bt, hideMs) {
     } else if (year) {
         subtitle.textContent = `— ${year}${hideMs ? ' (MS 제외)' : ''}`;
     } else {
-        subtitle.textContent = `— All time${hideMs ? ' (MS 제외)' : ''}`;
+        subtitle.textContent = `— All years${hideMs ? ' (MS 제외)' : ''}`;
     }
 
     // Debug: log first few periods to verify beam time labels
@@ -322,7 +322,7 @@ function renderHistogram(data, year, bt, hideMs) {
         xaxis: {
             gridcolor: '#21262d',
             color: '#8b949e',
-            tickangle: -45,
+            tickangle: year ? -45 : 0,
             automargin: true,
             type: 'category',
         },
