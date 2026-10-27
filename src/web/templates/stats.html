@@ -303,17 +303,24 @@ function renderHistogram(data, year, bt, hideMs) {
         return;
     }
 
-    // Auto height & Y-axis max+10 padding
+    // Auto height
     const histHeight = Math.max(400, Math.min(800, data.periods.length * 30 + 150));
     document.getElementById('chart-histogram').style.height = histHeight + 'px';
-    
-    // Compute max y value for padding
-    let maxY = 0;
+
+    // Compute totals per period for percentage and stacked-bar Y range
+    const periodTotals = {};
     for (const t of data.traces) {
-        for (const v of t.y) {
-            if (v > maxY) maxY = v;
+        for (let j = 0; j < t.x.length; j++) {
+            periodTotals[t.x[j]] = (periodTotals[t.x[j]] || 0) + t.y[j];
         }
     }
+    // Stacked bars can be taller than any single trace, so use period totals.
+    // Show at least 100 on the Y axis as requested.
+    let maxY = 0;
+    for (const key in periodTotals) {
+        if (periodTotals[key] > maxY) maxY = periodTotals[key];
+    }
+    const yMax = Math.max(100, maxY + 10);
 
     const layout = {
         paper_bgcolor: '#0d1117',
@@ -330,21 +337,13 @@ function renderHistogram(data, year, bt, hideMs) {
             gridcolor: '#21262d',
             color: '#8b949e',
             title: 'Events',
-            range: [0, maxY + 10],
+            range: [0, yMax],
         },
         margin: { l: 40, r: 20, t: 30, b: 120 },
         barmode: 'stack',
         legend: { font: { size: 9 }, orientation: 'h', y: -0.25 },
         hovermode: 'x unified',
     };
-
-    // Compute totals per period for percentage
-    const periodTotals = {};
-    for (const t of data.traces) {
-        for (let j = 0; j < t.x.length; j++) {
-            periodTotals[t.x[j]] = (periodTotals[t.x[j]] || 0) + t.y[j];
-        }
-    }
     
     const caseDescMap = {
         0: 'Unknown', 1: 'Beam loss (low beam current)',
