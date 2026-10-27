@@ -1080,21 +1080,18 @@ async def api_stats_histogram(
     user_beam_time: Optional[str] = Query(None),
     hide_ms: Optional[str] = Query("false"),
 ):
-    """Histogram data: fault type breakdown over time.
+    """Histogram data: fault type breakdown by year.
 
-    With no year filter (all years): groups by year.
-    With a year filter: groups by user_beam_time within that year.
+    Always groups by event year (timestamp prefix), never by user_beam_time.
+    A year filter limits the data to that year.
     hide_ms=true: filter out MS periods.
     """
     conn = get_sync_connection()
     try:
         conditions = ["user_beam_time != ''"]
         params = []
-        # All years → aggregate by year; a specific year → keep beam-time detail.
-        by_year = not year
-        period_expr = "SUBSTR(timestamp,1,4)" if by_year else "user_beam_time"
-        if by_year:
-            conditions.append("timestamp IS NOT NULL AND SUBSTR(timestamp,1,4) != ''")
+        period_expr = "SUBSTR(timestamp,1,4)"
+        conditions.append("timestamp IS NOT NULL AND SUBSTR(timestamp,1,4) != ''")
         if year:
             conditions.append("SUBSTR(timestamp,1,4) = ?")
             params.append(year)
@@ -1150,16 +1147,8 @@ async def api_stats_histogram(
 
         fault_types_sorted = sorted(ft_map.keys())
 
-        # Sort periods: years ascending, or by beam time number DESC with MS first
-        def sort_key(p):
-            parts = p.split(" ")
-            base = parts[0]
-            is_ms = len(parts) > 1 and "MS" in parts[1]
-            y, n_raw = base.split("-")
-            n = "".join(c for c in n_raw if c.isdigit())
-            return (int(y), int(n), 0 if is_ms else 1)
-
-        periods.sort(key=sort_key if not by_year else str)
+        # Periods are years — sort lexicographically (YYYY)
+        periods.sort(key=str)
 
         # Build traces
         traces = []
