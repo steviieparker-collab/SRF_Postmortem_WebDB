@@ -127,7 +127,7 @@
 </div>
 
 <script>
-// Unified case color palette (0-13) — used in all charts and badges
+// Unified case color palette (0-21) — used in all charts and badges
 const CASE_COLORS = [
     '#636efa',  // Case 0  — indigo
     '#ef553b',  // Case 1  — red
@@ -143,10 +143,18 @@ const CASE_COLORS = [
     '#6b8e8e',  // Case 11 — teal-gray
     '#c4b0a0',  // Case 12 — tan
     '#a1c9f4',  // Case 13 — light blue
+    '#7c7c7c',  // Case 14 — gray (Utility)
+    '#d3d3d3',  // Case 15 — light gray (Others)
+    '#50c878',  // Case 16 — emerald (Beam line)
+    '#bcbd22',  // Case 17 — olive (Control)
+    '#17becf',  // Case 18 — bright cyan (Kicker)
+    '#9467bd',  // Case 19 — dark purple (Magnet)
+    '#8c564b',  // Case 20 — brown (Operator)
+    '#e377c2',  // Case 21 — magenta (MechVac)
 ];
 
 function caseColor(caseId) {
-    return CASE_COLORS[Math.max(0, Math.min(caseId, 13))];
+    return CASE_COLORS[Math.max(0, Math.min(caseId, CASE_COLORS.length - 1))];
 }
 
 function extractCaseId(faultTypeName) {
@@ -217,6 +225,9 @@ function renderStats(data) {
         7: 'Case 7: Multi_interlock(different group)', 8: 'Case 8: Cavity_blip',
         9: 'Case 9: Cavity_quench', 10: 'Case 10: RF_path_Forward', 11: 'Case 11: RF_path_Cavity',
         12: 'Case 12: Cavity_detune', 13: 'Case 13: RF_source_fault',
+        14: 'Case 14: Utility', 15: 'Case 15: Others', 16: 'Case 16: Beam line',
+        17: 'Case 17: Control', 18: 'Case 18: Kicker', 19: 'Case 19: Magnet',
+        20: 'Case 20: Operator', 21: 'Case 21: MechVac',
     };
 
     document.getElementById('stat-total').textContent = data.total;

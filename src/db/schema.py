@@ -167,6 +167,11 @@ CASE_FAULT_TYPES = [
     ("Case 14: Utility", "Utility event: vacuum leak, cooling water, power supply, manual entry, etc."),
     ("Case 15: Others", "Other miscellaneous events."),
     ("Case 16: Beam line", "Beam line related event: beam dump, shutter, valve, etc."),
+    ("Case 17: Control", "Control system related event: IOC/EPICS, network, timing, etc."),
+    ("Case 18: Kicker", "Kicker magnet / pulsed power related event."),
+    ("Case 19: Magnet", "Magnet / magnet power supply related event."),
+    ("Case 20: Operator", "Operator action or manual intervention."),
+    ("Case 21: MechVac", "Mechanical vacuum related event."),
 ]
 
 

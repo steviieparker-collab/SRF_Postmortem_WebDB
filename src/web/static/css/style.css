@@ -134,6 +134,11 @@ body {
 .case-badge-14 { background-color: #7c7c7c; }  /* Utility: gray */
 .case-badge-15 { background-color: #d3d3d3; color: #000; }  /* Others: light gray */
 .case-badge-16 { background-color: #50c878; }  /* Beam line: emerald green */
+.case-badge-17 { background-color: #bcbd22; color: #000; }  /* Control: olive */
+.case-badge-18 { background-color: #17becf; color: #000; }  /* Kicker: bright cyan */
+.case-badge-19 { background-color: #9467bd; }  /* Magnet: dark purple */
+.case-badge-20 { background-color: #8c564b; }  /* Operator: brown */
+.case-badge-21 { background-color: #e377c2; color: #000; }  /* MechVac: magenta */
 
 /* Mobile adjustments */
 @media (max-width: 768px) {

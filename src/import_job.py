@@ -52,6 +52,11 @@ CASE_TO_FAULT = {
     14: "Case 14: Utility",
     15: "Case 15: Others",
     16: "Case 16: Beam line",
+    17: "Case 17: Control",
+    18: "Case 18: Kicker",
+    19: "Case 19: Magnet",
+    20: "Case 20: Operator",
+    21: "Case 21: MechVac",
 }
 
 
