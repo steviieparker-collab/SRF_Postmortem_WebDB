@@ -437,8 +437,12 @@ async def event_detail(
 
 
 @app.get("/stats", response_class=HTMLResponse, include_in_schema=False)
-async def stats_page(request: Request, hide_ms: Optional[str] = Query("true")):
-    """Statistics page."""
+async def stats_page(
+    request: Request,
+    hide_ms: Optional[str] = Query("true"),
+    year: Optional[str] = Query(None),
+):
+    """Statistics page. Defaults to the current year when no year is given."""
     conn = get_sync_connection()
     try:
         ms_filter = " AND (user_beam_time NOT LIKE '%MS%' OR user_beam_time IS NULL OR user_beam_time = '')" if hide_ms == "true" else ""
@@ -453,6 +457,16 @@ async def stats_page(request: Request, hide_ms: Optional[str] = Query("true")):
         years = [row["yr"] for row in cursor.fetchall()]
     finally:
         conn.close()
+
+    # No year in the URL → current year. `year=all` keeps the explicit all-years view.
+    if year == "all":
+        selected_year = ""
+    elif year:
+        selected_year = year
+    else:
+        current_year = str(datetime.now().year)
+        selected_year = current_year if current_year in years else (years[0] if years else "")
+
     return templates.TemplateResponse(
         request,
         "stats.html",
@@ -461,6 +475,7 @@ async def stats_page(request: Request, hide_ms: Optional[str] = Query("true")):
             "case_ids": case_ids,
             "fault_types": fault_types,
             "years": years,
+            "selected_year": selected_year,
             "hide_ms": hide_ms,
         },
     )

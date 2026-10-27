@@ -25,17 +25,17 @@
         <div class="row g-2 align-items-end">
             <div class="col-md-1">
                 <label class="form-label small mb-1">Year</label>
-                <select class="form-select form-select-sm" id="stats-year" onchange="var p=new URLSearchParams(location.search);var v=this.value;if(v)p.set('year',v);else p.delete('year');location.href='?'+p.toString()">
-                    <option value="">All years</option>
+                <select class="form-select form-select-sm" id="stats-year" onchange="var p=new URLSearchParams(location.search);p.set('year',this.value);location.href='?'+p.toString()">
+                    <option value="all" {% if not selected_year %}selected{% endif %}>All years</option>
                     {% for y in years %}
-                    <option value="{{ y }}">{{ y }}</option>
+                    <option value="{{ y }}" {% if selected_year == y %}selected{% endif %}>{{ y }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="col-md-auto d-flex align-items-center" style="padding-bottom:2px;">
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="stats-hide-ms"
-                           onchange="var p=new URLSearchParams(location.search);var y=document.getElementById('stats-year').value;if(y)p.set('year',y);p.set('hide_ms',this.checked?'true':'false');location.href='?'+p.toString()"
+                           onchange="var p=new URLSearchParams(location.search);var y=document.getElementById('stats-year').value;p.set('year',y);p.set('hide_ms',this.checked?'true':'false');location.href='?'+p.toString()"
                            autocomplete="off"
                            {% if hide_ms == 'true' %}checked{% endif %}>
                     <label class="form-check-label small" for="stats-hide-ms">MS 제외</label>
@@ -180,7 +180,8 @@ async function loadStats() {
     const loading = document.getElementById('stats-loading');
     loading.style.display = 'block';
 
-    const year = document.getElementById('stats-year').value;
+    const yearValue = document.getElementById('stats-year').value;
+    const year = (yearValue === 'all') ? '' : yearValue;
     const btList = getSelectedBeamTimes();
     const hideMs = document.getElementById('stats-hide-ms').checked;
 
