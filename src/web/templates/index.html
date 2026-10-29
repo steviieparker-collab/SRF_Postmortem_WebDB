@@ -198,6 +198,17 @@ footer a:hover { text-decoration: underline; }
     <button class="btn btn-warning btn-sm" onclick="batchBeamTime()" id="batch-bt-btn">
         <i class="bi bi-pencil"></i> Set Beam Time
     </button>
+    <select class="form-select form-select-sm" id="batch-case" style="width:auto;min-width:13rem;">
+        <option value="">Select case...</option>
+        {% for cid, cname in case_fault_types.items() %}
+        {% if cid >= 14 or (cid >= 1 and cid <= 13) %}
+        <option value="{{ cname }}">{{ cname }}</option>
+        {% endif %}
+        {% endfor %}
+    </select>
+    <button class="btn btn-info btn-sm" onclick="batchFaultType()" id="batch-case-btn">
+        <i class="bi bi-check2-square"></i> Apply
+    </button>
 </div>
 
 <!-- Event List -->
@@ -454,6 +465,28 @@ function batchBeamTime() {
         if (d.error) { showResultModal('Error', d.error, 'danger'); return; }
         const msg = d.updated + ' events updated.' + (d.errors.length ? ' Errors: ' + d.errors.length : '');
         showResultModal('Beam Time Set', msg, 'success');
+        if (d.updated > 0) setTimeout(() => location.reload(), 1500);
+    });
+}
+
+function batchFaultType() {
+    const ids = getSelectedIds();
+    if (ids.length === 0) { showResultModal('No Selection', 'Select events first.', 'warning'); return; }
+    const ft = document.getElementById('batch-case').value;
+    if (!ft) { showResultModal('No Case', 'Select a case first.', 'warning'); return; }
+    const pw = prompt('Enter password:');
+    if (pw === null) return;
+
+    fetch('/api/events/batch-fault-type?password=' + encodeURIComponent(pw), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_ids: ids, fault_type: ft })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) { showResultModal('Error', d.error, 'danger'); return; }
+        const msg = d.updated + ' events set to ' + ft + '.' + (d.errors.length ? ' Errors: ' + d.errors.length : '');
+        showResultModal('Case Applied', msg, 'success');
         if (d.updated > 0) setTimeout(() => location.reload(), 1500);
     });
 }

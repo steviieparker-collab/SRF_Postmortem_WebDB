@@ -794,6 +794,39 @@ async def api_batch_beamtime(request: Request):
         conn.close()
 
 
+@app.post("/api/events/batch-fault-type")
+async def api_batch_fault_type(request: Request):
+    """Batch set user_fault_type (manual case designation) for events."""
+    data = await request.json()
+    pw = request.query_params.get("password", "") or data.get("password", "")
+    if not _check_password(pw):
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+    event_ids = data.get("event_ids", [])
+    fault_type = (data.get("fault_type") or "").strip()
+    # 분류기 case 로 쓰이는 정식 이름만 허용 (case 0 은 수동 지정 대상이 아님)
+    allowed = {name for case_id, name in CASE_TO_FAULT.items() if case_id > 0}
+    if fault_type not in allowed:
+        return JSONResponse({"error": f"Unknown fault type: {fault_type}"}, status_code=400)
+    if not event_ids:
+        return {"ok": True, "updated": 0, "message": "No events specified"}
+    conn = get_sync_connection()
+    try:
+        updated_count = 0
+        errors = []
+        for eid in event_ids:
+            try:
+                ev = update_event(conn, eid, {"user_fault_type": fault_type})
+                if ev:
+                    updated_count += 1
+                else:
+                    errors.append(eid)
+            except Exception as ex:
+                errors.append(f"{eid}: {ex}")
+        return {"ok": True, "updated": updated_count, "errors": errors}
+    finally:
+        conn.close()
+
+
 @app.post("/api/events/manual-create")
 async def api_manual_create_event(request: Request):
     """Create a manual event without CSV/waveform data."""
