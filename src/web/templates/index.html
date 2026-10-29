@@ -248,7 +248,7 @@ footer a:hover { text-decoration: underline; }
                     </div>
                     {% if event.notes and event.notes|length > 0 %}
                     <div class="mt-0 small" style="color:#d29922;font-size:.7rem;">
-                        <i class="bi bi-chat-text"></i> {{ event.notes[:40] }}{% if event.notes|length > 40 %}...{% endif %}
+                        <i class="bi bi-chat-text"></i> {{ event.notes[:120] }}{% if event.notes|length > 120 %}...{% endif %}
                     </div>
                     {% endif %}
                 </div>
