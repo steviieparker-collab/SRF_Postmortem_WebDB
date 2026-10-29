@@ -208,7 +208,8 @@ def list_events(
     params: List[Any] = []
 
     if fault_type:
-        conditions.append("fault_type = ?")
+        # 수동 지정(user_fault_type)이 있으면 그 값을 우선한다 — 상세·통계와 동일 기준.
+        conditions.append("COALESCE(NULLIF(user_fault_type, ''), fault_type, '') = ?")
         params.append(fault_type)
 
     if date_from:
@@ -317,7 +318,7 @@ def get_events_by_fault_type(
 # ── Fault Type CRUD ──────────────────────────────────────────
 
 def list_fault_types(conn: sqlite3.Connection, hide_ms: bool = False) -> List[FaultType]:
-    """List all fault types with event counts."""
+    """List all fault types with event counts (user override takes precedence)."""
     ms_filter = ""
     if hide_ms:
         ms_filter = "AND (e.user_beam_time IS NULL OR e.user_beam_time = '' OR e.user_beam_time NOT LIKE '%MS%')"
@@ -326,7 +327,8 @@ def list_fault_types(conn: sqlite3.Connection, hide_ms: bool = False) -> List[Fa
         SELECT ft.name, ft.description, ft.typical_pattern, ft.severity, ft.created_at,
                COUNT(e.id) as event_count
         FROM fault_types ft
-        LEFT JOIN events e ON e.fault_type = ft.name {ms_filter}
+        LEFT JOIN events e
+               ON COALESCE(NULLIF(e.user_fault_type, ''), e.fault_type, '') = ft.name {ms_filter}
         GROUP BY ft.name
         ORDER BY event_count DESC
         """
@@ -476,7 +478,8 @@ def get_adjacent_events(
     params: list[Any] = []
 
     if fault_type:
-        conditions.append("fault_type = ?")
+        # 수동 지정(user_fault_type)이 있으면 그 값을 우선한다 — 상세·통계와 동일 기준.
+        conditions.append("COALESCE(NULLIF(user_fault_type, ''), fault_type, '') = ?")
         params.append(fault_type)
     if search:
         conditions.append("(notes LIKE ? OR case_description LIKE ? OR case_fault LIKE ?)")
