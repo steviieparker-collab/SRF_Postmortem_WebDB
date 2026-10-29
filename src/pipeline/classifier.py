@@ -384,7 +384,8 @@ class _InternalRuleEngine:
             return fault_msg
 
         # Rule 1: BeamCurrent low 또는 lowlow in FIRST
-        # (구 Rule 1/2 를 통합 — 두 경우 모두 원인/대응이 동일하다)
+        # 구 Rule 1/2 를 통합 — 두 경우 모두 원인/대응이 동일하므로 자동 분류는
+        # 항상 case 1 이다. case 2 는 자동 판정하지 않고 MPS 로 수동 지정하는 용도.
         if has_in_group(first, "BeamCurrent_v", "low") or \
            has_in_group(first, "BeamCurrent_v", "lowlow"):
             return {"case": 1, "description": "BeamCurrent is low",

@@ -152,7 +152,7 @@ async def init_db_async() -> aiosqlite.Connection:
 CASE_FAULT_TYPES = [
     ("Case 0: Unknown", "Unclassified by classifier."),
     ("Case 1: Beam_loss", "Beam loss, check other systems like MPS, feedback system."),
-    ("Case 2: Beam_loss", "Beam loss, check other systems like MPS, feedback system."),
+    ("Case 2: MPS", "MPS trip (manually assigned)."),
     ("Case 3: RF_Interlock", '"the first digital interlock" is the fault'),
     ("Case 4: MIS", "INT_MIS_IC is the fault."),
     ("Case 5: PSI", "INT_PSI_IC is the fault."),

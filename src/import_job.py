@@ -43,7 +43,7 @@ DIGITAL_COLUMNS = [
 
 CASE_TO_FAULT = {
     0: "Case 0: Unknown",
-    1: "Case 1: Beam_loss", 2: "Case 2: Beam_loss", 3: "Case 3: RF_Interlock",
+    1: "Case 1: Beam_loss", 2: "Case 2: MPS", 3: "Case 3: RF_Interlock",
     4: "Case 4: MIS", 5: "Case 5: PSI",
     6: "Case 6: Multi_interlock(same group)", 7: "Case 7: Multi_interlock(different group)",
     8: "Case 8: Cavity_blip", 9: "Case 9: Cavity_quench",
