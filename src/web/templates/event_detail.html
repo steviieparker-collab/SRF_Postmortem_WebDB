@@ -746,11 +746,12 @@ function highlightAlarmPvs(pvs) {
 function alarmChartCard(pv, entry, items) {
     const id = 'alarm-plot-' + pv.replace(/[^A-Za-z0-9_-]/g, '_');
     const desc = entry.description || pv;
+    const unit = entry.unit ? ` [${entry.unit}]` : '';
     const res = entry.resolution_s;
     const has = entry.points && entry.points.length;
     return `<div class="card mb-2 alarm-chart-card" data-pv="${alarmEsc(pv)}">
         <div class="card-header py-1 d-flex justify-content-between align-items-center">
-            <span><strong>${alarmEsc(desc)}</strong>
+            <span><strong>${alarmEsc(desc)}${alarmEsc(unit)}</strong>
                   <span class="text-secondary font-monospace small ms-1">${alarmEsc(pv)}</span></span>
             <span class="badge ${has ? 'bg-success' : 'bg-secondary'}">${has ? 'data' : 'no data'}</span>
         </div>
@@ -1010,7 +1011,7 @@ async function addAlarmPv() {
 }
 
 function updateAlarmExplorerLink() {
-    const pvs = alarmSelectedPvs.slice(0, 5);
+    const pvs = alarmSelectedPvs.slice(0, ALARM_MAX_PVS);
     const params = new URLSearchParams();
     pvs.forEach(x => {
         params.append('pv', x.pv);

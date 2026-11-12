@@ -127,6 +127,7 @@ let hierarchy = null;
 let currentItems = [];
 let selected = new Map();   // pv -> {pv, description, unit}
 const dataCache = new Map();
+const MAX_PVS = 8;          // matches the event page's selection limit
 
 // ── Time-axis state ───────────────────────────────────
 const FULL_RANGE = { x0: -600, x1: 200 };
@@ -328,9 +329,9 @@ function renderPvList() {
 async function togglePv(cb) {
     const pv = cb.dataset.pv;
     if (cb.checked) {
-        if (selected.size >= 5) {
+        if (selected.size >= MAX_PVS) {
             cb.checked = false;
-            alert('최대 5개 PV까지 선택할 수 있습니다.');
+            alert(`최대 ${MAX_PVS}개 PV까지 선택할 수 있습니다.`);
             return;
         }
         selected.set(pv, {pv, description: cb.dataset.desc || '', unit: cb.dataset.unit || ''});
@@ -339,6 +340,7 @@ async function togglePv(cb) {
         selected.delete(pv);
     }
     renderSelected();
+    saveSelection();
     await renderCharts();
 }
 
@@ -348,6 +350,7 @@ function removePv(pv) {
         if (cb.dataset.pv === pv) cb.checked = false;
     });
     renderSelected();
+    saveSelection();
     renderCharts();
 }
 
@@ -699,6 +702,32 @@ async function renderCharts() {
 }
 
 // ── Save / load ───────────────────────────────────────
+// The selection is shared with the event page's Alarm Messages & PV panel.
+// Note and timeline stamps stay in the pv-notes sidecar.
+let selectionSaveChain = Promise.resolve();
+
+function saveSelection() {
+    const items = [...selected.values()].map(x => ({
+        pv: x.pv,
+        description: x.description || '',
+        unit: x.unit || '',
+    }));
+    const job = async () => {
+        try {
+            const r = await fetch(`/api/events/${encodeURIComponent(EVENT_ID)}/pv-selection`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({items})
+            });
+            return r.ok;
+        } catch (e) {
+            return false;
+        }
+    };
+    selectionSaveChain = selectionSaveChain.then(job, job);
+    return selectionSaveChain;
+}
+
 async function saveNotes() {
     const items = [...selected.values()].map(x => ({
         pv: x.pv,
@@ -709,13 +738,15 @@ async function saveNotes() {
     const stampsPayload = stamps.map(s => ({x: Number(s.x), text: String(s.text || '')}));
     const st = document.getElementById('save-status');
     try {
+        // Persist the selection in the shared DB and the note/stamps sidecar.
+        const selectionOk = await saveSelection();
         const r = await fetch(`/api/events/${encodeURIComponent(EVENT_ID)}/pv-notes`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({items, note, stamps: stampsPayload})
         });
         const d = await r.json();
-        if (r.ok) {
+        if (selectionOk && r.ok) {
             st.textContent = `✓ saved ${d.saved}`;
             st.style.color = '#3fb950';
         } else {
@@ -730,24 +761,34 @@ async function saveNotes() {
 }
 
 async function loadSaved(descMap) {
+    // Selection comes from the shared DB (the event page reads the same rows).
+    // The pv-notes sidecar supplies only the integrated note and stamps.
+    let dbItems = [];
+    let notesDoc = {};
     try {
-        const d = await jget(`/api/events/${encodeURIComponent(EVENT_ID)}/pv-notes`);
-        for (const it of (d.items || [])) {
-            selected.set(it.pv, {
-                pv: it.pv,
-                description: it.description || descMap.get(it.pv) || '',
-                unit: it.unit || '',
-            });
-        }
-        const noteEl = document.getElementById('explorer-note');
-        if (noteEl) noteEl.value = d.note || '';
-        stamps = Array.isArray(d.stamps)
-            ? d.stamps
-                .filter(s => s && isFinite(Number(s.x)))
-                .map(s => ({x: Number(s.x), text: String(s.text || '')}))
-            : [];
-        stamps.sort((a, b) => a.x - b.x);
+        const sel = await jget(`/api/events/${encodeURIComponent(EVENT_ID)}/pv-selection`);
+        if (sel.saved) dbItems = sel.items || [];
+    } catch (e) { /* no saved selection */ }
+    try {
+        notesDoc = await jget(`/api/events/${encodeURIComponent(EVENT_ID)}/pv-notes`);
     } catch (e) { /* no saved notes */ }
+
+    const items = dbItems.slice(0, MAX_PVS);
+    for (const it of items) {
+        selected.set(it.pv, {
+            pv: it.pv,
+            description: it.description || descMap.get(it.pv) || '',
+            unit: it.unit || '',
+        });
+    }
+    const noteEl = document.getElementById('explorer-note');
+    if (noteEl) noteEl.value = notesDoc.note || '';
+    stamps = Array.isArray(notesDoc.stamps)
+        ? notesDoc.stamps
+            .filter(s => s && isFinite(Number(s.x)))
+            .map(s => ({x: Number(s.x), text: String(s.text || '')}))
+        : [];
+    stamps.sort((a, b) => a.x - b.x);
     renderStampList();
     renderSelected();
 }
@@ -788,7 +829,7 @@ document.getElementById('stamp-text').addEventListener('keydown', e => {
     }
 
     for (const item of urlPvs) {
-        if (selected.size >= 5) break;
+        if (selected.size >= MAX_PVS) break;
         if (!selected.has(item.pv)) {
             await addPv(item.pv, item.desc || descMap.get(item.pv) || '', '', false);
         }
