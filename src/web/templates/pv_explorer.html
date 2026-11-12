@@ -139,9 +139,9 @@ let renderSeq = 0;
 let stamps = [];
 
 // ── Plot geometry / colors ────────────────────────────
-const PV_PANEL_PX = 190;
+const PV_PANEL_PX = 127;      // 2/3 of the previous 190px
 const PV_PANEL_GAP = 18;
-const PV_MARGIN = { l: 70, r: 20, t: 80, b: 48 };
+const PV_MARGIN = { l: 70, r: 20, t: 38, b: 48 };
 const PV_COLORS = ['#58a6ff', '#ff922b', '#69db7c', '#da77f2', '#ffd43b'];
 const BG_COLOR = '#161b22';
 const PLOT_BG = '#0d1117';
@@ -515,9 +515,9 @@ async function renderCharts() {
             text: escHtml(s.text || `t=${fmtSec(x)}s`),
             showarrow:false,
             bgcolor:'rgba(210,153,34,0.92)',
-            bordercolor:'#d29922', borderwidth:1, borderpad:3,
-            font:{color:'#0d1117', size:10},
-            yshift: (i % 3) * 18,
+            bordercolor:'#d29922', borderwidth:1, borderpad:2,
+            font:{color:'#0d1117', size:9},
+            yshift: (i % 3) * 9,
         });
     });
 
