@@ -178,15 +178,105 @@ async function loadDescriptionMap() {
     return map;
 }
 
-async function loadHierarchy() {
+function readUrlPvs(params) {
+    const out = [];
+    const pvParams = params.getAll('pv');
+    const descParams = params.getAll('desc');
+    if (pvParams.length) {
+        for (let i = 0; i < pvParams.length; i++) {
+            const pv = (pvParams[i] || '').trim();
+            if (pv) out.push({pv, desc: descParams[i] || ''});
+        }
+    } else {
+        const pvsParam = params.get('pvs');
+        if (pvsParam) {
+            for (const pv of pvsParam.split(',').map(s => s.trim()).filter(Boolean)) {
+                out.push({pv, desc: ''});
+            }
+        }
+    }
+    return out;
+}
+
+function tokenizePv(value) {
+    return String(value || '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+}
+
+// Alarm graph PVs in the RF family map onto archiver sub codes with a
+// different spelling (CRM1 -> RF_CM1, CRG_COMP -> RF_CRG, ...).
+const SUB_ALIASES = {
+    KSU1: 'RF_KSU1', KSU2: 'RF_KSU2', KSU3: 'RF_KSU3',
+    CRM1: 'RF_CM1', CRM2: 'RF_CM2', CRM3: 'RF_CM3',
+    CM1: 'RF_CM1', CM2: 'RF_CM2', CM3: 'RF_CM3',
+    CRG: 'RF_CRG', LLRF: 'RF_LLRF',
+};
+
+function matchSubForPv(pv, subs) {
+    const tokens = new Set(tokenizePv(pv));
+    const byCode = new Map(subs.map(s => [String(s.code).toUpperCase(), String(s.code)]));
+
+    // Known alarm graph-PV families.
+    for (const token of tokens) {
+        const alias = SUB_ALIASES[token];
+        if (alias && byCode.has(alias)) return byCode.get(alias);
+    }
+
+    // Generic fallback: require at least two matched sub tokens (or one long
+    // single-token sub) so a lone "RF" does not pick an arbitrary group.
+    let best = null;
+    let bestScore = 0;
+    for (const sub of subs) {
+        const code = String(sub.code);
+        const subTokens = tokenizePv(code);
+        let matched = 0;
+        for (const t of subTokens) {
+            if (tokens.has(t)) { matched += 1; continue; }
+            if (t.length >= 3 && [...tokens].some(pt => pt.startsWith(t) || t.startsWith(pt))) {
+                matched += 0.5;
+            }
+        }
+        const singleLong = subTokens.length === 1 && subTokens[0].length >= 4 && matched >= 1;
+        if (matched < 1.5 && !singleLong) continue;
+        if (matched > bestScore || (matched === bestScore && best && code.length > best.length)) {
+            best = code;
+            bestScore = matched;
+        }
+    }
+    return best;
+}
+
+function pickGroupForPvs(pvs) {
+    if (!hierarchy || !Array.isArray(pvs) || !pvs.length) return null;
+    const classes = hierarchy?.data?.classes || [];
+    const classSubs = hierarchy?.data?.classSubs || [];
+    for (const raw of pvs) {
+        const pv = String(raw || '').trim().toUpperCase();
+        if (!pv) continue;
+        const head = pv.split(':')[0];
+        const cls = classes.find(c => String(c.code).toUpperCase() === head)
+            || classes.find(c => pv.startsWith(String(c.code).toUpperCase()))
+            || classes.find(c => String(c.code).toUpperCase() === 'SR');
+        if (!cls) continue;
+        const subs = classSubs.filter(s => s.classCode === cls.code);
+        const subCode = matchSubForPv(pv, subs);
+        if (subCode) return {classCode: cls.code, subCode};
+    }
+    return null;
+}
+
+async function loadHierarchy(candidatePvs = []) {
     hierarchy = await jget('/api/pv-hierarchy');
     const classes = hierarchy?.data?.classes || [];
     const cs = document.getElementById('class-select');
     cs.innerHTML = classes.map(c => `<option value="${c.code}">${c.name}</option>`).join('');
-    const sr = classes.find(c => c.code === 'SR');
-    if (sr) cs.value = 'SR';
+    const target = pickGroupForPvs(candidatePvs);
+    cs.value = target?.classCode || 'SR';
     cs.onchange = () => { fillSubs(); loadPvs(); };
     fillSubs();
+    if (target?.subCode) {
+        const ss = document.getElementById('sub-select');
+        if ([...ss.options].some(o => o.value === target.subCode)) ss.value = target.subCode;
+    }
     await loadPvs();
 }
 
@@ -291,6 +381,11 @@ function renderSelected() {
     el.querySelectorAll('[data-remove-pv]').forEach(btn => {
         btn.onclick = () => removePv(btn.dataset.removePv);
     });
+}
+
+function scrollFirstSelectedPv() {
+    const cb = document.querySelector('#pv-list .pv-check:checked');
+    if (cb) cb.closest('label')?.scrollIntoView({block: 'nearest'});
 }
 
 // ── Time axis ─────────────────────────────────────────
@@ -677,41 +772,25 @@ document.getElementById('stamp-text').addEventListener('keydown', e => {
 (async () => {
     updateRangeLabel();
     const descMap = await loadDescriptionMap();
+    const params = new URLSearchParams(location.search);
+    const urlPvs = readUrlPvs(params);
 
+    await loadSaved(descMap);
+
+    // Preselect the group of the alarm-linked PVs. With no URL PVs, keep
+    // the existing Beam Status default (saved PVs are still charted).
+    const candidatePvs = urlPvs.map(x => x.pv);
     try {
-        await loadHierarchy();
+        await loadHierarchy(candidatePvs);
     } catch (e) {
         document.getElementById('pv-list').innerHTML =
             `<div class="text-danger small p-2">PV hierarchy를 불러오지 못했습니다: ${escHtml(e)}</div>`;
     }
 
-    await loadSaved(descMap);
-    if (currentItems.length) renderPvList();
-
-    const params = new URLSearchParams(location.search);
-
-    // Deep link from the event page's Alarm Messages & PV panel. New links
-    // carry a description per PV; the comma-separated `pvs` form is legacy.
-    const pvParams = params.getAll('pv');
-    const descParams = params.getAll('desc');
-    if (pvParams.length) {
-        for (let i = 0; i < pvParams.length; i++) {
-            const pv = pvParams[i].trim();
-            if (!pv) continue;
-            if (selected.size >= 5) break;
-            if (!selected.has(pv)) {
-                await addPv(pv, descParams[i] || descMap.get(pv) || '', '', false);
-            }
-        }
-    } else {
-        const pvsParam = params.get('pvs');
-        if (pvsParam) {
-            for (const pv of pvsParam.split(',').map(s => s.trim()).filter(Boolean)) {
-                if (selected.size >= 5) break;
-                if (!selected.has(pv)) {
-                    await addPv(pv, descMap.get(pv) || '', '', false);
-                }
-            }
+    for (const item of urlPvs) {
+        if (selected.size >= 5) break;
+        if (!selected.has(item.pv)) {
+            await addPv(item.pv, item.desc || descMap.get(item.pv) || '', '', false);
         }
     }
 
@@ -727,6 +806,7 @@ document.getElementById('stamp-text').addEventListener('keydown', e => {
 
     if (currentItems.length) renderPvList();
     renderSelected();
+    scrollFirstSelectedPv();
     await renderCharts();
 })();
 </script>
