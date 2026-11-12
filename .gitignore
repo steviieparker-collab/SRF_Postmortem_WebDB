@@ -36,12 +36,18 @@ data/
 
 # Database
 *.db
+*.db-shm
+*.db-wal
+*.db.bak*
 *.sqlite
 *.sqlite3
 
 # Backups
 db/backups*/
 **/backups/
+*.bak*
+*~
+*_old.*
 *.tar.gz
 *.zip
 *.tgz

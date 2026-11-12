@@ -182,7 +182,10 @@ def update_event(
 
 
 def delete_event(conn: sqlite3.Connection, event_id: str) -> bool:
-    """Delete an event and its links. Returns True if deleted."""
+    """Delete an event, its links and attachment rows. Returns True if deleted."""
+    # event_attachments/event_links reference events(id) with FK enforcement ON,
+    # so dependent rows must go first or the event DELETE raises IntegrityError.
+    conn.execute("DELETE FROM event_attachments WHERE event_id = ?", (event_id,))
     conn.execute("DELETE FROM event_links WHERE event_id = ? OR related_event_id = ?",
                  (event_id, event_id))
     cursor = conn.execute("DELETE FROM events WHERE id = ?", (event_id,))

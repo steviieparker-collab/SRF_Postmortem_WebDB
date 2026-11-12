@@ -82,6 +82,88 @@ CREATE TABLE IF NOT EXISTS page_views (
     count   INTEGER NOT NULL DEFAULT 0,
     UNIQUE(date, path)
 );
+
+-- ── Alarm dashboard / monitor ───────────────────────────────
+CREATE TABLE IF NOT EXISTS alarm_pv_catalog (
+    pv                TEXT PRIMARY KEY,
+    description       TEXT NOT NULL DEFAULT '',
+    subsystem         TEXT NOT NULL DEFAULT '',
+    source_file       TEXT DEFAULT '',
+    graph_pv          TEXT DEFAULT '',      -- ';' separated
+    graph_description TEXT DEFAULT '',
+    match_type        TEXT DEFAULT '',
+    confidence        TEXT DEFAULT '',
+    alarm_state       TEXT DEFAULT '',      -- '0', '1', 'complex' (legacy)
+    normal_state      TEXT DEFAULT '',
+    alarm_expr        TEXT DEFAULT '',      -- JSON list of red(expr) conditions
+    normal_expr       TEXT DEFAULT '',      -- JSON list of green(expr) conditions
+    default_state     TEXT DEFAULT '',      -- normal / alarm / unknown
+    state_mode        TEXT DEFAULT '',      -- expr / complex / default
+    enabled           INTEGER NOT NULL DEFAULT 1,
+    severity          TEXT NOT NULL DEFAULT 'medium',
+    updated_by        TEXT DEFAULT '',
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_alarm_catalog_subsystem ON alarm_pv_catalog(subsystem);
+
+CREATE TABLE IF NOT EXISTS alarm_transitions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    pv          TEXT NOT NULL,
+    ts_utc      TEXT NOT NULL,
+    value       TEXT,
+    prev_value  TEXT,
+    state       TEXT NOT NULL,              -- alarm / normal / unknown / complex
+    source      TEXT NOT NULL DEFAULT 'ca',
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_alarm_tr_ts    ON alarm_transitions(ts_utc);
+CREATE INDEX IF NOT EXISTS idx_alarm_tr_pv_ts ON alarm_transitions(pv, ts_utc);
+
+CREATE TABLE IF NOT EXISTS alarm_last_state (
+    pv          TEXT PRIMARY KEY,
+    value       TEXT,
+    state       TEXT,
+    ts_utc      TEXT,
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS alarm_monitor_status (
+    id                INTEGER PRIMARY KEY CHECK (id = 1),
+    running           INTEGER NOT NULL DEFAULT 0,
+    pid               INTEGER,
+    started_at        TEXT,
+    last_heartbeat    TEXT,
+    pv_count          INTEGER DEFAULT 0,
+    connected_count   INTEGER DEFAULT 0,
+    transition_count  INTEGER DEFAULT 0,
+    error             TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS event_alarms (
+    event_id          TEXT NOT NULL,
+    pv                TEXT NOT NULL,
+    description       TEXT,
+    subsystem         TEXT,
+    graph_pv          TEXT,
+    graph_description TEXT,
+    first_seen_utc    TEXT,
+    first_seen_rel    REAL,
+    active_at_start   INTEGER DEFAULT 0,
+    severity          TEXT,
+    PRIMARY KEY (event_id, pv)
+);
+CREATE INDEX IF NOT EXISTS idx_event_alarms_event ON event_alarms(event_id);
+
+CREATE TABLE IF NOT EXISTS alarm_mapping_history (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    pv            TEXT NOT NULL,
+    old_graph_pv  TEXT,
+    new_graph_pv  TEXT,
+    old_enabled   INTEGER,
+    new_enabled   INTEGER,
+    changed_by    TEXT,
+    changed_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 
@@ -117,6 +199,16 @@ def init_db_sync() -> sqlite3.Connection:
         conn.execute("ALTER TABLE events ADD COLUMN user_fault_type TEXT DEFAULT ''")
     except sqlite3.OperationalError:
         pass
+    for col, typ in [
+        ("alarm_expr", "TEXT DEFAULT ''"),
+        ("normal_expr", "TEXT DEFAULT ''"),
+        ("default_state", "TEXT DEFAULT ''"),
+        ("state_mode", "TEXT DEFAULT ''"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE alarm_pv_catalog ADD COLUMN {col} {typ}")
+        except sqlite3.OperationalError:
+            pass
     conn.commit()
     return conn
 
@@ -141,6 +233,16 @@ async def init_db_async() -> aiosqlite.Connection:
     for col in [("notes", "TEXT DEFAULT ''"), ("user_fault_type", "TEXT DEFAULT ''")]:
         try:
             await conn.execute(f"ALTER TABLE events ADD COLUMN {col[0]} {col[1]}")
+        except sqlite3.OperationalError:
+            pass
+    for col, typ in [
+        ("alarm_expr", "TEXT DEFAULT ''"),
+        ("normal_expr", "TEXT DEFAULT ''"),
+        ("default_state", "TEXT DEFAULT ''"),
+        ("state_mode", "TEXT DEFAULT ''"),
+    ]:
+        try:
+            await conn.execute(f"ALTER TABLE alarm_pv_catalog ADD COLUMN {col} {typ}")
         except sqlite3.OperationalError:
             pass
     await conn.commit()

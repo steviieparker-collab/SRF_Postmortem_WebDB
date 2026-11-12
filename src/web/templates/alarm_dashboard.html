@@ -1,0 +1,749 @@
+{% extends "base.html" %}
+
+{% block title %}SRF Alarm Dashboard{% endblock %}
+
+{% block extra_head %}
+<style>
+    .alarm-table-wrap { max-height: 68vh; overflow-y: auto; overflow-x: auto; }
+    .alarm-table-wrap thead th { position: sticky; top: 0; z-index: 2; background: #1c2128; }
+    .alarm-table-wrap td { vertical-align: middle; }
+    .pv-code { font-size: .72rem; color: #8b949e; word-break: break-all; }
+    .summary-card { min-width: 120px; }
+    .summary-card .num { font-size: 1.4rem; font-weight: 600; line-height: 1.1; }
+    .summary-card .lbl { font-size: .72rem; color: #8b949e; }
+    .selected-pv-row { border-bottom: 1px solid #30363d; padding: .35rem 0; }
+    .selected-pv-row:last-child { border-bottom: 0; }
+    #edit-pv-select { min-height: 180px; }
+    .table-dark { --bs-table-bg: transparent; }
+
+    /* Lamp wall */
+    .lamp-groups { max-height: 62vh; overflow-y: auto; padding-right: 4px; }
+    .lamp-grid { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+    .alarm-lamp {
+        width: 14px; height: 14px; border-radius: 50%;
+        display: inline-block; background: #3fb950;
+        box-shadow: 0 0 2px #000 inset;
+        cursor: help;
+    }
+    .alarm-lamp.alarm {
+        background: #f85149;
+        box-shadow: 0 0 6px #f85149, 0 0 2px #000 inset;
+        animation: lamp-pulse 1.2s infinite;
+    }
+    .alarm-lamp.unknown { background: #484f58; }
+    @keyframes lamp-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: .45; }
+    }
+    .lamp-legend { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+    .lamp-legend.normal { background:#3fb950; }
+    .lamp-legend.alarm { background:#f85149; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+    <h4 class="mb-0"><i class="bi bi-bell-fill text-warning me-1"></i> SRF Alarm Dashboard</h4>
+    <span id="monitor-badge" class="badge bg-secondary">Monitor stopped</span>
+    <span id="monitor-detail" class="small text-secondary"></span>
+    <div class="ms-auto d-flex gap-2">
+        <button class="btn btn-sm btn-outline-warning" onclick="switchTab('mapping')"
+                title="알람별 Archiver 그래프 PV 연결 수정">
+            <i class="bi bi-diagram-3"></i> PV 연결 수정
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="reloadAll()" title="Refresh">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+        <a href="/" class="btn btn-sm btn-outline-info">
+            Postmortem <i class="bi bi-box-arrow-up-right"></i>
+        </a>
+    </div>
+</div>
+
+<div class="d-flex gap-2 mb-3 flex-wrap">
+    <div class="card summary-card" title="카탈로그 전체 알람 PV 수"><div class="card-body py-2 px-3">
+        <div class="num" id="sum-total">-</div><div class="lbl">Total</div></div></div>
+    <div class="card summary-card" title="현재 알람 상태 (빨간 램프)"><div class="card-body py-2 px-3">
+        <div class="num text-danger" id="sum-alarm">-</div><div class="lbl">Alarm</div></div></div>
+    <div class="card summary-card" title="정상 상태 (초록 램프)"><div class="card-body py-2 px-3">
+        <div class="num text-success" id="sum-normal">-</div><div class="lbl">Normal</div></div></div>
+    <div class="card summary-card" title="KSU 운전 상태 요약(ACTUAL_STATE) 3개 — 알람이 아니므로 램프에서 제외"><div class="card-body py-2 px-3">
+        <div class="num text-secondary" id="sum-disabled">-</div><div class="lbl">Disabled</div></div></div>
+    <div class="card summary-card" title="그래프 PV가 지정되지 않은 알람"><div class="card-body py-2 px-3">
+        <div class="num text-info" id="sum-unmapped">-</div><div class="lbl">Unmapped</div></div></div>
+</div>
+<div class="small text-secondary mb-3" id="summary-note"></div>
+
+<ul class="nav nav-tabs mb-3" id="main-tabs">
+    <li class="nav-item">
+        <button class="nav-link active" data-tab="lamps" onclick="switchTab('lamps')">
+            <i class="bi bi-grid-3x3-gap-fill"></i> Alarm Lamps
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link" data-tab="mapping" onclick="switchTab('mapping')">
+            <i class="bi bi-diagram-3"></i> PV Mapping
+        </button>
+    </li>
+</ul>
+
+<div id="tab-lamps">
+    <div class="card mb-3">
+        <div class="card-header py-1 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <strong>Alarm Lamps <span class="text-secondary small" id="lamp-total"></span></strong>
+            <span class="small text-secondary d-flex align-items-center gap-3">
+                <span><span class="lamp-legend normal"></span> normal</span>
+                <span><span class="lamp-legend alarm"></span> alarm</span>
+            </span>
+        </div>
+        <div class="card-body py-2">
+            <div class="lamp-groups" id="lamp-groups"></div>
+            <div class="small text-secondary mt-2">
+                램프에 마우스를 올리면 PV와 description이 표시됩니다. 빨간 램프만 아래 Active Alarms에 나열됩니다.
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header py-1 d-flex justify-content-between align-items-center">
+            <strong>Active Alarms</strong>
+            <span class="badge bg-danger" id="active-count">0</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-dark table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:170px">발생 시각 (KST)</th>
+                        <th style="width:80px">Subsystem</th>
+                        <th>Description</th>
+                        <th style="width:270px">Alarm PV</th>
+                        <th style="width:70px" class="text-end">Value</th>
+                        <th style="width:260px">Graph PV</th>
+                    </tr>
+                </thead>
+                <tbody id="active-alarm-rows"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="tab-mapping" style="display:none">
+    <div class="small text-secondary mb-2">
+        이 표는 각 알람에 표시할 Archiver 그래프 PV를 지정하는 용도입니다.
+        <strong>Edit</strong>을 눌러 드롭다운에서 PV를 선택하세요.
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label small mb-0">Subsystem</label>
+                    <select id="f-sub" class="form-select form-select-sm">
+                        <option value="">All</option>
+                        <option>KSU1</option><option>KSU2</option><option>KSU3</option>
+                        <option>CRM1</option><option>CRM2</option><option>CRM3</option>
+                        <option>CRG</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-0">State</label>
+                    <select id="f-state" class="form-select form-select-sm">
+                        <option value="">All</option>
+                        <option value="alarm">Alarm</option>
+                        <option value="normal">Normal</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-0">Mapping</label>
+                    <select id="f-mapping" class="form-select form-select-sm">
+                        <option value="">All</option>
+                        <option value="mapped">Mapped</option>
+                        <option value="unmapped">Unmapped</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-0">Enabled</label>
+                    <select id="f-enabled" class="form-select form-select-sm">
+                        <option value="">All</option>
+                        <option value="1">On</option>
+                        <option value="0">Off</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small mb-0">Search (PV / description)</label>
+                    <input id="f-q" class="form-control form-control-sm" placeholder="filament, KSU3, ...">
+                </div>
+            </div>
+            <div class="small text-secondary mt-2">
+                Showing <span id="row-count">-</span> rows. Page view is public; mapping edits require the password.
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header py-1 d-flex justify-content-between align-items-center">
+            <strong>Alarm PVs</strong>
+            <span class="small text-secondary">Archiver 그래프 PV는 드롭다운에서만 선택</span>
+        </div>
+        <div class="alarm-table-wrap">
+            <table class="table table-sm table-dark table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:80px">Subsystem</th>
+                        <th style="width:270px">Alarm PV</th>
+                        <th>Description</th>
+                        <th style="width:90px">State</th>
+                        <th style="width:70px" class="text-end">Value</th>
+                        <th style="width:150px">Last change (UTC)</th>
+                        <th style="width:260px">Graph PV</th>
+                        <th style="width:70px">Enabled</th>
+                        <th style="width:60px"></th>
+                    </tr>
+                </thead>
+                <tbody id="alarm-rows"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal fade" id="edit-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title"><i class="bi bi-pencil-square me-1"></i> Edit alarm mapping</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2 mb-2">
+                    <div class="col-md-8">
+                        <div class="small text-secondary">Alarm PV</div>
+                        <div class="font-monospace" id="edit-pv">-</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="small text-secondary">Current state</div>
+                        <div id="edit-state">-</div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="small text-secondary">Description</div>
+                    <div id="edit-desc">-</div>
+                </div>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-md-3">
+                        <label class="form-label small mb-0">Class</label>
+                        <select id="edit-class" class="form-select form-select-sm"></select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-0">Sub</label>
+                        <select id="edit-sub" class="form-select form-select-sm"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small mb-0">Filter PV / description</label>
+                        <input id="edit-pv-filter" class="form-control form-control-sm" placeholder="AI17, filament, ...">
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small mb-0">Archiver PV list</label>
+                    <select id="edit-pv-select" class="form-select form-select-sm" size="8"></select>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-info mb-3" id="add-pv-btn">
+                    <i class="bi bi-plus-lg"></i> Add selected PV
+                </button>
+
+                <div class="mb-3">
+                    <div class="small text-secondary mb-1">Selected graph PV(s) — max 4</div>
+                    <div id="selected-pvs" class="border border-secondary rounded p-2 small">없음</div>
+                </div>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-md-3">
+                        <label class="form-label small mb-0">Enabled</label>
+                        <select id="edit-enabled" class="form-select form-select-sm">
+                            <option value="1">on</option>
+                            <option value="0">off</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-0">Severity</label>
+                        <select id="edit-severity" class="form-select form-select-sm">
+                            <option value="low">low</option>
+                            <option value="medium">medium</option>
+                            <option value="high">high</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small mb-0">Password (required to save)</label>
+                        <input id="edit-password" type="password" class="form-control form-control-sm"
+                               placeholder="수정 비밀번호" autocomplete="current-password">
+                    </div>
+                </div>
+                <div class="small text-secondary">
+                    그래프 PV는 PLS Archiver 드롭다운 목록에서만 선택할 수 있습니다.
+                    선택한 PV의 description이 자동으로 함께 저장됩니다.
+                </div>
+                <div id="edit-status" class="small mt-2"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-primary" id="save-btn">
+                    <i class="bi bi-save"></i> Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="saved-toast" class="toast align-items-center text-bg-success border-0">
+        <div class="d-flex">
+            <div class="toast-body" id="saved-toast-body">Saved</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const DASH = {
+    state: {items: [], summary: {}, monitor: {}},
+    hierarchy: null,
+    pvList: [],
+    editingPv: null,
+    selectedGraphPvs: [],
+    maxGraphPvs: 4,
+    lampSig: null,
+    activeSig: null,
+    mappingDirty: true,
+};
+
+function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+}
+
+async function jget(url) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+}
+
+function stateBadge(s) {
+    const v = s || 'unknown';
+    const cls = v === 'alarm' ? 'bg-danger'
+              : v === 'normal' ? 'bg-success'
+              : 'bg-secondary';
+    return `<span class="badge ${cls}">${esc(v)}</span>`;
+}
+
+function mappingCell(r) {
+    if (!r.graph_pv_list || !r.graph_pv_list.length) {
+        return '<span class="text-secondary">—</span>';
+    }
+    return r.graph_pv_list.map((pv, i) => {
+        const d = (r.graph_description_list || [])[i] || '';
+        return `<div><span class="badge bg-dark border border-secondary font-monospace">${esc(pv)}</span>` +
+               (d ? `<div class="pv-code">${esc(d)}</div>` : '') + `</div>`;
+    }).join('');
+}
+
+function filteredItems() {
+    const sub = document.getElementById('f-sub').value;
+    const st = document.getElementById('f-state').value;
+    const mp = document.getElementById('f-mapping').value;
+    const en = document.getElementById('f-enabled').value;
+    const q = document.getElementById('f-q').value.trim().toLowerCase();
+    return DASH.state.items.filter(x => {
+        if (sub && x.subsystem !== sub) return false;
+        if (st && (x.live_state || 'unknown') !== st) return false;
+        if (mp === 'mapped' && !x.mapped) return false;
+        if (mp === 'unmapped' && x.mapped) return false;
+        if (en && String(x.enabled) !== en) return false;
+        if (q && !((x.pv || '').toLowerCase().includes(q) ||
+                   (x.description || '').toLowerCase().includes(q))) return false;
+        return true;
+    });
+}
+
+function renderSummary() {
+    const s = DASH.state.summary || {};
+    document.getElementById('sum-total').textContent = s.total ?? 0;
+    document.getElementById('sum-alarm').textContent = s.alarm ?? 0;
+    document.getElementById('sum-normal').textContent = s.normal ?? 0;
+    document.getElementById('sum-disabled').textContent = s.disabled ?? 0;
+    document.getElementById('sum-unmapped').textContent = s.unmapped ?? 0;
+    document.getElementById('summary-note').textContent =
+        `Total ${s.total ?? '-'} = 표시 ${s.enabled ?? '-'} (Alarm+Normal) + disabled ${s.disabled ?? 0} `
+        + '(KSU1/2/3 ACTUAL_STATE 요약 PV 제외)';
+}
+
+function renderMonitor() {
+    const m = DASH.state.monitor || {};
+    const badge = document.getElementById('monitor-badge');
+    const detail = document.getElementById('monitor-detail');
+    if (m.running) {
+        badge.className = 'badge bg-success';
+        badge.textContent = `Monitor running${m.pid ? ' (pid ' + m.pid + ')' : ''}`;
+    } else {
+        badge.className = 'badge bg-secondary';
+        badge.textContent = 'Monitor stopped';
+    }
+    const bits = [];
+    if (m.pv_count) bits.push(`${m.pv_count} PV`);
+    if (m.connected_count) bits.push(`${m.connected_count} connected`);
+    if (m.last_heartbeat) bits.push(`heartbeat ${m.last_heartbeat}`);
+    if (m.error) bits.push(`error: ${m.error}`);
+    if (!m.running) bits.push('Start Monitor in Settings');
+    detail.textContent = bits.join(' · ');
+}
+
+function switchTab(name) {
+    document.querySelectorAll('#main-tabs .nav-link').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === name);
+    });
+    document.getElementById('tab-lamps').style.display = name === 'lamps' ? '' : 'none';
+    document.getElementById('tab-mapping').style.display = name === 'mapping' ? '' : 'none';
+    if (name === 'mapping' && DASH.mappingDirty) {
+        renderTable();
+        DASH.mappingDirty = false;
+    }
+}
+
+function fmtTs(ts) {
+    if (!ts) return '-';
+    try {
+        return new Date(ts).toLocaleString('ko-KR', {
+            timeZone: 'Asia/Seoul', hour12: false,
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+        });
+    } catch (e) {
+        return ts;
+    }
+}
+
+function lampState(r) {
+    const s = r.live_state || 'unknown';
+    return ['alarm', 'normal'].includes(s) ? s : 'unknown';
+}
+
+function renderLamps() {
+    const groups = {};
+    const enabled = DASH.state.items.filter(r => r.enabled);
+    for (const r of enabled) {
+        const k = r.subsystem || 'ETC';
+        (groups[k] = groups[k] || []).push(r);
+    }
+    const order = ['KSU1', 'KSU2', 'KSU3', 'CRM1', 'CRM2', 'CRM3', 'CRG'];
+    const keys = order.filter(k => groups[k])
+        .concat(Object.keys(groups).filter(k => !order.includes(k)).sort());
+
+    document.getElementById('lamp-total').textContent = `(${enabled.length})`;
+    document.getElementById('lamp-groups').innerHTML = keys.map(k => {
+        const rows = groups[k].slice().sort((a, b) => a.pv.localeCompare(b.pv));
+        const nAlarm = rows.filter(r => lampState(r) === 'alarm').length;
+        return `<div class="mb-3">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <strong>${esc(k)}</strong>
+                <span class="small text-secondary">${rows.length}</span>
+                ${nAlarm ? `<span class="badge bg-danger">${nAlarm} alarm</span>` : ''}
+            </div>
+            <div class="lamp-grid">${rows.map(r => {
+                const s = lampState(r);
+                const title = [
+                    r.pv,
+                    r.description || '',
+                    r.live_value != null ? `value=${r.live_value}` : '',
+                    r.live_ts || '',
+                ].filter(Boolean).join('\n');
+                return `<span class="alarm-lamp ${s}" title="${esc(title)}" data-pv="${esc(r.pv)}"></span>`;
+            }).join('')}</div>
+        </div>`;
+    }).join('');
+}
+
+function renderActiveAlarms() {
+    const alarms = DASH.state.items
+        .filter(r => r.enabled && r.live_state === 'alarm')
+        .sort((a, b) => (b.live_ts || '').localeCompare(a.live_ts || ''));
+    document.getElementById('active-count').textContent = String(alarms.length);
+    const tbody = document.getElementById('active-alarm-rows');
+    if (!alarms.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-secondary py-3">현재 활성 알람 없음</td></tr>';
+        return;
+    }
+    tbody.innerHTML = alarms.map(r => `
+        <tr>
+            <td class="small">${esc(fmtTs(r.live_ts))}</td>
+            <td><span class="badge bg-dark border border-secondary">${esc(r.subsystem)}</span></td>
+            <td>${esc(r.description)}</td>
+            <td class="font-monospace small">${esc(r.pv)}</td>
+            <td class="text-end font-monospace small">${esc(r.live_value ?? '')}</td>
+            <td>${mappingCell(r)}</td>
+        </tr>`).join('');
+}
+
+function renderTable() {
+    const items = filteredItems();
+    document.getElementById('row-count').textContent = `${items.length} / ${DASH.state.items.length}`;
+    const tbody = document.getElementById('alarm-rows');
+    const wrap = document.querySelector('.alarm-table-wrap');
+    const scrollTop = wrap ? wrap.scrollTop : 0;
+    if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-secondary py-4">조건에 맞는 알람이 없습니다.</td></tr>';
+        if (wrap) wrap.scrollTop = scrollTop;
+        return;
+    }
+    tbody.innerHTML = items.map(r => `
+        <tr>
+            <td><span class="badge bg-dark border border-secondary">${esc(r.subsystem)}</span></td>
+            <td class="font-monospace" style="font-size:.72rem">${esc(r.pv)}</td>
+            <td>${esc(r.description)}</td>
+            <td>${stateBadge(r.live_state)}</td>
+            <td class="text-end font-monospace small">${esc(r.live_value ?? '')}</td>
+            <td class="small text-secondary">${esc(r.live_ts || '')}</td>
+            <td>${mappingCell(r)}</td>
+            <td>${r.enabled ? '<span class="badge bg-success">on</span>' : '<span class="badge bg-secondary">off</span>'}</td>
+            <td><button class="btn btn-sm btn-outline-info py-0 px-2 edit-btn" data-pv="${esc(r.pv)}">Edit</button></td>
+        </tr>`).join('');
+    tbody.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => openEdit(btn.dataset.pv));
+    });
+    if (wrap) wrap.scrollTop = scrollTop;
+}
+
+function renderLiveViews(includeTable = false) {
+    renderSummary();
+    renderMonitor();
+    const lampSig = DASH.state.items
+        .filter(r => r.enabled)
+        .map(r => r.pv + ':' + (r.live_state || 'unknown') + ':' +
+                  (r.live_value ?? '') + ':' + (r.live_ts || '')).join('|');
+    if (lampSig !== DASH.lampSig) {
+        DASH.lampSig = lampSig;
+        renderLamps();
+    }
+    const activeSig = DASH.state.items
+        .filter(r => r.enabled && r.live_state === 'alarm')
+        .map(r => r.pv + ':' + (r.live_ts || '')).join('|');
+    if (activeSig !== DASH.activeSig) {
+        DASH.activeSig = activeSig;
+        renderActiveAlarms();
+    }
+    const mappingVisible = document.getElementById('tab-mapping').style.display !== 'none';
+    if (includeTable && mappingVisible) {
+        renderTable();
+        DASH.mappingDirty = false;
+    } else if (!mappingVisible) {
+        DASH.mappingDirty = true;
+    }
+}
+
+async function loadState() {
+    try {
+        const d = await jget('/api/alarm/state');
+        DASH.state.items = d.items || [];
+        DASH.state.summary = d.summary || {};
+        DASH.state.monitor = d.monitor || {};
+        renderLiveViews(true);
+    } catch (e) {
+        document.getElementById('row-count').textContent = 'load error: ' + e.message;
+    }
+}
+
+async function pollLive() {
+    try {
+        const d = await jget('/api/alarm/live');
+        const states = d.states || {};
+        for (const r of DASH.state.items) {
+            const s = states[r.pv];
+            r.live_state = s ? s.state : 'unknown';
+            r.live_value = s ? s.value : null;
+            r.live_ts = s ? s.ts : null;
+        }
+        DASH.state.summary = d.summary || DASH.state.summary;
+        DASH.state.monitor = d.monitor || DASH.state.monitor;
+        renderLiveViews(false);
+    } catch (e) {
+        // Keep the previous values; the next poll may recover.
+    }
+}
+
+function reloadAll() { loadState(); }
+
+// ── Edit modal ──────────────────────────────────────────────
+async function loadHierarchy() {
+    if (DASH.hierarchy) return DASH.hierarchy;
+    DASH.hierarchy = await jget('/api/pv-hierarchy');
+    const classes = DASH.hierarchy?.data?.classes || [];
+    const cs = document.getElementById('edit-class');
+    cs.innerHTML = classes.map(c => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join('');
+    cs.onchange = () => { fillSubs(); loadPvList(); };
+    return DASH.hierarchy;
+}
+
+function fillSubs(defaultSub) {
+    const cls = document.getElementById('edit-class').value;
+    const subs = (DASH.hierarchy?.data?.classSubs || []).filter(s => s.classCode === cls);
+    const ss = document.getElementById('edit-sub');
+    ss.innerHTML = subs.map(s => `<option value="${esc(s.code)}">${esc(s.name)}</option>`).join('');
+    if (defaultSub && subs.some(s => s.code === defaultSub)) ss.value = defaultSub;
+    ss.onchange = loadPvList;
+}
+
+function inferClassSub(pv) {
+    if (pv.startsWith('SR:RF:KSU1:')) return ['SR', 'RF_KSU1'];
+    if (pv.startsWith('SR:RF:KSU2:')) return ['SR', 'RF_KSU2'];
+    if (pv.startsWith('SR:RF:KSU3:')) return ['SR', 'RF_KSU3'];
+    if (pv.startsWith('SR:RF:CRM1:')) return ['SR', 'RF_CM1'];
+    if (pv.startsWith('SR:RF:CRM2:')) return ['SR', 'RF_CM2'];
+    if (pv.startsWith('SR:RF:CRM3:')) return ['SR', 'RF_CM3'];
+    if (pv.startsWith('SR:RF:CRG')) return ['SR', 'RF_CRG'];
+    return ['SR', 'Beam Status'];
+}
+
+async function loadPvList() {
+    const cls = document.getElementById('edit-class').value;
+    const sub = document.getElementById('edit-sub').value;
+    if (!cls || !sub) return;
+    try {
+        const d = await jget(`/api/pv-list?class=${encodeURIComponent(cls)}&sub=${encodeURIComponent(sub)}`);
+        DASH.pvList = d?.data?.items || [];
+        renderPvOptions();
+    } catch (e) {
+        DASH.pvList = [];
+        renderPvOptions();
+        document.getElementById('edit-status').textContent =
+            'Archiver PV 목록을 불러오지 못했습니다: ' + e.message;
+    }
+}
+
+function renderPvOptions() {
+    const q = document.getElementById('edit-pv-filter').value.trim().toLowerCase();
+    const sel = document.getElementById('edit-pv-select');
+    const items = DASH.pvList.filter(x =>
+        !q || (x.pvKey || '').toLowerCase().includes(q) ||
+        (x.description || '').toLowerCase().includes(q));
+    sel.innerHTML = items.map(x =>
+        `<option value="${esc(x.pvKey)}" data-desc="${esc(x.description || '')}" data-unit="${esc(x.unit || '')}">` +
+        `${esc(x.pvKey)} — ${esc(x.description || '')}</option>`).join('');
+}
+
+function renderSelectedGraphPvs() {
+    const box = document.getElementById('selected-pvs');
+    if (!DASH.selectedGraphPvs.length) { box.textContent = '없음'; return; }
+    box.innerHTML = DASH.selectedGraphPvs.map((x, i) => `
+        <div class="selected-pv-row d-flex justify-content-between align-items-start gap-2">
+            <div>
+                <span class="badge bg-dark border border-secondary font-monospace">${esc(x.pv)}</span>
+                <div class="pv-code">${esc(x.description || '')}</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 remove-pv-btn" data-idx="${i}">×</button>
+        </div>`).join('');
+    box.querySelectorAll('.remove-pv-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            DASH.selectedGraphPvs.splice(Number(btn.dataset.idx), 1);
+            renderSelectedGraphPvs();
+        });
+    });
+}
+
+async function openEdit(pv) {
+    const item = DASH.state.items.find(x => x.pv === pv);
+    if (!item) return;
+    DASH.editingPv = pv;
+    DASH.selectedGraphPvs = (item.graph_pv_list || []).map((p, i) => ({
+        pv: p, description: (item.graph_description_list || [])[i] || ''
+    }));
+    document.getElementById('edit-pv').textContent = pv;
+    document.getElementById('edit-desc').textContent = item.description || '';
+    document.getElementById('edit-state').innerHTML = stateBadge(item.live_state) +
+        (item.live_value != null ? ` <span class="font-monospace small">${esc(item.live_value)}</span>` : '');
+    document.getElementById('edit-enabled').value = item.enabled ? '1' : '0';
+    document.getElementById('edit-severity').value = item.severity || 'medium';
+    document.getElementById('edit-pv-filter').value = '';
+    document.getElementById('edit-status').textContent = '';
+    document.getElementById('edit-password').value = sessionStorage.getItem('alarm_pw') || '';
+    renderSelectedGraphPvs();
+
+    await loadHierarchy();
+    const [cls, sub] = inferClassSub(pv);
+    document.getElementById('edit-class').value = cls;
+    fillSubs(sub);
+    await loadPvList();
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('edit-modal')).show();
+}
+
+function addSelectedPv() {
+    const sel = document.getElementById('edit-pv-select');
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt) return;
+    const pv = opt.value;
+    if (DASH.selectedGraphPvs.some(x => x.pv === pv)) return;
+    if (DASH.selectedGraphPvs.length >= DASH.maxGraphPvs) {
+        document.getElementById('edit-status').textContent = `최대 ${DASH.maxGraphPvs}개까지 선택할 수 있습니다.`;
+        return;
+    }
+    DASH.selectedGraphPvs.push({pv, description: opt.dataset.desc || ''});
+    document.getElementById('edit-status').textContent = '';
+    renderSelectedGraphPvs();
+}
+
+async function saveMapping() {
+    if (!DASH.editingPv) return;
+    const pw = document.getElementById('edit-password').value;
+    if (!pw) {
+        document.getElementById('edit-status').textContent = '비밀번호를 입력해 주세요.';
+        return;
+    }
+    const status = document.getElementById('edit-status');
+    status.textContent = 'Saving...';
+    const body = {
+        graph_pv: DASH.selectedGraphPvs.map(x => x.pv),
+        graph_description: DASH.selectedGraphPvs.map(x => x.description || ''),
+        enabled: Number(document.getElementById('edit-enabled').value),
+        severity: document.getElementById('edit-severity').value,
+    };
+    try {
+        const r = await fetch(`/api/alarm/catalog/${encodeURIComponent(DASH.editingPv)}?password=${encodeURIComponent(pw)}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+        });
+        const d = await r.json();
+        if (!r.ok) {
+            status.textContent = r.status === 401 ? '비밀번호가 올바르지 않습니다.' : (d.error || `HTTP ${r.status}`);
+            return;
+        }
+        sessionStorage.setItem('alarm_pw', pw);
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('edit-modal')).hide();
+        showToast('Saved: ' + DASH.editingPv);
+        await loadState();
+    } catch (e) {
+        status.textContent = 'Network error: ' + e.message;
+    }
+}
+
+function showToast(msg) {
+    document.getElementById('saved-toast-body').textContent = msg;
+    bootstrap.Toast.getOrCreateInstance(document.getElementById('saved-toast')).show();
+}
+
+// ── Init ────────────────────────────────────────────────────
+document.getElementById('f-sub').onchange = renderTable;
+document.getElementById('f-state').onchange = renderTable;
+document.getElementById('f-mapping').onchange = renderTable;
+document.getElementById('f-enabled').onchange = renderTable;
+document.getElementById('f-q').addEventListener('input', renderTable);
+document.getElementById('edit-pv-filter').addEventListener('input', renderPvOptions);
+document.getElementById('add-pv-btn').addEventListener('click', addSelectedPv);
+document.getElementById('save-btn').addEventListener('click', saveMapping);
+
+loadState();
+setInterval(pollLive, 1000);
+</script>
+{% endblock %}

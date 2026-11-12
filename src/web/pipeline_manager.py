@@ -1213,7 +1213,12 @@ def start_watchdog_only(config_path: str = "config/config.yaml"):
 
 
 def stop_monitor():
-    """Request graceful stop of monitor loop and watchdogs."""
+    """Request graceful stop of the CSV pipeline monitor only.
+
+    The alarm-state monitor is tied to the web app lifecycle and keeps
+    running; it is stopped by the web app shutdown hook (or the dedicated
+    Alarm Monitor Stop button).
+    """
     global _stop_monitor
     _stop_monitor.set()
     _stop_watchdogs()

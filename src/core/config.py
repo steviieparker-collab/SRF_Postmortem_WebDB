@@ -268,6 +268,23 @@ class MonitorPathsConfig(BaseModel):
 
 # ── Main unified configuration model ─────────────────────────
 
+class AlarmConfig(BaseModel):
+    """Configuration for the CA alarm monitor."""
+    ca_addr_list: str = Field(
+        default=(
+            "192.168.1.6 192.168.1.49 141.223.105.2 141.223.105.126 "
+            "141.223.105.142 141.223.105.145 141.223.105.149 141.223.105.213"
+        ),
+        description="EPICS_CA_ADDR_LIST for the alarm monitor",
+    )
+    ca_auto_addr_list: str = Field(default="NO", description="EPICS_CA_AUTO_ADDR_LIST")
+    window_pre_s: float = Field(default=60.0, description="Event alarm window: seconds before t0")
+    window_post_s: float = Field(default=10.0, description="Event alarm window: seconds after t0")
+    debounce_s: float = Field(default=0.3, description="Per-PV transition debounce")
+    last_state_throttle_s: float = Field(default=1.0, description="Min seconds between last-state writes")
+    heartbeat_s: float = Field(default=5.0, description="Monitor status heartbeat interval")
+
+
 class AppConfig(BaseModel):
     """Unified application configuration with ALL sections from both projects."""
 
@@ -290,6 +307,7 @@ class AppConfig(BaseModel):
     db: DBConfig = Field(default_factory=DBConfig)
     web: WebConfig = Field(default_factory=WebConfig)
     monitor: MonitorPathsConfig = Field(default_factory=MonitorPathsConfig)
+    alarm: AlarmConfig = Field(default_factory=AlarmConfig)
 
     @classmethod
     def from_yaml(cls, config_path: Union[str, Path]) -> "AppConfig":

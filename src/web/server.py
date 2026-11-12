@@ -7,11 +7,15 @@ Provides:
 - `/api/events` — JSON API
 """
 
+import datetime as dt
 import hashlib
 import json
 import os
 import re
+import shutil
 import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import List, Optional
 from urllib.parse import urlencode
@@ -41,6 +45,26 @@ from ..db.repository import (
 from ..db.similarity import update_similarity_links, update_all_similarity_links
 from ..import_job import run_import, CASE_TO_FAULT
 from ..db.models import EventCreate
+from ..alarm.catalog import (
+    seed_alarm_catalog,
+    apply_alarm_polarity,
+    list_alarm_states,
+    alarm_summary,
+    live_states,
+    get_monitor_status,
+    update_alarm_catalog,
+)
+from ..alarm.manager import (
+    alarm_monitor_status,
+    start_alarm_monitor,
+    stop_alarm_monitor,
+    ensure_clean as ensure_alarm_monitor_clean,
+)
+from ..alarm.event_link import (
+    load_event_alarms,
+    load_alarm_series,
+    save_alarm_series,
+)
 
 import threading
 import yaml
@@ -116,6 +140,17 @@ def _get_attachments_dir(event_id: str) -> Path:
     att_dir = project_root / "data" / "attachments" / event_id
     att_dir.mkdir(parents=True, exist_ok=True)
     return att_dir
+
+
+def _cleanup_event_attachments(event_id: str):
+    """Remove the attachment directory for a deleted event."""
+    project_root = Path(__file__).resolve().parent.parent.parent
+    att_dir = project_root / "data" / "attachments" / event_id
+    try:
+        if att_dir.is_dir():
+            shutil.rmtree(att_dir)
+    except OSError:
+        pass
 
 
 app = FastAPI(title="SRF Postmortem Viewer")
@@ -208,10 +243,36 @@ app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 @app.on_event("startup")
 async def startup():
-    """Initialize DB on first run."""
+    """Initialize DB and take ownership of the alarm monitor."""
     conn = init_db_sync()
     seed_fault_types(conn)
+    seed_alarm_catalog(conn)
+    apply_alarm_polarity(conn)
     conn.close()
+    ensure_alarm_monitor_clean()
+
+    # The alarm-state monitor belongs to the web app lifecycle: it runs
+    # whenever postmortem is up, independent of the CSV pipeline monitor.
+    # Stop any leftover CLI/old-web monitor first so this process owns it.
+    try:
+        stop_alarm_monitor()
+        config_path = str(
+            Path(__file__).resolve().parent.parent.parent / "config" / "config.yaml"
+        )
+        result = start_alarm_monitor(config_path)
+        if not result.get("ok"):
+            logging.getLogger(__name__).warning("Alarm monitor start failed: %s", result)
+    except Exception as e:
+        logging.getLogger(__name__).warning("Alarm monitor start failed: %s", e)
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    """Stop the alarm monitor when postmortem shuts down."""
+    try:
+        stop_alarm_monitor()
+    except Exception:
+        pass
 
 
 # ── Web Pages ────────────────────────────────────────────────
@@ -535,6 +596,394 @@ async def api_get_similar(event_id: str):
     return {"similar": [s.model_dump() for s in similar]}
 
 
+@app.get("/api/events/{event_id}/pv-evidence")
+async def api_get_pv_evidence(event_id: str):
+    """JSON endpoint: read-only PV evidence sidecar (if present)."""
+    project_root = Path(__file__).resolve().parent.parent.parent
+    path = project_root / "data" / "pv_evidence" / f"{event_id}.json"
+    if not path.exists():
+        return {"available": False, "reason": "no PV evidence for this event"}
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        doc.setdefault("available", True)
+        return JSONResponse(doc)
+    except (OSError, json.JSONDecodeError):
+        return JSONResponse(
+            {"available": False, "reason": "invalid PV evidence file"},
+            status_code=500,
+        )
+
+
+@app.get("/api/events/{event_id}/pv-series")
+async def api_get_pv_series(event_id: str):
+    """JSON endpoint: PV time series for an event (read-only)."""
+    project_root = Path(__file__).resolve().parent.parent.parent
+    path = project_root / "data" / "pv_series" / f"{event_id}.json"
+    if not path.exists():
+        return {"available": False, "reason": "no PV series for this event"}
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        doc.setdefault("available", True)
+        return JSONResponse(doc)
+    except (OSError, json.JSONDecodeError):
+        return JSONResponse(
+            {"available": False, "reason": "invalid PV series file"},
+            status_code=500,
+        )
+
+
+ARCHIVER_BASE = "https://plsarchiver.postech.ac.kr"
+KST = dt.timezone(dt.timedelta(hours=9))
+
+
+def _archiver_json(url: str):
+    with urllib.request.urlopen(url, timeout=30) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+@app.get("/api/pv-hierarchy")
+async def api_pv_hierarchy():
+    """Proxy: PLS archiver class/sub hierarchy (correlation page)."""
+    try:
+        return JSONResponse(_archiver_json(f"{ARCHIVER_BASE}/api/v1/db/classes"))
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=502)
+
+
+@app.get("/api/pv-list")
+async def api_pv_list(
+    class_code: str = Query(..., alias="class"),
+    sub: str = Query(...),
+):
+    """Proxy: PV list for a class/sub (pvKey + description)."""
+    q = urllib.parse.urlencode({"class": class_code, "sub": sub})
+    try:
+        return JSONResponse(_archiver_json(f"{ARCHIVER_BASE}/api/v1/db/pvs?{q}"))
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=502)
+
+
+_t0_cache = {}
+
+
+def _fetch_pv_range(pv: str, frm, to):
+    q = urllib.parse.urlencode({
+        "pv": pv,
+        "from": frm.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "to": to.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+    })
+    d = _archiver_json(f"{ARCHIVER_BASE}/api/v1/retrieval/data?{q}")
+    pts = [(p["secs"] + p.get("nanos", 0) / 1e9, p["val"])
+           for p in d.get("data", []) if p.get("val") is not None]
+    return pts, d.get("meta", {})
+
+
+def _fetch_pv(pv: str, base):
+    return _fetch_pv_range(
+        pv,
+        base - dt.timedelta(minutes=10),
+        base + dt.timedelta(minutes=3),
+    )
+
+
+def _event_t0(event_id: str, base):
+    """빔전류 최대값 이후 99% 아래로 처음 떨어지는 시각 (event 기준 초)."""
+    if event_id in _t0_cache:
+        return _t0_cache[event_id]
+    t0 = 0.0
+    try:
+        pts, _ = _fetch_pv("SR:G00:BEAMCURRENT_T", base)
+        b = base.timestamp()
+        pre = [(t, v) for t, v in pts if b - 600 <= t <= b + 60]
+        if pre:
+            mx = max(pre, key=lambda x: x[1])
+            hit = next((t for t, v in pts if t > mx[0] and v < mx[1] * 0.99), None)
+            if hit is not None:
+                t0 = round(hit - b, 3)
+    except Exception:
+        pass
+    _t0_cache[event_id] = t0
+    return t0
+
+
+@app.get("/api/pv-data")
+async def api_pv_data(
+    event_id: str,
+    pv: str,
+    pre: float = Query(600, description="seconds before t0"),
+    post: float = Query(180, description="seconds after t0"),
+):
+    """Fetch a PV time series around the event, rebased to beam-current drop."""
+    conn = get_sync_connection()
+    try:
+        event = get_event(conn, event_id)
+    finally:
+        conn.close()
+    if not event:
+        return JSONResponse({"available": False, "reason": "event not found"}, status_code=404)
+    try:
+        base = dt.datetime.fromisoformat(event.timestamp).replace(tzinfo=KST)
+    except (ValueError, TypeError):
+        base = dt.datetime.now(KST)
+    t0 = _event_t0(event_id, base)
+    t0_abs = base + dt.timedelta(seconds=t0)
+    try:
+        pts, meta = _fetch_pv_range(
+            pv,
+            t0_abs - dt.timedelta(seconds=pre),
+            t0_abs + dt.timedelta(seconds=post),
+        )
+    except Exception as e:
+        return JSONResponse({"available": False, "reason": str(e)}, status_code=502)
+    return JSONResponse({
+        "available": bool(pts), "event_id": event_id, "pv": pv,
+        "unit": meta.get("unit", ""),
+        "t0_offset_sec": t0,
+        "event_offset_sec": round(-t0, 3),
+        "pre": pre, "post": post,
+        "points": [[round(t - t0_abs.timestamp(), 3), v] for t, v in pts],
+    })
+
+
+def _split_semicolon(value: str) -> list[str]:
+    return [x.strip() for x in (value or "").split(";") if x.strip()]
+
+
+@app.get("/api/events/{event_id}/alarms")
+async def api_event_alarms(event_id: str):
+    """Alarm onset snapshot for an event (sidecar, DB fallback)."""
+    doc = load_event_alarms(event_id)
+    if doc is not None:
+        return JSONResponse(doc)
+
+    conn = get_sync_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM event_alarms WHERE event_id = ? ORDER BY first_seen_rel, pv",
+            (event_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    if not rows:
+        return {"available": False, "reason": "no alarm snapshot for this event"}
+    items = []
+    for r in rows:
+        items.append({
+            "pv": r["pv"],
+            "description": r["description"],
+            "subsystem": r["subsystem"],
+            "graph_pv": _split_semicolon(r["graph_pv"]),
+            "graph_description": _split_semicolon(r["graph_description"]),
+            "first_seen_utc": r["first_seen_utc"],
+            "first_seen_rel": r["first_seen_rel"],
+            "active_at_start": bool(r["active_at_start"]),
+            "severity": r["severity"],
+        })
+    return {
+        "available": True,
+        "event_id": event_id,
+        "t0_offset_sec": 0,
+        "window": {"pre": 60, "post": 10},
+        "items": items,
+    }
+
+
+@app.get("/api/events/{event_id}/alarm-series")
+async def api_event_alarm_series(event_id: str, pvs: str = Query("")):
+    """Archiver series for the alarm graph PVs (-60s .. +10s around t0)."""
+    conn = get_sync_connection()
+    try:
+        event = get_event(conn, event_id)
+    finally:
+        conn.close()
+    if not event:
+        return JSONResponse({"available": False, "reason": "event not found"}, status_code=404)
+
+    try:
+        base = dt.datetime.fromisoformat(event.timestamp).replace(tzinfo=KST)
+    except (ValueError, TypeError):
+        base = dt.datetime.now(KST)
+
+    alarms_doc = load_event_alarms(event_id)
+    t0 = float(alarms_doc.get("t0_offset_sec") or 0.0) if alarms_doc else _event_t0(event_id, base)
+    t0_abs = base + dt.timedelta(seconds=t0)
+    start = t0_abs - dt.timedelta(seconds=60)
+    end = t0_abs + dt.timedelta(seconds=10)
+
+    requested = [p.strip() for p in pvs.split(",") if p.strip()]
+    if not requested and alarms_doc:
+        for item in alarms_doc.get("items", []):
+            requested.extend(item.get("graph_pv", []))
+    requested = list(dict.fromkeys(requested))
+
+    cache = load_alarm_series(event_id) or {}
+    series = cache.get("series", {}) if isinstance(cache.get("series"), dict) else {}
+
+    for pv in requested:
+        entry = series.get(pv)
+        if entry and entry.get("points"):
+            continue
+        try:
+            pts, meta = _fetch_pv_range(pv, start, end)
+            times = [t for t, _ in pts]
+            diffs = sorted(b - a for a, b in zip(times, times[1:]) if b > a)
+            resolution = round(diffs[len(diffs) // 2], 3) if diffs else None
+            series[pv] = {
+                "points": [[round(t - t0_abs.timestamp(), 3), v] for t, v in pts],
+                "unit": meta.get("unit", ""),
+                "resolution_s": resolution,
+                "count": len(pts),
+            }
+        except Exception as e:
+            series[pv] = {"points": [], "error": str(e)}
+
+    doc = {
+        "event_id": event_id,
+        "t0_offset_sec": t0,
+        "window": {"pre": 60, "post": 10},
+        "series": {pv: series[pv] for pv in requested if pv in series},
+    }
+    save_alarm_series(event_id, doc)
+    return {
+        "available": any(doc["series"].get(pv, {}).get("points") for pv in requested) if requested else False,
+        **doc,
+    }
+
+
+@app.get("/api/events/{event_id}/pv-notes")
+async def api_get_pv_notes(event_id: str):
+    project_root = Path(__file__).resolve().parent.parent.parent
+    path = project_root / "data" / "pv_notes" / f"{event_id}.json"
+    if not path.exists():
+        return {"event_id": event_id, "items": []}
+    try:
+        return JSONResponse(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError):
+        return {"event_id": event_id, "items": []}
+
+
+@app.post("/api/events/{event_id}/pv-notes")
+async def api_save_pv_notes(event_id: str, request: Request):
+    data = await request.json()
+    project_root = Path(__file__).resolve().parent.parent.parent
+    out_dir = project_root / "data" / "pv_notes"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    doc = {
+        "event_id": event_id,
+        "updated_at": dt.datetime.now(KST).isoformat(timespec="seconds"),
+        "items": data.get("items", []),
+    }
+    (out_dir / f"{event_id}.json").write_text(
+        json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
+    return {"ok": True, "saved": len(doc["items"])}
+
+
+@app.get("/events/{event_id}/pv-explorer", response_class=HTMLResponse, include_in_schema=False)
+async def pv_explorer(request: Request, event_id: str):
+    conn = get_sync_connection()
+    try:
+        event = get_event(conn, event_id)
+    finally:
+        conn.close()
+    if not event:
+        return HTMLResponse("Event not found", status_code=404)
+    return templates.TemplateResponse(
+        request, "pv_explorer.html",
+        {"event": event, "back_url": f"/events/{event_id}"},
+    )
+
+
+# ── Alarm dashboard ─────────────────────────────────────────
+
+@app.get("/alarm-dashboard", response_class=HTMLResponse, include_in_schema=False)
+async def alarm_dashboard(request: Request):
+    """Public alarm status dashboard. Mapping edits require the password."""
+    return templates.TemplateResponse(request, "alarm_dashboard.html", {})
+
+
+@app.get("/api/alarm/state")
+async def api_alarm_state(
+    subsystem: Optional[str] = Query(None),
+    state: Optional[str] = Query(None),
+    mapping: Optional[str] = Query(None),
+    enabled: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+):
+    """Current alarm states joined with the catalog mapping."""
+    conn = get_sync_connection()
+    try:
+        items = list_alarm_states(
+            conn, subsystem=subsystem, state=state,
+            mapping=mapping, enabled=enabled, q=q,
+        )
+        summary = alarm_summary(conn)
+        monitor = get_monitor_status(conn)
+    finally:
+        conn.close()
+    return {
+        "monitor": monitor,
+        "summary": summary,
+        "filtered": len(items),
+        "items": items,
+    }
+
+
+@app.get("/api/alarm/live")
+async def api_alarm_live():
+    """Compact state map for the dashboard's 1-second refresh.
+
+    The full catalog is loaded once via /api/alarm/state; this endpoint only
+    returns the current states so the poll stays small.
+    """
+    conn = get_sync_connection()
+    try:
+        states = live_states(conn)
+        summary = alarm_summary(conn)
+        monitor = get_monitor_status(conn)
+    finally:
+        conn.close()
+    return {"monitor": monitor, "summary": summary, "states": states}
+
+
+@app.get("/api/alarm/monitor/status")
+async def api_alarm_monitor_status():
+    return alarm_monitor_status()
+
+
+@app.post("/api/alarm/monitor/start")
+async def api_alarm_monitor_start(request: Request):
+    pw = request.query_params.get("password", "")
+    if not _check_password(pw):
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+    config_path = str(Path(__file__).parent.parent.parent / "config" / "config.yaml")
+    return start_alarm_monitor(config_path)
+
+
+@app.post("/api/alarm/monitor/stop")
+async def api_alarm_monitor_stop(request: Request):
+    pw = request.query_params.get("password", "")
+    if not _check_password(pw):
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+    return stop_alarm_monitor()
+
+
+@app.post("/api/alarm/catalog/{pv}")
+async def api_alarm_catalog_update(pv: str, request: Request):
+    """Update one alarm's graph-PV mapping (password required)."""
+    pw = request.query_params.get("password", "")
+    if not _check_password(pw):
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+    data = await request.json()
+    conn = get_sync_connection()
+    try:
+        row = update_alarm_catalog(conn, pv, data, changed_by="web")
+    finally:
+        conn.close()
+    if not row:
+        return JSONResponse({"error": "PV not found"}, status_code=404)
+    return {"ok": True, "item": dict(row)}
+
+
 @app.get("/api/fault-types")
 async def api_fault_types():
     """JSON endpoint: list of fault types with counts."""
@@ -589,8 +1038,9 @@ async def api_delete_event(event_id: str, request: Request):
         deleted = delete_event_db(conn, event_id)
         if not deleted:
             return JSONResponse({"error": "Event not found"}, status_code=404)
-        # Also clean up merged and results files
+        # Also clean up merged/results files and uploaded attachments
         _cleanup_event_files(event_id)
+        _cleanup_event_attachments(event_id)
         return {"ok": True, "message": f"Event {event_id} deleted"}
     finally:
         conn.close()

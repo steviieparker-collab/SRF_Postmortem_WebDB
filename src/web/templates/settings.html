@@ -65,6 +65,16 @@
                 <div class="mb-1"><small class="text-secondary">Mode:</small> <span id="status-mode">{{ pipeline_status.mode or "-" }}</span></div>
                 <div class="mb-1"><small class="text-secondary">Progress:</small> <span id="status-progress">{{ pipeline_status.progress or "-" }}</span></div>
                 <div class="mb-1"><small class="text-secondary">Started:</small> <span id="status-started">{{ pipeline_status.started_at or "-" }}</span></div>
+                <div class="mb-1 d-flex align-items-center gap-2 flex-wrap">
+                    <small class="text-secondary">Alarm Monitor:</small>
+                    <span id="alarm-monitor-status">-</span>
+                    <button class="btn btn-sm btn-outline-success py-0" onclick="alarmMonitorAction('start')">Start</button>
+                    <button class="btn btn-sm btn-outline-danger py-0" onclick="alarmMonitorAction('stop')">Stop</button>
+                </div>
+                <div class="small text-secondary mb-1">
+                    알람 모니터는 postmortem과 함께 자동 시작/종료됩니다.
+                    Start Monitor는 CSV 파이프라인만 제어합니다.
+                </div>
                 <div class="log-box mt-2" id="status-log"><div class="log-entry text-secondary">Pipeline idle.</div></div>
             </div>
         </div>
@@ -403,8 +413,36 @@ function saveYamlConfig() {
 function reloadYaml() { api('/api/config').then(r=>r.json()).then(d=>{if(d.yaml)document.getElementById('config-yaml').value=d.yaml;}); }
 function resetServer() { api('/api/pipeline/reset',{method:'POST'}).then(r=>r.json()).then(d=>{const m=document.getElementById('yaml-save-msg');m.textContent=d.ok?'✅ Reloaded':'❌ '+(d.error||'');m.className=d.ok?'text-success':'text-danger';if(d.ok)setTimeout(()=>m.textContent='',3000);reloadYaml();}); }
 
+function alarmMonitorAction(action) {
+    api('/api/alarm/monitor/' + action, {method: 'POST'})
+        .then(r => r.json())
+        .then(d => {
+            if (!d.ok) alert('Alarm monitor ' + action + ' failed: ' + (d.error || 'unknown error'));
+            pollAlarmStatus();
+        })
+        .catch(e => alert('Alarm monitor ' + action + ' failed: ' + e));
+}
+
+function pollAlarmStatus() {
+    api('/api/alarm/monitor/status').then(r=>r.json()).then(s=>{
+        const el = document.getElementById('alarm-monitor-status');
+        if (!el) return;
+        if (s.running) {
+            el.innerHTML = '<span class="text-success">Running</span>' +
+                ' <span class="text-secondary small">pid ' + (s.pid || '-') +
+                ' · ' + (s.connected_count || 0) + '/' + (s.pv_count || 0) + ' PV' +
+                ' · heartbeat ' + (s.last_heartbeat || '-') + '</span>';
+        } else {
+            el.innerHTML = '<span class="text-secondary">Stopped</span>' +
+                (s.error ? ' <span class="text-danger small">' + s.error + '</span>' : '');
+        }
+    }).catch(function(){});
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     pollStatus();
+    pollAlarmStatus();
+    setInterval(pollAlarmStatus, 5000);
     loadAppendDirs();
 });
 </script>

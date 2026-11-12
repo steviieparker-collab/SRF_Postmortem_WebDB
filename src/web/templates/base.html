@@ -16,7 +16,7 @@
                 <i class="bi bi-lightning-charge-fill text-warning me-2"></i>
                 <strong>SRF Postmortem WebDB</strong>
             </a>
-            <div class="d-flex align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
                 <!-- 오늘 조회수 -->
                 <span id="today-views-badge" class="badge bg-dark d-flex align-items-center gap-1" style="font-weight:400;font-size:.72rem;border:1px solid #30363d;">
                     <i class="bi bi-eye" style="font-size:.75rem;"></i>
@@ -26,12 +26,15 @@
                     <span id="status-dot" style="width:8px;height:8px;border-radius:50%;background:#666;"></span>
                     <span id="status-label">Idle</span>
                 </span>
+                <a href="/alarm-dashboard" class="btn btn-sm btn-outline-secondary" title="Alarm Dashboard">
+                    <i class="bi bi-bell-fill"></i> <span class="d-none d-sm-inline">Alarms</span>
+                </a>
                 <a href="/stats" class="btn btn-sm btn-outline-secondary" title="Statistics">
-                    <i class="bi bi-bar-chart-fill"></i> Stats
+                    <i class="bi bi-bar-chart-fill"></i> <span class="d-none d-sm-inline">Stats</span>
                 </a>
                 <a href="#" class="btn btn-sm btn-outline-secondary" title="Pipeline Control"
                    onclick="var pw=prompt('Enter password:');if(pw)location.href='/settings?password='+encodeURIComponent(pw);return false;">
-                    <i class="bi bi-gear-fill"></i> Settings
+                    <i class="bi bi-gear-fill"></i> <span class="d-none d-sm-inline">Settings</span>
                 </a>
             </div>
         </div>
@@ -63,8 +66,8 @@
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
     {% block extra_scripts %}{% endblock %}
     <script>
-    // Pipeline status poller (every 5s)
-    setInterval(function() {
+    // Pipeline status poller (immediately, then every 5s)
+    function pollPipelineStatus() {
         fetch('/api/pipeline/status')
             .then(function(r) { return r.json(); })
             .then(function(d) {
@@ -86,7 +89,9 @@
                 dot.style.background = '#d32f2f';
                 document.getElementById('status-label').textContent = 'Error';
             });
-    }, 5000);
+    }
+    pollPipelineStatus();
+    setInterval(pollPipelineStatus, 5000);
 
     // Today views poller (every 30s)
     setInterval(function() {

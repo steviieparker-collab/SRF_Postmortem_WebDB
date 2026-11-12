@@ -494,6 +494,15 @@ def _import_one_file(
 
     try:
         create_event(conn, event)
+        # Alarm snapshot is best-effort; a failure must not lose the event.
+        try:
+            from .alarm.event_link import attach_event_alarms
+            attach_event_alarms(conn, event.id, event.timestamp)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Alarm snapshot failed for %s: %s", event.id, exc
+            )
         return {
             "file": fp.name,
             "event_id": event_id,

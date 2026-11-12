@@ -270,6 +270,61 @@
         </div>
     </div>
 
+    <!-- Alarm Messages & PV -->
+    <div class="row g-2 mb-3">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header py-1 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <strong><i class="bi bi-bell-fill text-warning"></i> Alarm Messages &amp; PV</strong>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-secondary" id="alarm-status">loading…</span>
+                        <a href="/events/{{ event.id }}/pv-explorer"
+                           class="btn btn-sm btn-outline-info py-0" id="alarm-explorer-link">PV Explorer</a>
+                    </div>
+                </div>
+                <div class="card-body py-2">
+                    <div class="row g-3">
+                        <div class="col-lg-5">
+                            <div class="small text-secondary mb-1">
+                                덤프 t0 기준 <strong>-60s ~ +10s</strong>에 발생한 알람
+                            </div>
+                            <div class="table-responsive" style="max-height:380px;overflow-y:auto;">
+                                <table class="table table-sm table-dark table-borderless align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:90px">시각</th>
+                                            <th style="width:70px">Subsystem</th>
+                                            <th>알람</th>
+                                            <th style="width:230px">PV</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="alarm-rows">
+                                        <tr><td colspan="4" class="text-secondary small py-3">loading…</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="small text-secondary mt-2" id="alarm-hint"></div>
+                        </div>
+                        <div class="col-lg-7">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <div class="small text-secondary">
+                                    0초 = 빔전류 하강 시작 · Archiver 초 단위
+                                </div>
+                                <button class="btn btn-sm btn-outline-secondary py-0"
+                                        onclick="openAlarmPvModal()">
+                                    <i class="bi bi-plus-lg"></i> Add PV
+                                </button>
+                            </div>
+                            <div id="alarm-charts">
+                                <div class="text-secondary small p-2">알람 그래프를 불러오는 중…</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Attachments Section -->
     <div class="row g-2 mb-3">
         <div class="col-md-12">
@@ -290,6 +345,45 @@
                         Loading attachments...
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add PV modal -->
+<div class="modal fade" id="alarm-pv-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title"><i class="bi bi-plus-circle me-1"></i> Add PV to compare</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2 mb-2">
+                    <div class="col-md-3">
+                        <label class="form-label small mb-0">Class</label>
+                        <select id="alarm-pv-class" class="form-select form-select-sm"></select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-0">Sub</label>
+                        <select id="alarm-pv-sub" class="form-select form-select-sm"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small mb-0">Filter</label>
+                        <input id="alarm-pv-filter" class="form-control form-control-sm"
+                               placeholder="PV / description">
+                    </div>
+                </div>
+                <select id="alarm-pv-select" class="form-select form-select-sm mb-2" size="8"></select>
+                <button type="button" class="btn btn-sm btn-outline-info mb-3" onclick="addAlarmPv()">
+                    <i class="bi bi-plus-lg"></i> Add selected PV
+                </button>
+                <div class="small text-secondary mb-1">선택된 PV (최대 8개)</div>
+                <div id="alarm-selected-pvs" class="border border-secondary rounded p-2 small">없음</div>
+                <div id="alarm-pv-status" class="small mt-2"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -568,6 +662,301 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Load attachments
     loadAttachments();
+});
+</script>
+<script>
+// ── Alarm Messages & PV ─────────────────────────────────────
+const ALARM_EVENT_ID = '{{ event.id }}';
+const ALARM_MAX_PVS = 8;
+
+let alarmDoc = null;
+let alarmSeriesMap = {};
+let alarmSelectedPvs = [];
+let alarmHierarchy = null;
+let alarmPvList = [];
+
+function alarmEsc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+}
+async function alarmJget(url) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+}
+
+function alarmTimeLabel(item) {
+    if (item.active_at_start && Number(item.first_seen_rel) < -60) return '≤ -60s';
+    return `${Number(item.first_seen_rel).toFixed(1)}s`;
+}
+
+function renderAlarmTable(doc) {
+    const tbody = document.getElementById('alarm-rows');
+    const status = document.getElementById('alarm-status');
+    const hint = document.getElementById('alarm-hint');
+    const items = doc.items || [];
+    if (!doc.available) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-secondary small py-3">알람 데이터 없음 (모니터 시작 전 이벤트)</td></tr>';
+        status.className = 'badge bg-secondary';
+        status.textContent = 'no data';
+        hint.textContent = doc.reason || '';
+        return;
+    }
+    if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-secondary small py-3">이 구간에 발생한 알람 없음</td></tr>';
+        status.className = 'badge bg-secondary';
+        status.textContent = 'no alarms';
+    } else {
+        status.className = 'badge bg-danger';
+        status.textContent = `${items.length} alarms`;
+        tbody.innerHTML = items.map(it => `
+            <tr class="alarm-row" data-pv="${alarmEsc(it.pv)}" style="cursor:pointer">
+                <td class="small">${alarmTimeLabel(it)}
+                    ${it.active_at_start ? '<span class="badge bg-warning text-dark ms-1">이미 활성</span>' : ''}</td>
+                <td><span class="badge bg-dark border border-secondary">${alarmEsc(it.subsystem)}</span></td>
+                <td>${alarmEsc(it.description)}</td>
+                <td class="font-monospace" style="font-size:.7rem">${alarmEsc(it.pv)}</td>
+            </tr>`).join('');
+        tbody.querySelectorAll('.alarm-row').forEach(tr => {
+            tr.addEventListener('click', () => {
+                const item = (alarmDoc.items || []).find(x => x.pv === tr.dataset.pv);
+                highlightAlarmPvs(item ? item.graph_pv : []);
+            });
+        });
+    }
+    const t0 = Number(doc.t0_offset_sec || 0);
+    hint.textContent = `0초 = 빔전류 하강 시작 (이벤트 기준 ${(-t0).toFixed(2)}s) · Archiver는 초 단위`
+        + (doc.source === 'backfill' ? ' · 알람 시각은 Archiver 데이터로 복원(backfill)' : '');
+}
+
+function highlightAlarmPvs(pvs) {
+    const set = new Set(pvs || []);
+    const cards = [...document.querySelectorAll('#alarm-charts .alarm-chart-card')];
+    cards.forEach(c => c.classList.toggle('border-info', set.has(c.dataset.pv)));
+    const el = cards.find(c => set.has(c.dataset.pv));
+    if (el) el.scrollIntoView({behavior: 'smooth', block: 'center'});
+}
+
+function alarmChartCard(pv, entry, items) {
+    const id = 'alarm-plot-' + pv.replace(/[^A-Za-z0-9_-]/g, '_');
+    const desc = entry.description || pv;
+    const res = entry.resolution_s;
+    const has = entry.points && entry.points.length;
+    return `<div class="card mb-2 alarm-chart-card" data-pv="${alarmEsc(pv)}">
+        <div class="card-header py-1 d-flex justify-content-between align-items-center">
+            <span><strong>${alarmEsc(desc)}</strong>
+                  <span class="text-secondary font-monospace small ms-1">${alarmEsc(pv)}</span></span>
+            <span class="badge ${has ? 'bg-success' : 'bg-secondary'}">${has ? 'data' : 'no data'}</span>
+        </div>
+        <div class="card-body p-1">
+            <div id="${id}" style="height:220px;"></div>
+            ${res ? `<div class="small text-secondary px-2 pb-1">archiver resolution ~${res}s</div>` : ''}
+        </div>
+    </div>`;
+}
+
+function plotAlarmChart(pv, entry, items) {
+    const id = 'alarm-plot-' + pv.replace(/[^A-Za-z0-9_-]/g, '_');
+    const el = document.getElementById(id);
+    if (!el) return;
+    const pts = entry.points || [];
+    if (!pts.length) {
+        el.innerHTML = '<div class="text-secondary small p-2">이 PV의 데이터가 없습니다.</div>';
+        return;
+    }
+    const x = pts.map(p => p[0]);
+    const y = pts.map(p => p[1]);
+    const shapes = [
+        {type:'rect', xref:'x', yref:'paper', x0:-60, x1:0, y0:0, y1:1, fillcolor:'rgba(88,166,255,0.06)', line:{width:0}},
+        {type:'rect', xref:'x', yref:'paper', x0:0, x1:10, y0:0, y1:1, fillcolor:'rgba(248,81,73,0.10)', line:{width:0}},
+        {type:'line', xref:'x', yref:'paper', x0:0, x1:0, y0:0, y1:1, line:{color:'#f85149', width:2, dash:'dash'}},
+    ];
+    const annotations = [];
+    (items || []).filter(it => (it.graph_pv || []).includes(pv)).forEach(it => {
+        const t = Number(it.first_seen_rel);
+        if (t >= -60 && t <= 10) {
+            shapes.push({type:'line', xref:'x', yref:'paper', x0:t, x1:t, y0:0, y1:1,
+                         line:{color:'#d29922', width:1.2, dash:'dot'}});
+            annotations.push({x:t, y:1, yref:'paper', text:'alarm', showarrow:false,
+                              font:{color:'#d29922', size:9}});
+        }
+    });
+    Plotly.newPlot(id, [{x, y, type:'scatter', mode:'lines',
+                         line:{color:'#58a6ff', width:1.4}}], {
+        paper_bgcolor:'#161b22', plot_bgcolor:'#0d1117',
+        font:{color:'#e6edf3', size:10},
+        margin:{l:50,r:15,t:15,b:35},
+        xaxis:{title:'t0 기준 (초)', range:[-60,10], gridcolor:'#30363d', zeroline:false},
+        yaxis:{title:entry.unit || 'value', gridcolor:'#30363d', zeroline:false},
+        shapes, annotations, showlegend:false,
+    }, {responsive:true});
+}
+
+function collectAlarmPvs(doc) {
+    const out = [];
+    const seen = new Set();
+    for (const it of (doc.items || [])) {
+        (it.graph_pv || []).forEach((pv, idx) => {
+            if (seen.has(pv)) return;
+            seen.add(pv);
+            out.push({pv, description: (it.graph_description || [])[idx] || pv});
+        });
+    }
+    return out;
+}
+
+async function loadAlarms() {
+    try {
+        alarmDoc = await alarmJget(`/api/events/${encodeURIComponent(ALARM_EVENT_ID)}/alarms`);
+        renderAlarmTable(alarmDoc);
+        alarmSelectedPvs = collectAlarmPvs(alarmDoc);
+        renderAlarmSelectedPvs();
+        await loadAlarmCharts();
+        updateAlarmExplorerLink();
+    } catch (e) {
+        document.getElementById('alarm-status').className = 'badge bg-danger';
+        document.getElementById('alarm-status').textContent = 'error';
+        document.getElementById('alarm-hint').textContent = String(e);
+    }
+}
+
+async function loadAlarmCharts() {
+    const box = document.getElementById('alarm-charts');
+    if (!alarmSelectedPvs.length) {
+        box.innerHTML = '<div class="text-secondary small p-2">알람에 연결된 그래프 PV가 없습니다.</div>';
+        return;
+    }
+    const pvs = alarmSelectedPvs.map(x => x.pv);
+    let series = {};
+    try {
+        const q = encodeURIComponent(pvs.join(','));
+        const d = await alarmJget(`/api/events/${encodeURIComponent(ALARM_EVENT_ID)}/alarm-series?pvs=${q}`);
+        series = d.series || {};
+    } catch (e) { /* fall back to per-PV fetch below */ }
+
+    for (const item of alarmSelectedPvs) {
+        if (series[item.pv] && series[item.pv].points) continue;
+        try {
+            const d = await alarmJget(`/api/pv-data?event_id=${encodeURIComponent(ALARM_EVENT_ID)}&pv=${encodeURIComponent(item.pv)}&pre=60&post=10`);
+            series[item.pv] = {points: d.points || [], unit: d.unit || '', resolution_s: null};
+        } catch (e) {
+            series[item.pv] = {points: [], error: String(e)};
+        }
+    }
+    alarmSeriesMap = series;
+    box.innerHTML = alarmSelectedPvs.map(item => {
+        const entry = series[item.pv] || {points: []};
+        entry.description = item.description;
+        return alarmChartCard(item.pv, entry, alarmDoc?.items || []);
+    }).join('');
+    for (const item of alarmSelectedPvs) {
+        plotAlarmChart(item.pv, series[item.pv] || {points: []}, alarmDoc?.items || []);
+    }
+}
+
+function renderAlarmSelectedPvs() {
+    const box = document.getElementById('alarm-selected-pvs');
+    if (!alarmSelectedPvs.length) { box.textContent = '없음'; return; }
+    box.innerHTML = alarmSelectedPvs.map((x, i) => `
+        <div class="d-flex justify-content-between align-items-start gap-2 py-1 border-bottom border-dark">
+            <div><span class="badge bg-dark border border-secondary font-monospace">${alarmEsc(x.pv)}</span>
+                 <div class="small text-secondary">${alarmEsc(x.description || '')}</div></div>
+            <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="removeAlarmPv(${i})">×</button>
+        </div>`).join('');
+}
+
+function removeAlarmPv(idx) {
+    alarmSelectedPvs.splice(idx, 1);
+    renderAlarmSelectedPvs();
+    loadAlarmCharts();
+    updateAlarmExplorerLink();
+}
+
+async function loadAlarmHierarchy() {
+    if (alarmHierarchy) return;
+    alarmHierarchy = await alarmJget('/api/pv-hierarchy');
+    const classes = alarmHierarchy?.data?.classes || [];
+    const cs = document.getElementById('alarm-pv-class');
+    cs.innerHTML = classes.map(c => `<option value="${alarmEsc(c.code)}">${alarmEsc(c.name)}</option>`).join('');
+    cs.value = 'SR';
+    cs.onchange = () => { alarmFillSubs(); alarmLoadPvList(); };
+    alarmFillSubs();
+    await alarmLoadPvList();
+}
+
+function alarmFillSubs() {
+    const cls = document.getElementById('alarm-pv-class').value;
+    const subs = (alarmHierarchy?.data?.classSubs || []).filter(s => s.classCode === cls);
+    const ss = document.getElementById('alarm-pv-sub');
+    ss.innerHTML = subs.map(s => `<option value="${alarmEsc(s.code)}">${alarmEsc(s.name)}</option>`).join('');
+    if (subs.some(s => s.code === 'RF_KSU1')) ss.value = 'RF_KSU1';
+    ss.onchange = alarmLoadPvList;
+}
+
+async function alarmLoadPvList() {
+    const cls = document.getElementById('alarm-pv-class').value;
+    const sub = document.getElementById('alarm-pv-sub').value;
+    if (!cls || !sub) return;
+    try {
+        const d = await alarmJget(`/api/pv-list?class=${encodeURIComponent(cls)}&sub=${encodeURIComponent(sub)}`);
+        alarmPvList = d?.data?.items || [];
+    } catch (e) {
+        alarmPvList = [];
+        document.getElementById('alarm-pv-status').textContent = 'PV 목록을 불러오지 못했습니다: ' + e;
+    }
+    alarmRenderPvOptions();
+}
+
+function alarmRenderPvOptions() {
+    const q = document.getElementById('alarm-pv-filter').value.trim().toLowerCase();
+    const sel = document.getElementById('alarm-pv-select');
+    const items = alarmPvList.filter(x =>
+        !q || (x.pvKey || '').toLowerCase().includes(q) ||
+        (x.description || '').toLowerCase().includes(q));
+    sel.innerHTML = items.map(x =>
+        `<option value="${alarmEsc(x.pvKey)}" data-desc="${alarmEsc(x.description || '')}">` +
+        `${alarmEsc(x.pvKey)} — ${alarmEsc(x.description || '')}</option>`).join('');
+}
+
+function openAlarmPvModal() {
+    document.getElementById('alarm-pv-status').textContent = '';
+    renderAlarmSelectedPvs();
+    loadAlarmHierarchy().then(() => {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('alarm-pv-modal')).show();
+    }).catch(e => {
+        document.getElementById('alarm-pv-status').textContent = String(e);
+    });
+}
+
+async function addAlarmPv() {
+    const sel = document.getElementById('alarm-pv-select');
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt) return;
+    const pv = opt.value;
+    if (alarmSelectedPvs.some(x => x.pv === pv)) return;
+    if (alarmSelectedPvs.length >= ALARM_MAX_PVS) {
+        document.getElementById('alarm-pv-status').textContent = `최대 ${ALARM_MAX_PVS}개까지 추가할 수 있습니다.`;
+        return;
+    }
+    alarmSelectedPvs.push({pv, description: opt.dataset.desc || ''});
+    document.getElementById('alarm-pv-status').textContent = '';
+    renderAlarmSelectedPvs();
+    await loadAlarmCharts();
+    updateAlarmExplorerLink();
+}
+
+function updateAlarmExplorerLink() {
+    const pvs = alarmSelectedPvs.map(x => x.pv).slice(0, 5);
+    const link = document.getElementById('alarm-explorer-link');
+    if (!link) return;
+    link.href = `/events/${encodeURIComponent(ALARM_EVENT_ID)}/pv-explorer` +
+        (pvs.length ? `?pvs=${encodeURIComponent(pvs.join(','))}` : '');
+}
+
+document.getElementById('alarm-pv-filter').addEventListener('input', alarmRenderPvOptions);
+document.addEventListener('DOMContentLoaded', () => {
+    loadAlarms();
 });
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

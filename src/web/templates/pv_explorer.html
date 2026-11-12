@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PV Explorer — {{ event.id }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        body { background:#0d1117; color:#e6edf3; font-size:.9rem; }
+        .card { background:#161b22; border-color:#30363d; }
+        .card-header { background:#1c2128; border-bottom:1px solid #30363d; }
+        .form-control, .form-select { background:#0d1117; border-color:#30363d; color:#e6edf3; }
+        .form-control:focus, .form-select:focus { border-color:#58a6ff; box-shadow:0 0 0 .15rem rgba(88,166,255,.3); }
+        .pv-list { max-height:420px; overflow-y:auto; }
+        .pv-row:hover { background:#1c2128; }
+        ::-webkit-scrollbar { width:6px; }
+        ::-webkit-scrollbar-thumb { background:#30363d; border-radius:3px; }
+    </style>
+</head>
+<body>
+<div class="container-fluid py-3">
+    <div class="d-flex align-items-center mb-3 gap-2">
+        <a href="{{ back_url }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i></a>
+        <h5 class="mb-0">{{ event.id }}</h5>
+        <span class="text-secondary">{{ event.timestamp }}</span>
+        <span class="badge bg-info">PV Explorer (test)</span>
+        <div class="ms-auto d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-success" onclick="saveNotes()">
+                <i class="bi bi-save"></i> Save notes
+            </button>
+            <span class="small" id="save-status"></span>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header py-1"><strong>PV selection</strong></div>
+                <div class="card-body py-2">
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><select id="class-select" class="form-select form-select-sm"></select></div>
+                        <div class="col-6"><select id="sub-select" class="form-select form-select-sm"></select></div>
+                    </div>
+                    <input id="pv-search" class="form-control form-control-sm mb-2"
+                           placeholder="description / PV 검색">
+                    <div class="small text-secondary mb-1" id="pv-count"></div>
+                    <div id="pv-list" class="pv-list border border-secondary rounded p-1"></div>
+                </div>
+            </div>
+            <div class="card mt-3">
+                <div class="card-header py-1"><strong>Selected PV</strong></div>
+                <div class="card-body py-2 small" id="selected-list">없음</div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div id="charts"></div>
+            <div class="text-secondary small mt-2">
+                그래프는 BEAM CURRENT가 최대값에서 떨어지는 순간을 0초로 한 −600~+180초 구간입니다.
+                PV별 note를 입력한 뒤 Save notes로 저장하세요.
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const EVENT_ID = '{{ event.id }}';
+let hierarchy = null;
+let currentItems = [];
+let selected = new Map();   // pv -> {pv, description, unit, note}
+const dataCache = new Map();
+
+async function jget(url) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+}
+function safeId(pv) { return pv.replace(/[^A-Za-z0-9_-]/g, '_'); }
+
+async function loadHierarchy() {
+    hierarchy = await jget('/api/pv-hierarchy');
+    const classes = hierarchy?.data?.classes || [];
+    const cs = document.getElementById('class-select');
+    cs.innerHTML = classes.map(c => `<option value="${c.code}">${c.name}</option>`).join('');
+    const sr = classes.find(c => c.code === 'SR');
+    if (sr) cs.value = 'SR';
+    cs.onchange = () => { fillSubs(); loadPvs(); };
+    fillSubs();
+    await loadPvs();
+}
+
+function fillSubs() {
+    const cls = document.getElementById('class-select').value;
+    const subs = (hierarchy?.data?.classSubs || []).filter(s => s.classCode === cls);
+    const ss = document.getElementById('sub-select');
+    ss.innerHTML = subs.map(s => `<option value="${s.code}">${s.name}</option>`).join('');
+    const bs = subs.find(s => s.code === 'Beam Status');
+    if (bs) ss.value = 'Beam Status';
+    ss.onchange = loadPvs;
+}
+
+async function loadPvs() {
+    const cls = document.getElementById('class-select').value;
+    const sub = document.getElementById('sub-select').value;
+    if (!cls || !sub) return;
+    try {
+        const d = await jget(`/api/pv-list?class=${encodeURIComponent(cls)}&sub=${encodeURIComponent(sub)}`);
+        currentItems = d?.data?.items || [];
+        renderPvList();
+    } catch (e) {
+        document.getElementById('pv-list').innerHTML =
+            `<div class="text-danger small p-2">PV 목록을 불러오지 못했습니다: ${e}</div>`;
+    }
+}
+
+function renderPvList() {
+    const q = document.getElementById('pv-search').value.toLowerCase();
+    const items = currentItems.filter(x =>
+        !q || (x.description || '').toLowerCase().includes(q) ||
+        (x.pvKey || '').toLowerCase().includes(q));
+    document.getElementById('pv-count').textContent = `${items.length} / ${currentItems.length} PV`;
+    const box = document.getElementById('pv-list');
+    box.innerHTML = items.map(x => `
+        <label class="d-flex align-items-start gap-2 py-1 px-1 border-bottom border-dark pv-row">
+            <input type="checkbox" class="form-check-input mt-1 pv-check"
+                   data-pv="${x.pvKey}" data-desc="${x.description || ''}" data-unit="${x.unit || ''}"
+                   ${selected.has(x.pvKey) ? 'checked' : ''}>
+            <span>
+                <span class="small">${x.description || x.pvKey}</span>
+                <span class="text-secondary font-monospace d-block" style="font-size:.7rem">${x.pvKey}</span>
+            </span>
+        </label>`).join('');
+    box.querySelectorAll('.pv-check').forEach(cb => cb.onchange = () => togglePv(cb));
+}
+
+async function togglePv(cb) {
+    const pv = cb.dataset.pv;
+    if (cb.checked) {
+        if (selected.size >= 5) {
+            cb.checked = false;
+            alert('최대 5개 PV까지 선택할 수 있습니다.');
+            return;
+        }
+        selected.set(pv, {pv, description: cb.dataset.desc, unit: cb.dataset.unit, note: ''});
+        await ensureData(pv);
+    } else {
+        selected.delete(pv);
+    }
+    renderSelected();
+    await renderCharts();
+}
+
+function removePv(pv) {
+    selected.delete(pv);
+    document.querySelectorAll('.pv-check').forEach(cb => {
+        if (cb.dataset.pv === pv) cb.checked = false;
+    });
+    renderSelected();
+    renderCharts();
+}
+
+async function ensureData(pv) {
+    if (dataCache.has(pv)) return dataCache.get(pv);
+    try {
+        const d = await jget(`/api/pv-data?event_id=${encodeURIComponent(EVENT_ID)}&pv=${encodeURIComponent(pv)}`);
+        dataCache.set(pv, d);
+        return d;
+    } catch (e) {
+        const d = {available: false, reason: String(e)};
+        dataCache.set(pv, d);
+        return d;
+    }
+}
+
+function renderSelected() {
+    const el = document.getElementById('selected-list');
+    if (!selected.size) { el.textContent = '없음'; return; }
+    el.innerHTML = [...selected.values()].map(x => `
+        <div class="d-flex justify-content-between align-items-center py-1">
+            <span><span class="font-monospace">${x.pv}</span><br>
+                  <span class="text-secondary">${x.description || ''}</span></span>
+            <button class="btn btn-sm btn-outline-danger py-0" onclick="removePv('${x.pv}')">×</button>
+        </div>`).join('');
+}
+
+async function renderCharts() {
+    const box = document.getElementById('charts');
+    box.innerHTML = '';
+    for (const item of selected.values()) {
+        const d = await ensureData(item.pv);
+        const card = document.createElement('div');
+        card.className = 'card mb-3';
+        card.innerHTML = `
+            <div class="card-header py-1 d-flex justify-content-between align-items-center">
+                <span>
+                    <strong>${item.description || item.pv}</strong>
+                    <span class="text-secondary font-monospace small ms-2">${item.pv}</span>
+                </span>
+                <span class="badge ${d.available ? 'bg-success' : 'bg-secondary'}">
+                    ${d.available ? 'data' : 'no data'}
+                </span>
+            </div>
+            <div class="card-body py-2">
+                <div id="plot-${safeId(item.pv)}" style="height:260px;"></div>
+                ${d.available && d.t0_offset_sec != null ? `
+                <div class="small text-secondary mt-1">
+                    0초 = 빔전류 최대값 하강 시작 (이벤트 기준 ${Number(d.t0_offset_sec).toFixed(3)}초)
+                </div>` : ''}
+                <textarea class="form-control form-control-sm mt-2 pv-note"
+                          data-pv="${item.pv}" rows="2"
+                          placeholder="이 PV 그래프에 대한 note">${item.note || ''}</textarea>
+            </div>`;
+        box.appendChild(card);
+        card.querySelector('.pv-note').oninput = (e) => { item.note = e.target.value; };
+        if (d.available && d.points && d.points.length) {
+            plotSeries(`plot-${safeId(item.pv)}`, item, d);
+        } else {
+            document.getElementById(`plot-${safeId(item.pv)}`).innerHTML =
+                '<div class="text-secondary small p-2">이 PV의 데이터가 없습니다.</div>';
+        }
+    }
+}
+
+function plotSeries(id, item, d) {
+    const x = d.points.map(p => p[0]);
+    const y = d.points.map(p => p[1]);
+    const shapes = [
+        {type:'rect', xref:'x', yref:'paper', x0:-600, x1:-300, y0:0, y1:1, fillcolor:'rgba(88,166,255,0.08)', line:{width:0}},
+        {type:'rect', xref:'x', yref:'paper', x0:-300, x1:0, y0:0, y1:1, fillcolor:'rgba(210,153,34,0.10)', line:{width:0}},
+        {type:'rect', xref:'x', yref:'paper', x0:0, x1:180, y0:0, y1:1, fillcolor:'rgba(248,81,73,0.10)', line:{width:0}},
+        {type:'line', xref:'x', yref:'paper', x0:0, x1:0, y0:0, y1:1, line:{color:'#f85149', width:2, dash:'dash'}},
+    ];
+    Plotly.newPlot(id,
+        [{x, y, type:'scatter', mode:'lines', line:{color:'#58a6ff', width:1.5}}],
+        {paper_bgcolor:'#161b22', plot_bgcolor:'#0d1117', font:{color:'#e6edf3', size:11},
+         margin:{l:55,r:20,t:20,b:40},
+         xaxis:{title:'빔전류 하강 기준 시간 (초)', gridcolor:'#30363d', zeroline:false},
+         yaxis:{title:d.unit || 'value', gridcolor:'#30363d', zeroline:false},
+         shapes, showlegend:false},
+        {responsive:true});
+}
+
+async function saveNotes() {
+    const items = [...selected.values()].map(x => ({
+        pv: x.pv, description: x.description, unit: x.unit, note: x.note || ''
+    }));
+    const st = document.getElementById('save-status');
+    try {
+        const r = await fetch(`/api/events/${encodeURIComponent(EVENT_ID)}/pv-notes`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({items})
+        });
+        const d = await r.json();
+        if (r.ok) {
+            st.textContent = `✓ saved ${d.saved}`;
+            st.style.color = '#3fb950';
+        } else {
+            st.textContent = '✗ save failed';
+            st.style.color = '#f85149';
+        }
+    } catch (e) {
+        st.textContent = '✗ network error';
+        st.style.color = '#f85149';
+    }
+    setTimeout(() => { st.textContent = ''; }, 3000);
+}
+
+async function loadSaved() {
+    try {
+        const d = await jget(`/api/events/${encodeURIComponent(EVENT_ID)}/pv-notes`);
+        for (const it of (d.items || [])) {
+            selected.set(it.pv, {
+                pv: it.pv, description: it.description || '',
+                unit: it.unit || '', note: it.note || ''
+            });
+        }
+    } catch (e) { /* ignore */ }
+    renderSelected();
+    await renderCharts();
+}
+
+async function addDemoPv(pv, desc, unit, note) {
+    selected.set(pv, {pv, description: desc, unit, note: note || ''});
+    await ensureData(pv);
+    renderSelected();
+    await renderCharts();
+}
+
+document.getElementById('pv-search').addEventListener('input', renderPvList);
+
+(async () => {
+    await loadHierarchy();
+    await loadSaved();
+    const params = new URLSearchParams(location.search);
+
+    // Deep link from the event page's Alarm Messages & PV panel.
+    const pvsParam = params.get('pvs');
+    if (pvsParam) {
+        for (const pv of pvsParam.split(',').map(s => s.trim()).filter(Boolean)) {
+            if (selected.size >= 5) break;
+            if (!selected.has(pv)) await addDemoPv(pv, '', '', '');
+        }
+    }
+
+    if (params.get('demo') === '1' && selected.size === 0) {
+        await addDemoPv('SR:G00:BEAMCURRENT_T', 'SR Beam Current', 'mA', '덤프 시점 전류 하강 확인');
+        await addDemoPv('SR:RF:KSU3:AI48', 'KSU#3-CIR.WatFldw(l/m)', 'L/min', 'KSU3 유량 하강 여부 확인');
+    }
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
