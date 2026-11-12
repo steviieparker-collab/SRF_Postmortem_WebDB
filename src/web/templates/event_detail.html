@@ -305,21 +305,8 @@
                             <div class="small text-secondary mt-2" id="alarm-hint"></div>
                         </div>
                         <div class="col-lg-7">
-                            <div class="d-flex justify-content-between align-items-center mb-1 gap-2 flex-wrap">
-                                <div class="small text-secondary">
-                                    0초 = 빔전류 하강 시작 · Archiver 초 단위
-                                </div>
-                                <div class="d-flex align-items-center gap-2">
-                                    <span class="small" id="alarm-pv-save-status"></span>
-                                    <button class="btn btn-sm btn-outline-success py-0"
-                                            onclick="saveAlarmPvs()">
-                                        <i class="bi bi-save"></i> Save PVs
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-secondary py-0"
-                                            onclick="openAlarmPvModal()">
-                                        <i class="bi bi-plus-lg"></i> Add PV
-                                    </button>
-                                </div>
+                            <div class="small text-secondary mb-1">
+                                0초 = 빔전류 하강 시작 · Archiver 초 단위 · PV 추가/삭제는 PV Explorer에서
                             </div>
                             <div id="alarm-charts">
                                 <div class="text-secondary small p-2">알람 그래프를 불러오는 중…</div>
@@ -351,45 +338,6 @@
                         Loading attachments...
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Add PV modal -->
-<div class="modal fade" id="alarm-pv-modal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header py-2">
-                <h5 class="modal-title"><i class="bi bi-plus-circle me-1"></i> Add PV to compare</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="row g-2 mb-2">
-                    <div class="col-md-3">
-                        <label class="form-label small mb-0">Class</label>
-                        <select id="alarm-pv-class" class="form-select form-select-sm"></select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small mb-0">Sub</label>
-                        <select id="alarm-pv-sub" class="form-select form-select-sm"></select>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label small mb-0">Filter</label>
-                        <input id="alarm-pv-filter" class="form-control form-control-sm"
-                               placeholder="PV / description">
-                    </div>
-                </div>
-                <select id="alarm-pv-select" class="form-select form-select-sm mb-2" size="8"></select>
-                <button type="button" class="btn btn-sm btn-outline-info mb-3" onclick="addAlarmPv()">
-                    <i class="bi bi-plus-lg"></i> Add selected PV
-                </button>
-                <div class="small text-secondary mb-1">선택된 PV (최대 8개)</div>
-                <div id="alarm-selected-pvs" class="border border-secondary rounded p-2 small">없음</div>
-                <div id="alarm-pv-status" class="small mt-2"></div>
-            </div>
-            <div class="modal-footer py-2">
-                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -678,8 +626,6 @@ const ALARM_MAX_PVS = 8;
 let alarmDoc = null;
 let alarmSeriesMap = {};
 let alarmSelectedPvs = [];
-let alarmHierarchy = null;
-let alarmPvList = [];
 
 function alarmEsc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -826,56 +772,12 @@ async function loadSavedAlarmPvs() {
     return false;
 }
 
-let alarmSaveChain = Promise.resolve();
-let alarmSaveStatusTimer = null;
-
-function saveAlarmPvs() {
-    // Capture the selection at call time, then serialize writes so rapid
-    // add/remove clicks cannot leave an older list in the DB.
-    const items = alarmSelectedPvs.map(x => ({
-        pv: x.pv,
-        description: x.description || ''
-    }));
-    const job = async () => {
-        const st = document.getElementById('alarm-pv-save-status');
-        try {
-            const r = await fetch(`/api/events/${encodeURIComponent(ALARM_EVENT_ID)}/pv-selection`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({items})
-            });
-            const d = await r.json();
-            if (st) {
-                if (r.ok) {
-                    st.textContent = `✓ saved ${d.saved}`;
-                    st.style.color = '#3fb950';
-                } else {
-                    st.textContent = '✗ save failed';
-                    st.style.color = '#f85149';
-                }
-            }
-        } catch (e) {
-            if (st) {
-                st.textContent = '✗ network error';
-                st.style.color = '#f85149';
-            }
-        }
-        if (st) {
-            clearTimeout(alarmSaveStatusTimer);
-            alarmSaveStatusTimer = setTimeout(() => { st.textContent = ''; }, 3000);
-        }
-    };
-    alarmSaveChain = alarmSaveChain.then(job, job);
-    return alarmSaveChain;
-}
-
 async function loadAlarms() {
     try {
         alarmDoc = await alarmJget(`/api/events/${encodeURIComponent(ALARM_EVENT_ID)}/alarms`);
         renderAlarmTable(alarmDoc);
         const restored = await loadSavedAlarmPvs();
         if (!restored) alarmSelectedPvs = collectAlarmPvs(alarmDoc);
-        renderAlarmSelectedPvs();
         await loadAlarmCharts();
         updateAlarmExplorerLink();
     } catch (e) {
@@ -919,97 +821,6 @@ async function loadAlarmCharts() {
     }
 }
 
-function renderAlarmSelectedPvs() {
-    const box = document.getElementById('alarm-selected-pvs');
-    if (!alarmSelectedPvs.length) { box.textContent = '없음'; return; }
-    box.innerHTML = alarmSelectedPvs.map((x, i) => `
-        <div class="d-flex justify-content-between align-items-start gap-2 py-1 border-bottom border-dark">
-            <div><span class="badge bg-dark border border-secondary font-monospace">${alarmEsc(x.pv)}</span>
-                 <div class="small text-secondary">${alarmEsc(x.description || '')}</div></div>
-            <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="removeAlarmPv(${i})">×</button>
-        </div>`).join('');
-}
-
-async function removeAlarmPv(idx) {
-    alarmSelectedPvs.splice(idx, 1);
-    renderAlarmSelectedPvs();
-    updateAlarmExplorerLink();
-    await Promise.all([loadAlarmCharts(), saveAlarmPvs()]);
-}
-
-async function loadAlarmHierarchy() {
-    if (alarmHierarchy) return;
-    alarmHierarchy = await alarmJget('/api/pv-hierarchy');
-    const classes = alarmHierarchy?.data?.classes || [];
-    const cs = document.getElementById('alarm-pv-class');
-    cs.innerHTML = classes.map(c => `<option value="${alarmEsc(c.code)}">${alarmEsc(c.name)}</option>`).join('');
-    cs.value = 'SR';
-    cs.onchange = () => { alarmFillSubs(); alarmLoadPvList(); };
-    alarmFillSubs();
-    await alarmLoadPvList();
-}
-
-function alarmFillSubs() {
-    const cls = document.getElementById('alarm-pv-class').value;
-    const subs = (alarmHierarchy?.data?.classSubs || []).filter(s => s.classCode === cls);
-    const ss = document.getElementById('alarm-pv-sub');
-    ss.innerHTML = subs.map(s => `<option value="${alarmEsc(s.code)}">${alarmEsc(s.name)}</option>`).join('');
-    if (subs.some(s => s.code === 'RF_KSU1')) ss.value = 'RF_KSU1';
-    ss.onchange = alarmLoadPvList;
-}
-
-async function alarmLoadPvList() {
-    const cls = document.getElementById('alarm-pv-class').value;
-    const sub = document.getElementById('alarm-pv-sub').value;
-    if (!cls || !sub) return;
-    try {
-        const d = await alarmJget(`/api/pv-list?class=${encodeURIComponent(cls)}&sub=${encodeURIComponent(sub)}`);
-        alarmPvList = d?.data?.items || [];
-    } catch (e) {
-        alarmPvList = [];
-        document.getElementById('alarm-pv-status').textContent = 'PV 목록을 불러오지 못했습니다: ' + e;
-    }
-    alarmRenderPvOptions();
-}
-
-function alarmRenderPvOptions() {
-    const q = document.getElementById('alarm-pv-filter').value.trim().toLowerCase();
-    const sel = document.getElementById('alarm-pv-select');
-    const items = alarmPvList.filter(x =>
-        !q || (x.pvKey || '').toLowerCase().includes(q) ||
-        (x.description || '').toLowerCase().includes(q));
-    sel.innerHTML = items.map(x =>
-        `<option value="${alarmEsc(x.pvKey)}" data-desc="${alarmEsc(x.description || '')}">` +
-        `${alarmEsc(x.pvKey)} — ${alarmEsc(x.description || '')}</option>`).join('');
-}
-
-function openAlarmPvModal() {
-    document.getElementById('alarm-pv-status').textContent = '';
-    renderAlarmSelectedPvs();
-    loadAlarmHierarchy().then(() => {
-        bootstrap.Modal.getOrCreateInstance(document.getElementById('alarm-pv-modal')).show();
-    }).catch(e => {
-        document.getElementById('alarm-pv-status').textContent = String(e);
-    });
-}
-
-async function addAlarmPv() {
-    const sel = document.getElementById('alarm-pv-select');
-    const opt = sel.options[sel.selectedIndex];
-    if (!opt) return;
-    const pv = opt.value;
-    if (alarmSelectedPvs.some(x => x.pv === pv)) return;
-    if (alarmSelectedPvs.length >= ALARM_MAX_PVS) {
-        document.getElementById('alarm-pv-status').textContent = `최대 ${ALARM_MAX_PVS}개까지 추가할 수 있습니다.`;
-        return;
-    }
-    alarmSelectedPvs.push({pv, description: opt.dataset.desc || ''});
-    document.getElementById('alarm-pv-status').textContent = '';
-    renderAlarmSelectedPvs();
-    updateAlarmExplorerLink();
-    await Promise.all([loadAlarmCharts(), saveAlarmPvs()]);
-}
-
 function updateAlarmExplorerLink() {
     const pvs = alarmSelectedPvs.slice(0, ALARM_MAX_PVS);
     const params = new URLSearchParams();
@@ -1023,7 +834,6 @@ function updateAlarmExplorerLink() {
         (pvs.length ? `?${params.toString()}` : '');
 }
 
-document.getElementById('alarm-pv-filter').addEventListener('input', alarmRenderPvOptions);
 document.addEventListener('DOMContentLoaded', () => {
     loadAlarms();
 });
