@@ -17,6 +17,8 @@
         .pv-row:hover { background:#1c2128; }
         ::-webkit-scrollbar { width:6px; }
         ::-webkit-scrollbar-thumb { background:#30363d; border-radius:3px; }
+        .time-range-label { min-width:150px; }
+        .stamp-row { border-bottom:1px solid #21262d; }
     </style>
 </head>
 <body>
@@ -56,10 +58,64 @@
         </div>
 
         <div class="col-md-8">
-            <div id="charts"></div>
-            <div class="text-secondary small mt-2">
-                그래프는 BEAM CURRENT가 최대값에서 떨어지는 순간을 0초로 한 −600~+180초 구간입니다.
-                PV별 note를 입력한 뒤 Save notes로 저장하세요.
+            <div class="card mb-2">
+                <div class="card-body py-2 d-flex flex-wrap align-items-center gap-2">
+                    <span class="small text-secondary">Time axis</span>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Time axis controls">
+                        <button type="button" class="btn btn-outline-secondary" onclick="panTime(-0.25)"
+                                title="왼쪽으로 이동"><i class="bi bi-arrow-left"></i></button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="zoomTime(0.5)"
+                                title="확대"><i class="bi bi-zoom-in"></i></button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="zoomTime(2)"
+                                title="축소"><i class="bi bi-zoom-out"></i></button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="panTime(0.25)"
+                                title="오른쪽으로 이동"><i class="bi bi-arrow-right"></i></button>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-info" onclick="resetTime()">Reset</button>
+                    <span class="small font-monospace text-secondary time-range-label"
+                          id="time-range-label">-600s ~ +200s</span>
+                    <span class="small text-secondary ms-auto">최소 -6s ~ +2s</span>
+                </div>
+            </div>
+
+            <div id="charts">
+                <div class="text-secondary small p-2">PV를 선택하면 그래프가 표시됩니다.</div>
+            </div>
+            <div class="text-secondary small mt-2" id="pv-stack-hint"></div>
+
+            <div class="card mt-3">
+                <div class="card-header py-1"><strong>Integrated note</strong></div>
+                <div class="card-body py-2">
+                    <textarea id="explorer-note" class="form-control form-control-sm" rows="4"
+                              placeholder="이벤트 전체에 대한 note (모든 PV 그래프 공통)"></textarea>
+                    <div class="small text-secondary mt-1">기존 PV별 note는 저장 시 삭제됩니다.</div>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header py-1 d-flex justify-content-between align-items-center">
+                    <strong>Timeline stamps</strong>
+                    <span class="small text-secondary" id="stamp-count"></span>
+                </div>
+                <div class="card-body py-2">
+                    <div class="d-flex flex-wrap gap-2 align-items-end mb-2">
+                        <div>
+                            <label class="form-label small mb-0" for="stamp-x">x (초)</label>
+                            <input id="stamp-x" type="number" step="0.1" class="form-control form-control-sm"
+                                   style="width:110px" placeholder="-0.2">
+                        </div>
+                        <div class="flex-grow-1" style="min-width:180px;">
+                            <label class="form-label small mb-0" for="stamp-text">note</label>
+                            <input id="stamp-text" class="form-control form-control-sm"
+                                   placeholder="예: HVPS trip">
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-warning" onclick="addStamp()">
+                            <i class="bi bi-pin-angle"></i> Add stamp
+                        </button>
+                    </div>
+                    <div class="small text-secondary mb-1">데이터 점을 클릭하면 x 값이 자동으로 입력됩니다.</div>
+                    <div id="stamp-list" class="small text-secondary">아직 스탬프가 없습니다.</div>
+                </div>
             </div>
         </div>
     </div>
@@ -69,15 +125,58 @@
 const EVENT_ID = '{{ event.id }}';
 let hierarchy = null;
 let currentItems = [];
-let selected = new Map();   // pv -> {pv, description, unit, note}
+let selected = new Map();   // pv -> {pv, description, unit}
 const dataCache = new Map();
+
+// ── Time-axis state ───────────────────────────────────
+const FULL_RANGE = { x0: -600, x1: 200 };
+const MIN_SPAN = 8;          // -6s ~ +2s
+const DATA_PRE = 600;
+const DATA_POST = 200;
+let viewRange = { ...FULL_RANGE };
+let renderedPanelCount = 0;
+let renderSeq = 0;
+let stamps = [];
+
+// ── Plot geometry / colors ────────────────────────────
+const PV_PANEL_PX = 190;
+const PV_PANEL_GAP = 18;
+const PV_MARGIN = { l: 70, r: 20, t: 80, b: 48 };
+const PV_COLORS = ['#58a6ff', '#ff922b', '#69db7c', '#da77f2', '#ffd43b'];
+const BG_COLOR = '#161b22';
+const PLOT_BG = '#0d1117';
+const GRID_COLOR = '#21262d';
+const AXIS_COLOR = '#8b949e';
+const BOX_COLOR = '#30363d';
+
+function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+}
 
 async function jget(url) {
     const r = await fetch(url);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.json();
 }
-function safeId(pv) { return pv.replace(/[^A-Za-z0-9_-]/g, '_'); }
+
+// The event page's alarm snapshot pairs graph PVs with their descriptions.
+// Use it to fill descriptions for PVs that arrive without one (deep link).
+async function loadDescriptionMap() {
+    const map = new Map();
+    try {
+        const doc = await jget(`/api/events/${encodeURIComponent(EVENT_ID)}/alarms`);
+        for (const item of (doc.items || [])) {
+            (item.graph_pv || []).forEach((pv, idx) => {
+                const desc = (item.graph_description || [])[idx];
+                if (desc) map.set(pv, desc);
+            });
+            if (item.pv && item.description) map.set(item.pv, item.description);
+        }
+    } catch (e) { /* alarm data is optional */ }
+    return map;
+}
 
 async function loadHierarchy() {
     hierarchy = await jget('/api/pv-hierarchy');
@@ -111,7 +210,7 @@ async function loadPvs() {
         renderPvList();
     } catch (e) {
         document.getElementById('pv-list').innerHTML =
-            `<div class="text-danger small p-2">PV 목록을 불러오지 못했습니다: ${e}</div>`;
+            `<div class="text-danger small p-2">PV 목록을 불러오지 못했습니다: ${escHtml(e)}</div>`;
     }
 }
 
@@ -125,11 +224,12 @@ function renderPvList() {
     box.innerHTML = items.map(x => `
         <label class="d-flex align-items-start gap-2 py-1 px-1 border-bottom border-dark pv-row">
             <input type="checkbox" class="form-check-input mt-1 pv-check"
-                   data-pv="${x.pvKey}" data-desc="${x.description || ''}" data-unit="${x.unit || ''}"
+                   data-pv="${escHtml(x.pvKey)}" data-desc="${escHtml(x.description || '')}"
+                   data-unit="${escHtml(x.unit || '')}"
                    ${selected.has(x.pvKey) ? 'checked' : ''}>
             <span>
-                <span class="small">${x.description || x.pvKey}</span>
-                <span class="text-secondary font-monospace d-block" style="font-size:.7rem">${x.pvKey}</span>
+                <span class="small">${escHtml(x.description || x.pvKey)}</span>
+                <span class="text-secondary font-monospace d-block" style="font-size:.7rem">${escHtml(x.pvKey)}</span>
             </span>
         </label>`).join('');
     box.querySelectorAll('.pv-check').forEach(cb => cb.onchange = () => togglePv(cb));
@@ -143,7 +243,7 @@ async function togglePv(cb) {
             alert('최대 5개 PV까지 선택할 수 있습니다.');
             return;
         }
-        selected.set(pv, {pv, description: cb.dataset.desc, unit: cb.dataset.unit, note: ''});
+        selected.set(pv, {pv, description: cb.dataset.desc || '', unit: cb.dataset.unit || ''});
         await ensureData(pv);
     } else {
         selected.delete(pv);
@@ -164,11 +264,13 @@ function removePv(pv) {
 async function ensureData(pv) {
     if (dataCache.has(pv)) return dataCache.get(pv);
     try {
-        const d = await jget(`/api/pv-data?event_id=${encodeURIComponent(EVENT_ID)}&pv=${encodeURIComponent(pv)}`);
+        const d = await jget(
+            `/api/pv-data?event_id=${encodeURIComponent(EVENT_ID)}` +
+            `&pv=${encodeURIComponent(pv)}&pre=${DATA_PRE}&post=${DATA_POST}`);
         dataCache.set(pv, d);
         return d;
     } catch (e) {
-        const d = {available: false, reason: String(e)};
+        const d = {available: false, reason: String(e), points: []};
         dataCache.set(pv, d);
         return d;
     }
@@ -179,79 +281,322 @@ function renderSelected() {
     if (!selected.size) { el.textContent = '없음'; return; }
     el.innerHTML = [...selected.values()].map(x => `
         <div class="d-flex justify-content-between align-items-center py-1">
-            <span><span class="font-monospace">${x.pv}</span><br>
-                  <span class="text-secondary">${x.description || ''}</span></span>
-            <button class="btn btn-sm btn-outline-danger py-0" onclick="removePv('${x.pv}')">×</button>
+            <span class="me-2">
+                <span class="font-monospace">${escHtml(x.pv)}</span><br>
+                <span class="text-secondary">${escHtml(x.description || '(description 없음)')}</span>
+            </span>
+            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2"
+                    data-remove-pv="${escHtml(x.pv)}">×</button>
         </div>`).join('');
+    el.querySelectorAll('[data-remove-pv]').forEach(btn => {
+        btn.onclick = () => removePv(btn.dataset.removePv);
+    });
 }
 
-async function renderCharts() {
-    const box = document.getElementById('charts');
-    box.innerHTML = '';
-    for (const item of selected.values()) {
-        const d = await ensureData(item.pv);
-        const card = document.createElement('div');
-        card.className = 'card mb-3';
-        card.innerHTML = `
-            <div class="card-header py-1 d-flex justify-content-between align-items-center">
-                <span>
-                    <strong>${item.description || item.pv}</strong>
-                    <span class="text-secondary font-monospace small ms-2">${item.pv}</span>
-                </span>
-                <span class="badge ${d.available ? 'bg-success' : 'bg-secondary'}">
-                    ${d.available ? 'data' : 'no data'}
-                </span>
-            </div>
-            <div class="card-body py-2">
-                <div id="plot-${safeId(item.pv)}" style="height:260px;"></div>
-                ${d.available && d.t0_offset_sec != null ? `
-                <div class="small text-secondary mt-1">
-                    0초 = 빔전류 최대값 하강 시작 (이벤트 기준 ${Number(d.t0_offset_sec).toFixed(3)}초)
-                </div>` : ''}
-                <textarea class="form-control form-control-sm mt-2 pv-note"
-                          data-pv="${item.pv}" rows="2"
-                          placeholder="이 PV 그래프에 대한 note">${item.note || ''}</textarea>
-            </div>`;
-        box.appendChild(card);
-        card.querySelector('.pv-note').oninput = (e) => { item.note = e.target.value; };
-        if (d.available && d.points && d.points.length) {
-            plotSeries(`plot-${safeId(item.pv)}`, item, d);
-        } else {
-            document.getElementById(`plot-${safeId(item.pv)}`).innerHTML =
-                '<div class="text-secondary small p-2">이 PV의 데이터가 없습니다.</div>';
-        }
+// ── Time axis ─────────────────────────────────────────
+function fmtSec(v) {
+    const n = Number(v);
+    return Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : n.toFixed(1);
+}
+
+function updateRangeLabel() {
+    const el = document.getElementById('time-range-label');
+    if (el) el.textContent = `${fmtSec(viewRange.x0)}s ~ ${fmtSec(viewRange.x1)}s`;
+}
+
+function applyViewRange() {
+    updateRangeLabel();
+    const plotDiv = document.getElementById('pv-stack-plot');
+    if (!plotDiv || !plotDiv.data || !renderedPanelCount) return;
+    // xaxis2..xaxisN use matches:'x', so updating the shared axis moves them all.
+    Plotly.relayout(plotDiv, {'xaxis.range': [viewRange.x0, viewRange.x1]});
+}
+
+function zoomTime(factor) {
+    const span = viewRange.x1 - viewRange.x0;
+    if (!isFinite(span) || span <= 0) return;
+    const anchor = (viewRange.x0 <= 0 && 0 <= viewRange.x1)
+        ? 0 : (viewRange.x0 + viewRange.x1) / 2;
+    let n0 = anchor + (viewRange.x0 - anchor) * factor;
+    let n1 = anchor + (viewRange.x1 - anchor) * factor;
+
+    if (n1 - n0 >= FULL_RANGE.x1 - FULL_RANGE.x0) {
+        n0 = FULL_RANGE.x0;
+        n1 = FULL_RANGE.x1;
+    } else if (n1 - n0 < MIN_SPAN) {
+        // Snap exactly to the 8-second minimum, keeping the anchor fixed.
+        const s = MIN_SPAN / (n1 - n0);
+        n0 = anchor + (n0 - anchor) * s;
+        n1 = anchor + (n1 - anchor) * s;
     }
+
+    if (n0 < FULL_RANGE.x0) { n1 += FULL_RANGE.x0 - n0; n0 = FULL_RANGE.x0; }
+    if (n1 > FULL_RANGE.x1) { n0 -= n1 - FULL_RANGE.x1; n1 = FULL_RANGE.x1; }
+    viewRange = {x0: n0, x1: n1};
+    applyViewRange();
 }
 
-function plotSeries(id, item, d) {
-    const x = d.points.map(p => p[0]);
-    const y = d.points.map(p => p[1]);
+function panTime(frac) {
+    const span = viewRange.x1 - viewRange.x0;
+    if (!isFinite(span) || span <= 0) return;
+    const shift = span * frac;
+    let n0 = viewRange.x0 + shift;
+    let n1 = viewRange.x1 + shift;
+    if (n0 < FULL_RANGE.x0) { n1 += FULL_RANGE.x0 - n0; n0 = FULL_RANGE.x0; }
+    if (n1 > FULL_RANGE.x1) { n0 -= n1 - FULL_RANGE.x1; n1 = FULL_RANGE.x1; }
+    viewRange = {x0: n0, x1: n1};
+    applyViewRange();
+}
+
+function resetTime() {
+    viewRange = { ...FULL_RANGE };
+    applyViewRange();
+}
+
+// ── Timeline stamps ───────────────────────────────────
+function renderStampList() {
+    const el = document.getElementById('stamp-list');
+    const countEl = document.getElementById('stamp-count');
+    if (countEl) countEl.textContent = stamps.length ? `${stamps.length} stamps` : '';
+    if (!stamps.length) {
+        el.textContent = '아직 스탬프가 없습니다.';
+        return;
+    }
+    el.innerHTML = stamps.map((s, i) => `
+        <div class="d-flex justify-content-between align-items-center gap-2 py-1 stamp-row">
+            <span class="font-monospace text-warning">${fmtSec(s.x)}s</span>
+            <span class="flex-grow-1">${escHtml(s.text || '')}</span>
+            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2"
+                    data-remove-stamp="${i}">×</button>
+        </div>`).join('');
+    el.querySelectorAll('[data-remove-stamp]').forEach(btn => {
+        btn.onclick = () => removeStamp(Number(btn.dataset.removeStamp));
+    });
+}
+
+function addStamp() {
+    const xEl = document.getElementById('stamp-x');
+    const textEl = document.getElementById('stamp-text');
+    const raw = (xEl.value || '').trim();
+    const x = Number(raw);
+    if (raw === '' || !isFinite(x)) {
+        alert('x 값을 초 단위 숫자로 입력하세요.');
+        return;
+    }
+    const text = (textEl.value || '').trim();
+    stamps.push({x, text: text || `t=${fmtSec(x)}s`});
+    stamps.sort((a, b) => a.x - b.x);
+    xEl.value = '';
+    textEl.value = '';
+    renderStampList();
+    renderCharts();
+}
+
+function removeStamp(idx) {
+    stamps.splice(idx, 1);
+    renderStampList();
+    renderCharts();
+}
+
+// ── Stacked PV chart ──────────────────────────────────
+async function renderCharts() {
+    const seq = ++renderSeq;
+    const box = document.getElementById('charts');
+    const hint = document.getElementById('pv-stack-hint');
+    const items = [...selected.values()];
+
+    if (!items.length) {
+        renderedPanelCount = 0;
+        box.innerHTML = '<div class="text-secondary small p-2">PV를 선택하면 그래프가 표시됩니다.</div>';
+        hint.textContent = '';
+        return;
+    }
+
+    box.innerHTML = '<div class="text-secondary small p-2">그래프를 불러오는 중…</div>';
+    const datas = await Promise.all(items.map(it => ensureData(it.pv)));
+    if (seq !== renderSeq) return;
+
+    // Fill units from the archiver metadata when the PV list did not have one.
+    items.forEach((it, i) => {
+        const d = datas[i] || {};
+        if (!it.unit && d.unit) it.unit = d.unit;
+    });
+
+    const count = items.length;
+    const plotArea = count * PV_PANEL_PX + (count - 1) * PV_PANEL_GAP;
+    const height = plotArea + PV_MARGIN.t + PV_MARGIN.b;
+
+    const slots = [];
+    let cursor = plotArea;
+    for (let i = 0; i < count; i++) {
+        const bottom = cursor - PV_PANEL_PX;
+        slots.push({
+            item: items[i],
+            data: datas[i] || {},
+            domain: [bottom / plotArea, cursor / plotArea],
+            xId: i === 0 ? 'x' : `x${i + 1}`,
+            yId: i === 0 ? 'y' : `y${i + 1}`,
+        });
+        cursor = bottom - PV_PANEL_GAP;
+    }
+
+    box.innerHTML = '<div class="card"><div class="card-body p-1">' +
+        '<div id="pv-stack-plot"></div></div></div>';
+    const plotDiv = document.getElementById('pv-stack-plot');
+    plotDiv.style.height = height + 'px';
+    renderedPanelCount = count;
+
+    const traces = [];
     const shapes = [
-        {type:'rect', xref:'x', yref:'paper', x0:-600, x1:-300, y0:0, y1:1, fillcolor:'rgba(88,166,255,0.08)', line:{width:0}},
-        {type:'rect', xref:'x', yref:'paper', x0:-300, x1:0, y0:0, y1:1, fillcolor:'rgba(210,153,34,0.10)', line:{width:0}},
-        {type:'rect', xref:'x', yref:'paper', x0:0, x1:180, y0:0, y1:1, fillcolor:'rgba(248,81,73,0.10)', line:{width:0}},
-        {type:'line', xref:'x', yref:'paper', x0:0, x1:0, y0:0, y1:1, line:{color:'#f85149', width:2, dash:'dash'}},
+        {type:'rect', xref:'x', yref:'paper', x0: FULL_RANGE.x0, x1: 0,
+         y0:0, y1:1, fillcolor:'rgba(88,166,255,0.07)', line:{width:0}},
+        {type:'rect', xref:'x', yref:'paper', x0: 0, x1: FULL_RANGE.x1,
+         y0:0, y1:1, fillcolor:'rgba(248,81,73,0.08)', line:{width:0}},
+        {type:'line', xref:'x', yref:'paper', x0: 0, x1: 0,
+         y0:0, y1:1, line:{color:'#f85149', width:2, dash:'dash'}},
     ];
-    Plotly.newPlot(id,
-        [{x, y, type:'scatter', mode:'lines', line:{color:'#58a6ff', width:1.5}}],
-        {paper_bgcolor:'#161b22', plot_bgcolor:'#0d1117', font:{color:'#e6edf3', size:11},
-         margin:{l:55,r:20,t:20,b:40},
-         xaxis:{title:'빔전류 하강 기준 시간 (초)', gridcolor:'#30363d', zeroline:false},
-         yaxis:{title:d.unit || 'value', gridcolor:'#30363d', zeroline:false},
-         shapes, showlegend:false},
-        {responsive:true});
+    const annotations = [];
+
+    slots.forEach((slot, i) => {
+        const it = slot.item;
+        const d = slot.data;
+        const pts = (d.available && Array.isArray(d.points)) ? d.points : [];
+        const desc = it.description || it.pv;
+        const unit = d.unit || it.unit || '';
+        const label = unit ? `${desc} [${unit}]` : desc;
+
+        // Panel label: description is the primary identifier.
+        annotations.push({
+            xref:'paper', yref:'paper',
+            x: 0.006, y: slot.domain[1] - 0.008,
+            xanchor:'left', yanchor:'top',
+            text: `<b>${escHtml(label)}</b>`,
+            showarrow:false,
+            font:{color:'#e6edf3', size:11},
+            bgcolor:'rgba(13,17,23,0.60)',
+            borderpad:2,
+        });
+
+        if (pts.length) {
+            traces.push({
+                x: pts.map(p => p[0]),
+                y: pts.map(p => p[1]),
+                type:'scatter', mode:'lines',
+                name: desc,
+                line:{color: PV_COLORS[i % PV_COLORS.length], width:1.5},
+                hovertemplate:
+                    `${escHtml(desc)}<br>${escHtml(it.pv)}` +
+                    `<br>t=%{x:.2f}s · %{y:.4f} ${escHtml(unit)}<extra></extra>`,
+                xaxis: slot.xId,
+                yaxis: slot.yId,
+                showlegend:false,
+            });
+        } else {
+            annotations.push({
+                xref:'paper', yref:'paper',
+                x: 0.5, y: (slot.domain[0] + slot.domain[1]) / 2,
+                text:'no data', showarrow:false,
+                font:{color:'#8b949e', size:11},
+            });
+        }
+    });
+
+    // Full-height vertical lines + ribbon labels above the panels.
+    stamps.forEach((s, i) => {
+        const x = Number(s.x);
+        if (!isFinite(x)) return;
+        shapes.push({
+            type:'line', xref:'x', yref:'paper', x0:x, x1:x, y0:0, y1:1,
+            line:{color:'#d29922', width:1.5, dash:'dot'},
+        });
+        annotations.push({
+            xref:'x', yref:'paper', x:x, y:1.0, yanchor:'bottom',
+            xanchor:'left', align:'left',
+            text: escHtml(s.text || `t=${fmtSec(x)}s`),
+            showarrow:false,
+            bgcolor:'rgba(210,153,34,0.92)',
+            bordercolor:'#d29922', borderwidth:1, borderpad:3,
+            font:{color:'#0d1117', size:10},
+            yshift: (i % 3) * 18,
+        });
+    });
+
+    const layout = {
+        height,
+        paper_bgcolor: BG_COLOR,
+        plot_bgcolor: PLOT_BG,
+        font:{color: AXIS_COLOR, size:11},
+        margin:{...PV_MARGIN},
+        hovermode:'closest',
+        dragmode:false,
+        doubleclick:false,
+        showlegend:false,
+        shapes,
+        annotations,
+    };
+
+    slots.forEach((slot, i) => {
+        const yKey = i === 0 ? 'yaxis' : `yaxis${i + 1}`;
+        const xKey = i === 0 ? 'xaxis' : `xaxis${i + 1}`;
+        layout[yKey] = {
+            domain: slot.domain,
+            anchor: slot.xId,
+            gridcolor: GRID_COLOR,
+            zerolinecolor: BOX_COLOR,
+            color: AXIS_COLOR,
+            automargin:true,
+            showline:true, mirror:true, linecolor:BOX_COLOR, linewidth:1,
+            fixedrange:true,
+        };
+        layout[xKey] = {
+            anchor: slot.yId,
+            gridcolor: GRID_COLOR,
+            zerolinecolor: BOX_COLOR,
+            color: AXIS_COLOR,
+            automargin:true,
+            showline:true, mirror:true, linecolor:BOX_COLOR, linewidth:1,
+            showticklabels: i === count - 1,
+            title: i === count - 1 ? {text:'t0 기준 시간 (초)', font:{size:10}} : {text:''},
+            ...(i === 0 ? {range:[viewRange.x0, viewRange.x1]} : {matches:'x'}),
+        };
+    });
+
+    await Plotly.newPlot(plotDiv, traces, layout, {
+        responsive:true,
+        displayModeBar:false,
+        scrollZoom:false,
+        displaylogo:false,
+    });
+
+    // Clicking anywhere on a trace prefills the stamp x value.
+    plotDiv.on('plotly_click', ev => {
+        const p = (ev.points || [])[0];
+        if (!p || typeof p.x !== 'number') return;
+        const input = document.getElementById('stamp-x');
+        if (input) input.value = Number(p.x).toFixed(2);
+    });
+
+    const firstAvail = datas.find(d => d && d.available && d.t0_offset_sec != null);
+    hint.textContent = firstAvail
+        ? `0초 = 빔전류 최대값 하강 시작 (이벤트 기준 ${Number(firstAvail.t0_offset_sec).toFixed(3)}초) · Archiver 초 단위`
+        : '선택한 PV의 데이터가 없습니다.';
 }
 
+// ── Save / load ───────────────────────────────────────
 async function saveNotes() {
     const items = [...selected.values()].map(x => ({
-        pv: x.pv, description: x.description, unit: x.unit, note: x.note || ''
+        pv: x.pv,
+        description: x.description || '',
+        unit: x.unit || '',
     }));
+    const note = document.getElementById('explorer-note')?.value || '';
+    const stampsPayload = stamps.map(s => ({x: Number(s.x), text: String(s.text || '')}));
     const st = document.getElementById('save-status');
     try {
         const r = await fetch(`/api/events/${encodeURIComponent(EVENT_ID)}/pv-notes`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({items})
+            body: JSON.stringify({items, note, stamps: stampsPayload})
         });
         const d = await r.json();
         if (r.ok) {
@@ -268,47 +613,100 @@ async function saveNotes() {
     setTimeout(() => { st.textContent = ''; }, 3000);
 }
 
-async function loadSaved() {
+async function loadSaved(descMap) {
     try {
         const d = await jget(`/api/events/${encodeURIComponent(EVENT_ID)}/pv-notes`);
         for (const it of (d.items || [])) {
             selected.set(it.pv, {
-                pv: it.pv, description: it.description || '',
-                unit: it.unit || '', note: it.note || ''
+                pv: it.pv,
+                description: it.description || descMap.get(it.pv) || '',
+                unit: it.unit || '',
             });
         }
-    } catch (e) { /* ignore */ }
+        const noteEl = document.getElementById('explorer-note');
+        if (noteEl) noteEl.value = d.note || '';
+        stamps = Array.isArray(d.stamps)
+            ? d.stamps
+                .filter(s => s && isFinite(Number(s.x)))
+                .map(s => ({x: Number(s.x), text: String(s.text || '')}))
+            : [];
+        stamps.sort((a, b) => a.x - b.x);
+    } catch (e) { /* no saved notes */ }
+    renderStampList();
     renderSelected();
-    await renderCharts();
 }
 
-async function addDemoPv(pv, desc, unit, note) {
-    selected.set(pv, {pv, description: desc, unit, note: note || ''});
+async function addPv(pv, desc, unit, doRender = true) {
+    if (!selected.has(pv)) {
+        selected.set(pv, {pv, description: desc || '', unit: unit || ''});
+    }
     await ensureData(pv);
-    renderSelected();
-    await renderCharts();
+    if (doRender) {
+        renderSelected();
+        await renderCharts();
+    }
 }
 
+// ── Bootstrap ─────────────────────────────────────────
 document.getElementById('pv-search').addEventListener('input', renderPvList);
+document.getElementById('stamp-text').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); addStamp(); }
+});
 
 (async () => {
-    await loadHierarchy();
-    await loadSaved();
+    updateRangeLabel();
+    const descMap = await loadDescriptionMap();
+
+    try {
+        await loadHierarchy();
+    } catch (e) {
+        document.getElementById('pv-list').innerHTML =
+            `<div class="text-danger small p-2">PV hierarchy를 불러오지 못했습니다: ${escHtml(e)}</div>`;
+    }
+
+    await loadSaved(descMap);
+    if (currentItems.length) renderPvList();
+
     const params = new URLSearchParams(location.search);
 
-    // Deep link from the event page's Alarm Messages & PV panel.
-    const pvsParam = params.get('pvs');
-    if (pvsParam) {
-        for (const pv of pvsParam.split(',').map(s => s.trim()).filter(Boolean)) {
+    // Deep link from the event page's Alarm Messages & PV panel. New links
+    // carry a description per PV; the comma-separated `pvs` form is legacy.
+    const pvParams = params.getAll('pv');
+    const descParams = params.getAll('desc');
+    if (pvParams.length) {
+        for (let i = 0; i < pvParams.length; i++) {
+            const pv = pvParams[i].trim();
+            if (!pv) continue;
             if (selected.size >= 5) break;
-            if (!selected.has(pv)) await addDemoPv(pv, '', '', '');
+            if (!selected.has(pv)) {
+                await addPv(pv, descParams[i] || descMap.get(pv) || '', '', false);
+            }
+        }
+    } else {
+        const pvsParam = params.get('pvs');
+        if (pvsParam) {
+            for (const pv of pvsParam.split(',').map(s => s.trim()).filter(Boolean)) {
+                if (selected.size >= 5) break;
+                if (!selected.has(pv)) {
+                    await addPv(pv, descMap.get(pv) || '', '', false);
+                }
+            }
         }
     }
 
     if (params.get('demo') === '1' && selected.size === 0) {
-        await addDemoPv('SR:G00:BEAMCURRENT_T', 'SR Beam Current', 'mA', '덤프 시점 전류 하강 확인');
-        await addDemoPv('SR:RF:KSU3:AI48', 'KSU#3-CIR.WatFldw(l/m)', 'L/min', 'KSU3 유량 하강 여부 확인');
+        await addPv('SR:G00:BEAMCURRENT_T', 'SR Beam Current', 'mA', false);
+        await addPv('SR:RF:KSU3:AI48', 'KSU#3-CIR.WatFldw(l/m)', 'L/min', false);
     }
+
+    // Anything still missing a description gets one from the alarm mapping.
+    for (const it of selected.values()) {
+        if (!it.description) it.description = descMap.get(it.pv) || '';
+    }
+
+    if (currentItems.length) renderPvList();
+    renderSelected();
+    await renderCharts();
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

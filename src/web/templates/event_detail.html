@@ -295,11 +295,10 @@
                                             <th style="width:90px">시각</th>
                                             <th style="width:70px">Subsystem</th>
                                             <th>알람</th>
-                                            <th style="width:230px">PV</th>
                                         </tr>
                                     </thead>
                                     <tbody id="alarm-rows">
-                                        <tr><td colspan="4" class="text-secondary small py-3">loading…</td></tr>
+                                        <tr><td colspan="3" class="text-secondary small py-3">loading…</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -697,14 +696,14 @@ function renderAlarmTable(doc) {
     const hint = document.getElementById('alarm-hint');
     const items = doc.items || [];
     if (!doc.available) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-secondary small py-3">알람 데이터 없음 (모니터 시작 전 이벤트)</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="3" class="text-secondary small py-3">알람 데이터 없음 (모니터 시작 전 이벤트)</td></tr>';
         status.className = 'badge bg-secondary';
         status.textContent = 'no data';
         hint.textContent = doc.reason || '';
         return;
     }
     if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-secondary small py-3">이 구간에 발생한 알람 없음</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="3" class="text-secondary small py-3">이 구간에 발생한 알람 없음</td></tr>';
         status.className = 'badge bg-secondary';
         status.textContent = 'no alarms';
     } else {
@@ -716,7 +715,6 @@ function renderAlarmTable(doc) {
                     ${it.active_at_start ? '<span class="badge bg-warning text-dark ms-1">이미 활성</span>' : ''}</td>
                 <td><span class="badge bg-dark border border-secondary">${alarmEsc(it.subsystem)}</span></td>
                 <td>${alarmEsc(it.description)}</td>
-                <td class="font-monospace" style="font-size:.7rem">${alarmEsc(it.pv)}</td>
             </tr>`).join('');
         tbody.querySelectorAll('.alarm-row').forEach(tr => {
             tr.addEventListener('click', () => {
@@ -947,11 +945,16 @@ async function addAlarmPv() {
 }
 
 function updateAlarmExplorerLink() {
-    const pvs = alarmSelectedPvs.map(x => x.pv).slice(0, 5);
+    const pvs = alarmSelectedPvs.slice(0, 5);
+    const params = new URLSearchParams();
+    pvs.forEach(x => {
+        params.append('pv', x.pv);
+        params.append('desc', x.description || '');
+    });
     const link = document.getElementById('alarm-explorer-link');
     if (!link) return;
     link.href = `/events/${encodeURIComponent(ALARM_EVENT_ID)}/pv-explorer` +
-        (pvs.length ? `?pvs=${encodeURIComponent(pvs.join(','))}` : '');
+        (pvs.length ? `?${params.toString()}` : '');
 }
 
 document.getElementById('alarm-pv-filter').addEventListener('input', alarmRenderPvOptions);

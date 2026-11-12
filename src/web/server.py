@@ -10,6 +10,7 @@ Provides:
 import datetime as dt
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -855,11 +856,21 @@ async def api_get_pv_notes(event_id: str):
     project_root = Path(__file__).resolve().parent.parent.parent
     path = project_root / "data" / "pv_notes" / f"{event_id}.json"
     if not path.exists():
-        return {"event_id": event_id, "items": []}
+        return {"event_id": event_id, "items": [], "note": "", "stamps": []}
     try:
-        return JSONResponse(json.loads(path.read_text(encoding="utf-8")))
+        doc = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {"event_id": event_id, "items": []}
+        return {"event_id": event_id, "items": [], "note": "", "stamps": []}
+    if not isinstance(doc, dict):
+        doc = {}
+    doc.setdefault("items", [])
+    doc.setdefault("note", "")
+    doc.setdefault("stamps", [])
+    if not isinstance(doc["items"], list):
+        doc["items"] = []
+    if not isinstance(doc["stamps"], list):
+        doc["stamps"] = []
+    return JSONResponse(doc)
 
 
 @app.post("/api/events/{event_id}/pv-notes")
@@ -868,10 +879,31 @@ async def api_save_pv_notes(event_id: str, request: Request):
     project_root = Path(__file__).resolve().parent.parent.parent
     out_dir = project_root / "data" / "pv_notes"
     out_dir.mkdir(parents=True, exist_ok=True)
+    items = data.get("items", [])
+    if not isinstance(items, list):
+        items = []
+
+    stamps = data.get("stamps", [])
+    if not isinstance(stamps, list):
+        stamps = []
+    norm_stamps = []
+    for s in stamps:
+        if not isinstance(s, dict):
+            continue
+        try:
+            x = float(s.get("x"))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(x):
+            continue
+        norm_stamps.append({"x": x, "text": str(s.get("text") or "")})
+
     doc = {
         "event_id": event_id,
         "updated_at": dt.datetime.now(KST).isoformat(timespec="seconds"),
-        "items": data.get("items", []),
+        "items": items,
+        "note": str(data.get("note") or ""),
+        "stamps": norm_stamps,
     }
     (out_dir / f"{event_id}.json").write_text(
         json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
