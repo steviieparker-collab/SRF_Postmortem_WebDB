@@ -74,7 +74,7 @@
                     <button type="button" class="btn btn-sm btn-outline-info" onclick="resetTime()">Reset</button>
                     <span class="small font-monospace text-secondary time-range-label"
                           id="time-range-label">-600s ~ +200s</span>
-                    <span class="small text-secondary ms-auto">최소 -6s ~ +2s</span>
+                    <span class="small text-secondary ms-auto">휠 확대/축소 · 드래그 이동 · 최소 -6s ~ +2s</span>
                 </div>
             </div>
 
@@ -528,7 +528,7 @@ async function renderCharts() {
         font:{color: AXIS_COLOR, size:11},
         margin:{...PV_MARGIN},
         hovermode:'closest',
-        dragmode:false,
+        dragmode:'pan',
         doubleclick:false,
         showlegend:false,
         shapes,
@@ -564,8 +564,29 @@ async function renderCharts() {
     await Plotly.newPlot(plotDiv, traces, layout, {
         responsive:true,
         displayModeBar:false,
-        scrollZoom:false,
+        scrollZoom:true,
         displaylogo:false,
+    });
+
+    // Wheel zoom / drag pan changes the range directly in Plotly; mirror it
+    // back into viewRange so a later re-render keeps the current view.
+    plotDiv.on('plotly_relayout', ev => {
+        let r0 = ev['xaxis.range[0]'];
+        let r1 = ev['xaxis.range[1]'];
+        if (!Number.isFinite(r0) || !Number.isFinite(r1)) {
+            const range = ev['xaxis.range'];
+            if (Array.isArray(range) && range.length === 2) {
+                r0 = range[0];
+                r1 = range[1];
+            }
+        }
+        if (Number.isFinite(r0) && Number.isFinite(r1)) {
+            viewRange = {x0: r0, x1: r1};
+            updateRangeLabel();
+        } else if (ev['xaxis.autorange']) {
+            viewRange = {...FULL_RANGE};
+            updateRangeLabel();
+        }
     });
 
     // Clicking anywhere on a trace prefills the stamp x value.
