@@ -164,6 +164,17 @@ CREATE TABLE IF NOT EXISTS alarm_mapping_history (
     changed_by    TEXT,
     changed_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS event_pv_selection (
+    event_id          TEXT NOT NULL,
+    pv                TEXT NOT NULL,
+    description       TEXT NOT NULL DEFAULT '',
+    position          INTEGER NOT NULL DEFAULT 0,
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (event_id, pv)
+);
+CREATE INDEX IF NOT EXISTS idx_event_pv_selection_event
+    ON event_pv_selection(event_id, position);
 """
 
 

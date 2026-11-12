@@ -851,6 +851,76 @@ async def api_event_alarm_series(event_id: str, pvs: str = Query("")):
     }
 
 
+@app.get("/api/events/{event_id}/pv-selection")
+async def api_get_event_pv_selection(event_id: str):
+    """Saved PV selection for the event page's Alarm Messages & PV panel."""
+    conn = get_sync_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT pv, description
+              FROM event_pv_selection
+             WHERE event_id = ?
+             ORDER BY position, pv
+            """,
+            (event_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    if not rows:
+        return {"event_id": event_id, "saved": False, "items": []}
+    return {
+        "event_id": event_id,
+        "saved": True,
+        "items": [
+            {"pv": r["pv"], "description": r["description"] or ""}
+            for r in rows
+        ],
+    }
+
+
+@app.post("/api/events/{event_id}/pv-selection")
+async def api_save_event_pv_selection(event_id: str, request: Request):
+    """Replace the saved PV selection for one event."""
+    data = await request.json()
+    raw_items = data.get("items", [])
+    if not isinstance(raw_items, list):
+        raw_items = []
+
+    items = []
+    seen = set()
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        pv = str(item.get("pv") or "").strip()
+        if not pv or pv in seen:
+            continue
+        seen.add(pv)
+        items.append((pv, str(item.get("description") or "").strip()))
+    items = items[:50]
+
+    conn = get_sync_connection()
+    try:
+        if not get_event(conn, event_id):
+            return JSONResponse(
+                {"ok": False, "error": "event not found"}, status_code=404)
+        now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+        conn.execute(
+            "DELETE FROM event_pv_selection WHERE event_id = ?", (event_id,))
+        conn.executemany(
+            """
+            INSERT INTO event_pv_selection
+                (event_id, pv, description, position, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [(event_id, pv, desc, i, now) for i, (pv, desc) in enumerate(items)],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True, "saved": len(items)}
+
+
 @app.get("/api/events/{event_id}/pv-notes")
 async def api_get_pv_notes(event_id: str):
     project_root = Path(__file__).resolve().parent.parent.parent
