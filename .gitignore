@@ -46,6 +46,7 @@ data/
 db/backups*/
 **/backups/
 *.bak*
+*.org
 *~
 *_old.*
 *.tar.gz
@@ -65,5 +66,6 @@ logs/
 # IDE
 .idea/
 .vscode/
+.project
 *.swp
 *.swo
