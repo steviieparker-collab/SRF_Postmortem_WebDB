@@ -30,6 +30,7 @@ Desktop.ini
 
 # Data files
 data/
+CSS/
 *.csv
 *.parquet
 *.pq
