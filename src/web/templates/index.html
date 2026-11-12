@@ -231,14 +231,14 @@ footer a:hover { text-decoration: underline; }
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
                             <strong class="text-light event-id">{{ event.id }}</strong>
-                            {% if event.fault_type %}
-                            <span class="badge case-badge-{{ event.fault_type|extract_case_id }} me-1">{{ event.fault_type }}</span>
-                            {% endif %}
-                            {% if event.user_fault_type and event.user_fault_type != event.fault_type %}
-                            <span class="badge case-badge-{{ event.user_fault_type|extract_case_id }} ms-1" title="User override">
+                            {% if event.user_fault_type %}
+                            {# 수동 지정이 있으면 홈 카드에는 그 case 만 표시한다 (상세 페이지는 둘 다 표시). #}
+                            <span class="badge case-badge-{{ event.user_fault_type|extract_case_id }} me-1" title="User override">
                                 <i class="bi bi-pencil"></i> {{ event.user_fault_type }}
                             </span>
-                            {% elif not event.fault_type %}
+                            {% elif event.fault_type %}
+                            <span class="badge case-badge-{{ event.fault_type|extract_case_id }} me-1">{{ event.fault_type }}</span>
+                            {% else %}
                             <span class="badge case-badge-0 me-1">Unknown</span>
                             {% endif %}
                         </div>
