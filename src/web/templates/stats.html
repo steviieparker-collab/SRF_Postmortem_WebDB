@@ -130,31 +130,33 @@
 // Unified case color palette (0-21) — used in all charts and badges.
 // NOTE: keep in sync with `.case-badge-*` in static/css/style.css.
 // Tuned for the dark UI (#0d1117): all colors are light enough to read on
-// dark backgrounds (L* >= 56) while keeping CIEDE2000 distance >= ~12.4.
-// Dark text is used on every colored badge/bar (see CSS and chart textfont).
+// dark backgrounds (L* >= 55) with dark text. The 8 highest-frequency cases
+// (RF_Interlock, MIS, Beam line, MPS, Control, Unknown, Others, Utility) are
+// deliberately spread apart (CIEDE2000 min ~21.5 among them); overall palette
+// minimum distance is ~12.4.
 const CASE_COLORS = [
     '#B3ADA6',  // Case 0  — warm gray (Unknown)
-    '#F05A5F',  // Case 1  — red (Beam_loss)
-    '#DAC68B',  // Case 2  — tan (MPS)
-    '#2CA0ED',  // Case 3  — blue (RF_Interlock)
-    '#ED6F2C',  // Case 4  — orange (MIS)
+    '#DA8B93',  // Case 1  — dusty rose (Beam_loss)
+    '#E3ED2C',  // Case 2  — yellow (MPS)
+    '#F04545',  // Case 3  — red (RF_Interlock)
+    '#EDA92C',  // Case 4  — amber (MIS)
     '#F372F3',  // Case 5  — magenta (PSI)
     '#728CF3',  // Case 6  — periwinkle (Multi same group)
     '#51C8C2',  // Case 7  — teal (Multi different group)
-    '#35E3AF',  // Case 8  — mint (Cavity_blip)
-    '#E3ED2C',  // Case 9  — yellow (Cavity_quench)
+    '#52ED2C',  // Case 8  — green (Cavity_blip)
+    '#ED6F2C',  // Case 9  — orange (Cavity_quench)
     '#E7A87E',  // Case 10 — peach (RF_path_Forward)
     '#A4C851',  // Case 11 — lime (RF_path_Cavity)
-    '#DA8B93',  // Case 12 — dusty pink (Cavity_detune)
-    '#AB8BDA',  // Case 13 — lavender (RF_source_fault)
-    '#8B95A3',  // Case 14 — gray (Utility)
-    '#D5DCE3',  // Case 15 — light gray (Others)
-    '#52ED2C',  // Case 16 — green (Beam line)
-    '#2CC6ED',  // Case 17 — sky blue (Control)
-    '#C2EDF0',  // Case 18 — pale cyan (Kicker)
+    '#F9B9DC',  // Case 12 — pale pink (Cavity_detune)
+    '#8B95A3',  // Case 13 — gray (RF_source_fault)
+    '#AB8BDA',  // Case 14 — lavender (Utility)
+    '#C2EDF0',  // Case 15 — pale cyan (Others)
+    '#35E3AF',  // Case 16 — mint (Beam line)
+    '#2CA0ED',  // Case 17 — blue (Control)
+    '#2CC6ED',  // Case 18 — sky blue (Kicker)
     '#CBC5ED',  // Case 19 — pale lavender (Magnet)
-    '#EDA92C',  // Case 20 — amber (Operator)
-    '#F9B9DC',  // Case 21 — pale pink (MechVac)
+    '#DAC68B',  // Case 20 — tan (Operator)
+    '#D5DCE3',  // Case 21 — light gray (MechVac)
 ];
 
 function caseColor(caseId) {
