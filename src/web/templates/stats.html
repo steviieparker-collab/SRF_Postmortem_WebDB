@@ -129,32 +129,32 @@
 <script>
 // Unified case color palette (0-21) — used in all charts and badges.
 // NOTE: keep in sync with `.case-badge-*` in static/css/style.css.
-// Colors are spread for maximum perceptual distance (CIEDE2000 min ~16.8);
-// the previous Plotly-derived palette had near-identical purples for
-// RF_Interlock/Magnet and similar yellows for Control/Quench.
+// Tuned for the dark UI (#0d1117): all colors are light enough to read on
+// dark backgrounds (L* >= 56) while keeping CIEDE2000 distance >= ~12.4.
+// Dark text is used on every colored badge/bar (see CSS and chart textfont).
 const CASE_COLORS = [
-    '#222222',  // Case 0  — black (Unknown)
-    '#AA181F',  // Case 1  — dark red (Beam_loss)
-    '#9B5527',  // Case 2  — brown (MPS)
-    '#275B9B',  // Case 3  — navy (RF_Interlock)
-    '#D67A1F',  // Case 4  — orange (MIS)
-    '#E444CC',  // Case 5  — magenta (PSI)
-    '#9B2795',  // Case 6  — purple (Multi same group)
-    '#27849B',  // Case 7  — teal-blue (Multi different group)
-    '#279B7E',  // Case 8  — green-teal (Cavity_blip)
-    '#E4CC44',  // Case 9  — yellow (Cavity_quench)
-    '#EB8370',  // Case 10 — salmon (RF_path_Forward)
-    '#44E444',  // Case 11 — bright green (RF_path_Cavity)
-    '#E44474',  // Case 12 — pink-red (Cavity_detune)
-    '#6444E4',  // Case 13 — violet (RF_source_fault)
-    '#6B7280',  // Case 14 — gray (Utility)
-    '#C8CDD2',  // Case 15 — light gray (Others)
-    '#7E9B27',  // Case 16 — olive (Beam line)
-    '#44B4E4',  // Case 17 — sky blue (Control)
-    '#44E4DC',  // Case 18 — cyan (Kicker)
-    '#9A7CDE',  // Case 19 — light violet (Magnet)
-    '#9B7E27',  // Case 20 — dark gold (Operator)
-    '#E9A5C0',  // Case 21 — pale pink (MechVac)
+    '#B3ADA6',  // Case 0  — warm gray (Unknown)
+    '#F05A5F',  // Case 1  — red (Beam_loss)
+    '#DAC68B',  // Case 2  — tan (MPS)
+    '#2CA0ED',  // Case 3  — blue (RF_Interlock)
+    '#ED6F2C',  // Case 4  — orange (MIS)
+    '#F372F3',  // Case 5  — magenta (PSI)
+    '#728CF3',  // Case 6  — periwinkle (Multi same group)
+    '#51C8C2',  // Case 7  — teal (Multi different group)
+    '#35E3AF',  // Case 8  — mint (Cavity_blip)
+    '#E3ED2C',  // Case 9  — yellow (Cavity_quench)
+    '#E7A87E',  // Case 10 — peach (RF_path_Forward)
+    '#A4C851',  // Case 11 — lime (RF_path_Cavity)
+    '#DA8B93',  // Case 12 — dusty pink (Cavity_detune)
+    '#AB8BDA',  // Case 13 — lavender (RF_source_fault)
+    '#8B95A3',  // Case 14 — gray (Utility)
+    '#D5DCE3',  // Case 15 — light gray (Others)
+    '#52ED2C',  // Case 16 — green (Beam line)
+    '#2CC6ED',  // Case 17 — sky blue (Control)
+    '#C2EDF0',  // Case 18 — pale cyan (Kicker)
+    '#CBC5ED',  // Case 19 — pale lavender (Magnet)
+    '#EDA92C',  // Case 20 — amber (Operator)
+    '#F9B9DC',  // Case 21 — pale pink (MechVac)
 ];
 
 function caseColor(caseId) {
@@ -246,7 +246,9 @@ function renderStats(data) {
         values: data.case_stats.map(c => c.count),
         type: 'pie',
         domain: { x: [0.1, 0.9], y: [0.1, 0.9] },
-        textfont: { size: 10 },
+        textposition: 'auto',
+        insidetextfont: { size: 10, color: '#0d1117' },
+        outsidetextfont: { size: 10, color: '#e6edf3' },
         marker: { colors: data.case_stats.map(c => caseColor(c.case_id)) },
         textinfo: 'label+percent',
         hovertemplate: '%{label}<br>%{value} events (%{percent})<extra></extra>',
@@ -378,7 +380,7 @@ function renderHistogram(data, year, bt, hideMs) {
             marker: { color: caseColor(caseId) },
             text: text,
             textposition: 'inside',
-            textfont: { size: 9, color: '#fff' },
+            textfont: { size: 9, color: '#0d1117' },
             customdata: hoverTexts,
             hovertemplate: '%{customdata}<extra></extra>',
         };
