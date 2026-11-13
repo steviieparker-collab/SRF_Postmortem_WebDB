@@ -323,12 +323,14 @@ function renderHistogram(data, year, bt, hideMs) {
         }
     }
     // Stacked bars can be taller than any single trace, so use period totals.
-    // Show at least 100 on the Y axis as requested.
+    // Dynamic Y range: tallest stacked period + 10% headroom.  The old fixed
+    // floor of 100 made small selections unreadable; computing from the
+    // stacked total (not a single trace) still prevents clipping on All years.
     let maxY = 0;
     for (const key in periodTotals) {
         if (periodTotals[key] > maxY) maxY = periodTotals[key];
     }
-    const yMax = Math.max(100, maxY + 10);
+    const yMax = maxY > 0 ? Math.ceil(maxY * 1.1) + 1 : 1;
 
     const layout = {
         paper_bgcolor: '#0d1117',
