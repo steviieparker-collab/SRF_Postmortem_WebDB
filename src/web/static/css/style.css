@@ -117,28 +117,30 @@ body {
 }
 
 /* Case badge colors (matching stats chart palette) */
-.case-badge-0  { background-color: #636efa; }  /* plotly default blue */
-.case-badge-1  { background-color: #ef553b; }  /* plotly red */
-.case-badge-2  { background-color: #00cc96; }  /* plotly teal */
-.case-badge-3  { background-color: #ab63fa; }  /* plotly purple */
-.case-badge-4  { background-color: #ffa15a; }  /* plotly orange */
-.case-badge-5  { background-color: #19d3f3; color: #000; }  /* plotly cyan */
-.case-badge-6  { background-color: #ff6692; }  /* plotly pink */
-.case-badge-7  { background-color: #b6e880; color: #000; }  /* plotly lime */
-.case-badge-8  { background-color: #ff97ff; color: #000; }  /* plotly light magenta */
-.case-badge-9  { background-color: #fecb52; color: #000; }  /* plotly yellow */
-.case-badge-10 { background-color: #8a9fd1; color: #000; }  /* plotly lavender */
-.case-badge-11 { background-color: #6b8e8e; }  /* plotly teal-gray */
-.case-badge-12 { background-color: #c4b0a0; color: #000; }  /* plotly tan */
-.case-badge-13 { background-color: #a1c9f4; color: #000; }  /* plotly light blue */
-.case-badge-14 { background-color: #7c7c7c; }  /* Utility: gray */
-.case-badge-15 { background-color: #d3d3d3; color: #000; }  /* Others: light gray */
-.case-badge-16 { background-color: #50c878; }  /* Beam line: emerald green */
-.case-badge-17 { background-color: #bcbd22; color: #000; }  /* Control: olive */
-.case-badge-18 { background-color: #17becf; color: #000; }  /* Kicker: bright cyan */
-.case-badge-19 { background-color: #9467bd; }  /* Magnet: dark purple */
-.case-badge-20 { background-color: #8c564b; }  /* Operator: brown */
-.case-badge-21 { background-color: #e377c2; color: #000; }  /* MechVac: magenta */
+/* Case colors — keep in sync with CASE_COLORS in templates/stats.html.
+   Palette is spread for maximum perceptual distance (CIEDE2000 min ~16.8). */
+.case-badge-0  { background-color: #222222; color: #fff; }  /* Unknown: black */
+.case-badge-1  { background-color: #AA181F; color: #fff; }  /* Beam_loss: dark red */
+.case-badge-2  { background-color: #9B5527; color: #fff; }  /* MPS: brown */
+.case-badge-3  { background-color: #275B9B; color: #fff; }  /* RF_Interlock: navy */
+.case-badge-4  { background-color: #D67A1F; color: #000; }  /* MIS: orange */
+.case-badge-5  { background-color: #E444CC; color: #000; }  /* PSI: magenta */
+.case-badge-6  { background-color: #9B2795; color: #fff; }  /* Multi same group: purple */
+.case-badge-7  { background-color: #27849B; color: #000; }  /* Multi different group: teal-blue */
+.case-badge-8  { background-color: #279B7E; color: #000; }  /* Cavity_blip: green-teal */
+.case-badge-9  { background-color: #E4CC44; color: #000; }  /* Cavity_quench: yellow */
+.case-badge-10 { background-color: #EB8370; color: #000; }  /* RF_path_Forward: salmon */
+.case-badge-11 { background-color: #44E444; color: #000; }  /* RF_path_Cavity: bright green */
+.case-badge-12 { background-color: #E44474; color: #000; }  /* Cavity_detune: pink-red */
+.case-badge-13 { background-color: #6444E4; color: #fff; }  /* RF_source_fault: violet */
+.case-badge-14 { background-color: #6B7280; color: #fff; }  /* Utility: gray */
+.case-badge-15 { background-color: #C8CDD2; color: #000; }  /* Others: light gray */
+.case-badge-16 { background-color: #7E9B27; color: #000; }  /* Beam line: olive */
+.case-badge-17 { background-color: #44B4E4; color: #000; }  /* Control: sky blue */
+.case-badge-18 { background-color: #44E4DC; color: #000; }  /* Kicker: cyan */
+.case-badge-19 { background-color: #9A7CDE; color: #000; }  /* Magnet: light violet */
+.case-badge-20 { background-color: #9B7E27; color: #000; }  /* Operator: dark gold */
+.case-badge-21 { background-color: #E9A5C0; color: #000; }  /* MechVac: pale pink */
 
 /* Mobile adjustments */
 @media (max-width: 768px) {

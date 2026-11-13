@@ -127,30 +127,34 @@
 </div>
 
 <script>
-// Unified case color palette (0-21) — used in all charts and badges
+// Unified case color palette (0-21) — used in all charts and badges.
+// NOTE: keep in sync with `.case-badge-*` in static/css/style.css.
+// Colors are spread for maximum perceptual distance (CIEDE2000 min ~16.8);
+// the previous Plotly-derived palette had near-identical purples for
+// RF_Interlock/Magnet and similar yellows for Control/Quench.
 const CASE_COLORS = [
-    '#636efa',  // Case 0  — indigo
-    '#ef553b',  // Case 1  — red
-    '#00cc96',  // Case 2  — teal
-    '#ab63fa',  // Case 3  — purple
-    '#ffa15a',  // Case 4  — orange
-    '#19d3f3',  // Case 5  — cyan
-    '#ff6692',  // Case 6  — pink
-    '#b6e880',  // Case 7  — lime
-    '#ff97ff',  // Case 8  — light magenta
-    '#fecb52',  // Case 9  — yellow
-    '#8a9fd1',  // Case 10 — lavender
-    '#6b8e8e',  // Case 11 — teal-gray
-    '#c4b0a0',  // Case 12 — tan
-    '#a1c9f4',  // Case 13 — light blue
-    '#7c7c7c',  // Case 14 — gray (Utility)
-    '#d3d3d3',  // Case 15 — light gray (Others)
-    '#50c878',  // Case 16 — emerald (Beam line)
-    '#bcbd22',  // Case 17 — olive (Control)
-    '#17becf',  // Case 18 — bright cyan (Kicker)
-    '#9467bd',  // Case 19 — dark purple (Magnet)
-    '#8c564b',  // Case 20 — brown (Operator)
-    '#e377c2',  // Case 21 — magenta (MechVac)
+    '#222222',  // Case 0  — black (Unknown)
+    '#AA181F',  // Case 1  — dark red (Beam_loss)
+    '#9B5527',  // Case 2  — brown (MPS)
+    '#275B9B',  // Case 3  — navy (RF_Interlock)
+    '#D67A1F',  // Case 4  — orange (MIS)
+    '#E444CC',  // Case 5  — magenta (PSI)
+    '#9B2795',  // Case 6  — purple (Multi same group)
+    '#27849B',  // Case 7  — teal-blue (Multi different group)
+    '#279B7E',  // Case 8  — green-teal (Cavity_blip)
+    '#E4CC44',  // Case 9  — yellow (Cavity_quench)
+    '#EB8370',  // Case 10 — salmon (RF_path_Forward)
+    '#44E444',  // Case 11 — bright green (RF_path_Cavity)
+    '#E44474',  // Case 12 — pink-red (Cavity_detune)
+    '#6444E4',  // Case 13 — violet (RF_source_fault)
+    '#6B7280',  // Case 14 — gray (Utility)
+    '#C8CDD2',  // Case 15 — light gray (Others)
+    '#7E9B27',  // Case 16 — olive (Beam line)
+    '#44B4E4',  // Case 17 — sky blue (Control)
+    '#44E4DC',  // Case 18 — cyan (Kicker)
+    '#9A7CDE',  // Case 19 — light violet (Magnet)
+    '#9B7E27',  // Case 20 — dark gold (Operator)
+    '#E9A5C0',  // Case 21 — pale pink (MechVac)
 ];
 
 function caseColor(caseId) {
