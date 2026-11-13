@@ -18,7 +18,7 @@ import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Query, Request, UploadFile, File, Form
@@ -1061,6 +1061,85 @@ async def api_alarm_live():
     finally:
         conn.close()
     return {"monitor": monitor, "summary": summary, "states": states}
+
+
+@app.get("/api/alarm/history")
+async def api_alarm_history(
+    limit: int = Query(200, ge=1, le=1000),
+    before_id: Optional[int] = Query(None),
+    state: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+):
+    """Cumulative alarm-transition history, newest first.
+
+    Each row is one recorded transition.  ``event_ids`` is populated when the
+    transition is the exact alarm onset attached to one or more beam-dump
+    events (event_alarms.first_seen_utc), so the dashboard can link to the
+    event page.  Pagination uses the transition id (insertion order).
+    """
+    where: list[str] = []
+    params: list[Any] = []
+    if before_id is not None:
+        where.append("t.id < ?")
+        params.append(before_id)
+    if state and state != "all":
+        where.append("t.state = ?")
+        params.append(state)
+    if q:
+        like = f"%{q}%"
+        where.append("(t.pv LIKE ? OR c.description LIKE ? OR c.subsystem LIKE ?)")
+        params.extend([like, like, like])
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+
+    conn = get_sync_connection()
+    try:
+        total = conn.execute(
+            f"""
+            SELECT COUNT(*)
+              FROM alarm_transitions t
+              LEFT JOIN alarm_pv_catalog c ON c.pv = t.pv
+              {where_sql}
+            """,
+            params,
+        ).fetchone()[0]
+        rows = conn.execute(
+            f"""
+            SELECT t.id, t.pv, t.ts_utc, t.value, t.prev_value,
+                   t.state, t.source,
+                   c.description, c.subsystem,
+                   ea.event_ids
+              FROM alarm_transitions t
+              LEFT JOIN alarm_pv_catalog c ON c.pv = t.pv
+              LEFT JOIN (
+                    SELECT pv, first_seen_utc,
+                           GROUP_CONCAT(DISTINCT event_id) AS event_ids
+                      FROM event_alarms
+                     GROUP BY pv, first_seen_utc
+              ) ea ON ea.pv = t.pv AND ea.first_seen_utc = t.ts_utc
+              {where_sql}
+             ORDER BY t.id DESC
+             LIMIT ?
+            """,
+            params + [limit],
+        ).fetchall()
+    finally:
+        conn.close()
+
+    items = []
+    for r in rows:
+        items.append({
+            "id": r["id"],
+            "pv": r["pv"],
+            "ts_utc": r["ts_utc"],
+            "value": r["value"],
+            "prev_value": r["prev_value"],
+            "state": r["state"],
+            "source": r["source"],
+            "description": r["description"] or r["pv"],
+            "subsystem": r["subsystem"] or "",
+            "event_ids": [x for x in (r["event_ids"] or "").split(",") if x],
+        })
+    return {"items": items, "total": total, "has_more": len(items) == limit}
 
 
 @app.get("/api/alarm/monitor/status")

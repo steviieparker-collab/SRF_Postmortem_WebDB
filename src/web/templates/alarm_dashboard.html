@@ -81,6 +81,11 @@
         </button>
     </li>
     <li class="nav-item">
+        <button class="nav-link" data-tab="history" onclick="switchTab('history')">
+            <i class="bi bi-clock-history"></i> Alarm History
+        </button>
+    </li>
+    <li class="nav-item">
         <button class="nav-link" data-tab="mapping" onclick="switchTab('mapping')">
             <i class="bi bi-diagram-3"></i> PV Mapping
         </button>
@@ -123,6 +128,44 @@
                 </thead>
                 <tbody id="active-alarm-rows"></tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<div id="tab-history" style="display:none">
+    <div class="card">
+        <div class="card-header py-1 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <strong>Alarm History <span class="small text-secondary">누적 기록 · 최신순</span></strong>
+            <div class="d-flex align-items-center gap-2">
+                <select id="history-state" class="form-select form-select-sm" style="width:auto">
+                    <option value="alarm" selected>Alarm</option>
+                    <option value="normal">Normal</option>
+                    <option value="all">All transitions</option>
+                </select>
+                <input id="history-q" class="form-control form-control-sm" style="width:220px"
+                       placeholder="PV / description 검색">
+            </div>
+        </div>
+        <div class="alarm-table-wrap">
+            <table class="table table-sm table-dark table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:170px">발생 시각 (KST)</th>
+                        <th style="width:80px">Subsystem</th>
+                        <th>Description</th>
+                        <th style="width:250px">Alarm PV</th>
+                        <th style="width:80px">State</th>
+                        <th style="width:130px">Value</th>
+                        <th style="width:170px">Event</th>
+                    </tr>
+                </thead>
+                <tbody id="history-rows"></tbody>
+            </table>
+        </div>
+        <div class="card-footer py-2 d-flex justify-content-between align-items-center">
+            <span class="small text-secondary" id="history-count">-</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="history-more"
+                    style="display:none">Load more</button>
         </div>
     </div>
 </div>
@@ -253,7 +296,7 @@
                 </button>
 
                 <div class="mb-3">
-                    <div class="small text-secondary mb-1">Selected graph PV(s) — max 4</div>
+                    <div class="small text-secondary mb-1">Selected graph PV(s) — max 10</div>
                     <div id="selected-pvs" class="border border-secondary rounded p-2 small">없음</div>
                 </div>
 
@@ -317,6 +360,7 @@ const DASH = {
     lampSig: null,
     activeSig: null,
     mappingDirty: true,
+    history: {rows: [], total: 0, loaded: false, loading: false, oldestId: null},
 };
 
 function esc(s) {
@@ -405,7 +449,9 @@ function switchTab(name) {
         b.classList.toggle('active', b.dataset.tab === name);
     });
     document.getElementById('tab-lamps').style.display = name === 'lamps' ? '' : 'none';
+    document.getElementById('tab-history').style.display = name === 'history' ? '' : 'none';
     document.getElementById('tab-mapping').style.display = name === 'mapping' ? '' : 'none';
+    if (name === 'history' && !DASH.history.loaded) loadHistory(true);
     if (name === 'mapping' && DASH.mappingDirty) {
         renderTable();
         DASH.mappingDirty = false;
@@ -515,6 +561,90 @@ function renderTable() {
     if (wrap) wrap.scrollTop = scrollTop;
 }
 
+// ── Alarm history (cumulative) ──────────────────────────────
+function renderHistory() {
+    const rows = DASH.history.rows;
+    const tbody = document.getElementById('history-rows');
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-secondary py-4">기록이 없습니다.</td></tr>';
+    } else {
+        tbody.innerHTML = rows.map(r => {
+            const ev = (r.event_ids || []).map(id =>
+                `<a href="/events/${encodeURIComponent(id)}" ` +
+                `class="badge bg-info text-dark text-decoration-none me-1">${esc(id)}</a>`
+            ).join('') || '<span class="text-secondary">—</span>';
+            const hasPrev = r.prev_value !== null && r.prev_value !== undefined && r.prev_value !== '';
+            const val = hasPrev
+                ? `${esc(r.prev_value)} → ${esc(r.value ?? '')}`
+                : esc(r.value ?? '');
+            return `<tr>
+                <td class="small">${esc(fmtTs(r.ts_utc))}</td>
+                <td><span class="badge bg-dark border border-secondary">${esc(r.subsystem)}</span></td>
+                <td>${esc(r.description)}</td>
+                <td class="font-monospace" style="font-size:.72rem">${esc(r.pv)}</td>
+                <td>${stateBadge(r.state)}</td>
+                <td class="font-monospace small">${val}</td>
+                <td>${ev}</td>
+            </tr>`;
+        }).join('');
+    }
+    document.getElementById('history-count').textContent =
+        `${rows.length} / ${DASH.history.total} records`;
+    document.getElementById('history-more').style.display =
+        rows.length < DASH.history.total ? '' : 'none';
+}
+
+function historyParams(withBefore) {
+    const p = new URLSearchParams();
+    p.set('limit', '200');
+    const st = document.getElementById('history-state').value;
+    if (st && st !== 'all') p.set('state', st);
+    const q = document.getElementById('history-q').value.trim();
+    if (q) p.set('q', q);
+    if (withBefore && DASH.history.oldestId != null) {
+        p.set('before_id', String(DASH.history.oldestId));
+    }
+    return p.toString();
+}
+
+async function loadHistory(reset = false) {
+    if (DASH.history.loading) return;
+    DASH.history.loading = true;
+    try {
+        const d = await jget('/api/alarm/history?' + historyParams(!reset));
+        if (reset) DASH.history.rows = [];
+        const map = new Map(DASH.history.rows.map(r => [r.id, r]));
+        for (const it of (d.items || [])) map.set(it.id, it);
+        DASH.history.rows = [...map.values()].sort((a, b) => b.id - a.id);
+        DASH.history.total = d.total || 0;
+        DASH.history.loaded = true;
+        DASH.history.oldestId = DASH.history.rows.length
+            ? DASH.history.rows[DASH.history.rows.length - 1].id : null;
+        renderHistory();
+    } catch (e) {
+        document.getElementById('history-count').textContent = 'load error: ' + e.message;
+    } finally {
+        DASH.history.loading = false;
+    }
+}
+
+async function refreshHistoryLatest() {
+    if (!DASH.history.loaded || DASH.history.loading) return;
+    DASH.history.loading = true;
+    try {
+        const d = await jget('/api/alarm/history?' + historyParams(false));
+        const map = new Map(DASH.history.rows.map(r => [r.id, r]));
+        for (const it of (d.items || [])) map.set(it.id, it);
+        DASH.history.rows = [...map.values()].sort((a, b) => b.id - a.id);
+        DASH.history.total = d.total || 0;
+        renderHistory();
+    } catch (e) {
+        // Keep the previous rows; the next refresh may recover.
+    } finally {
+        DASH.history.loading = false;
+    }
+}
+
 function renderLiveViews(includeTable = false) {
     renderSummary();
     renderMonitor();
@@ -572,7 +702,10 @@ async function pollLive() {
     }
 }
 
-function reloadAll() { loadState(); }
+function reloadAll() {
+    loadState();
+    if (DASH.history.loaded) loadHistory(true);
+}
 
 // ── Edit modal ──────────────────────────────────────────────
 async function loadHierarchy() {
@@ -742,6 +875,19 @@ document.getElementById('f-q').addEventListener('input', renderTable);
 document.getElementById('edit-pv-filter').addEventListener('input', renderPvOptions);
 document.getElementById('add-pv-btn').addEventListener('click', addSelectedPv);
 document.getElementById('save-btn').addEventListener('click', saveMapping);
+
+document.getElementById('history-state').addEventListener('change', () => loadHistory(true));
+let historySearchTimer = null;
+document.getElementById('history-q').addEventListener('input', () => {
+    clearTimeout(historySearchTimer);
+    historySearchTimer = setTimeout(() => loadHistory(true), 300);
+});
+document.getElementById('history-more').addEventListener('click', () => loadHistory(false));
+setInterval(() => {
+    if (document.getElementById('tab-history').style.display !== 'none') {
+        refreshHistoryLatest();
+    }
+}, 5000);
 
 loadState();
 setInterval(pollLive, 1000);
