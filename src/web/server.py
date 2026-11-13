@@ -237,6 +237,22 @@ def extract_case_id(fault_type: str) -> int:
 
 templates.env.filters["extract_case_id"] = extract_case_id
 
+
+def static_version(rel_path: str) -> str:
+    """Cache-busting token for a static asset, based on its mtime.
+
+    Static files are cached aggressively by browsers/Cloudflare, so a change
+    to style.css may not reach users unless the URL changes. Using mtime keeps
+    the query string in sync automatically (e.g. style.css?v=1762...).
+    """
+    try:
+        return str(int((_static_dir / rel_path).stat().st_mtime))
+    except OSError:
+        return "0"
+
+
+templates.env.globals["static_version"] = static_version
+
 app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 
