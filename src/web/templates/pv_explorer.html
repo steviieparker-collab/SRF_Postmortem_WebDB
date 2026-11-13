@@ -127,7 +127,7 @@ let hierarchy = null;
 let currentItems = [];
 let selected = new Map();   // pv -> {pv, description, unit}
 const dataCache = new Map();
-const MAX_PVS = 8;          // matches the event page's selection limit
+const MAX_PVS = 20;         // matches the event page's alarm-PV chart limit
 
 // ── Time-axis state ───────────────────────────────────
 const FULL_RANGE = { x0: -600, x1: 200 };

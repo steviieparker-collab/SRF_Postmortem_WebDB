@@ -621,7 +621,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <script>
 // ── Alarm Messages & PV ─────────────────────────────────────
 const ALARM_EVENT_ID = '{{ event.id }}';
-const ALARM_MAX_PVS = 8;
+const ALARM_MAX_PVS = 20;
 
 let alarmDoc = null;
 let alarmSeriesMap = {};
@@ -776,8 +776,21 @@ async function loadAlarms() {
     try {
         alarmDoc = await alarmJget(`/api/events/${encodeURIComponent(ALARM_EVENT_ID)}/alarms`);
         renderAlarmTable(alarmDoc);
-        const restored = await loadSavedAlarmPvs();
-        if (!restored) alarmSelectedPvs = collectAlarmPvs(alarmDoc);
+        // This panel shows only PVs assigned to alarms.  Saved PV selections
+        // are a manual PV-Explorer feature; use them only when the event has
+        // no alarm-derived graph PVs at all.
+        const derived = collectAlarmPvs(alarmDoc);
+        if (derived.length) {
+            alarmSelectedPvs = derived.slice(0, ALARM_MAX_PVS);
+            const hint = document.getElementById('alarm-hint');
+            if (derived.length > ALARM_MAX_PVS && hint) {
+                hint.textContent +=
+                    ` · PV 그래프 ${ALARM_MAX_PVS}개 제한으로 ${derived.length - ALARM_MAX_PVS}개 생략`;
+            }
+        } else {
+            const restored = await loadSavedAlarmPvs();
+            if (!restored) alarmSelectedPvs = [];
+        }
         await loadAlarmCharts();
         updateAlarmExplorerLink();
     } catch (e) {
