@@ -274,9 +274,13 @@ function renderStats(data) {
         text: data.fault_stats.map(f => `${f.count} (${((f.count / total) * 100).toFixed(1)}%)`),
         textposition: 'outside',
         textfont: { size: 9 },
-        hovertemplate: '%{customdata}<br>%{y} events (%{customdata2}%)<extra></extra>',
-        customdata: data.fault_stats.map(f => f.fault_type || 'Unknown'),
-        customdata2: data.fault_stats.map(f => ((f.count / total) * 100).toFixed(1)),
+        // Plotly hovertemplate에는 customdata2 같은 이름을 쓸 수 없다.
+        // customdata를 [fault_type, percent] 배열로 넘겨 인덱스로 참조한다.
+        hovertemplate: '%{customdata[0]}<br>%{y} events (%{customdata[1]}%)<extra></extra>',
+        customdata: data.fault_stats.map(f => [
+            f.fault_type || 'Unknown',
+            ((f.count / total) * 100).toFixed(1),
+        ]),
     }];
     // Compute max y for y-axis padding
     const ftMaxY = Math.max(...data.fault_stats.map(f => f.count), 0);
