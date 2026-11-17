@@ -392,6 +392,24 @@ function renderHistogram(data, year, bt, hideMs) {
     // hovermode 변경: 'x unified'는 유지하되, 빈 customdata는 표시 안 함
     layout.hovermode = 'x unified';
 
+    // 빔덤프가 0회인 차수도 알아볼 수 있게 기준선에 '0'을 표시한다.
+    // (막대가 없으면 x축 라벨만으로는 무덤프 차수를 놓치기 쉽다)
+    const zeroPeriods = data.periods.filter((p) => !periodTotals[p]);
+    if (zeroPeriods.length > 0) {
+        traces.push({
+            x: zeroPeriods,
+            y: zeroPeriods.map(() => 0),
+            type: 'scatter',
+            mode: 'text',
+            text: zeroPeriods.map(() => '0'),
+            textposition: 'top center',
+            textfont: { size: 9, color: '#8b949e' },
+            cliponaxis: false,
+            hovertemplate: '0 events (빔덤프 없음)<extra></extra>',
+            showlegend: false,
+        });
+    }
+
     Plotly.newPlot('chart-histogram', traces, layout, { responsive: true, displaylogo: false });
 }
 

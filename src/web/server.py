@@ -1759,6 +1759,30 @@ async def api_get_waveforms(event_id: str):
     }
 
 
+# Canonical user beam-time runs per year (from 유저빔타임_목록).  The events
+# table only contains runs that had at least one event, so a run with zero
+# beam dumps (e.g. 2025-09차 / 2025-17차) would otherwise disappear from the
+# "Fault Type Over Time" chart.  Keep this file in sync with the beam-time
+# master list; runs already present in the DB are always kept even if this
+# file is stale.
+_BEAM_TIMES_FILE = Path(__file__).with_name("beam_times.json")
+
+
+def _load_beam_time_runs() -> dict[str, list[str]]:
+    try:
+        raw = json.loads(_BEAM_TIMES_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {
+        str(year): sorted(str(p) for p in periods)
+        for year, periods in raw.items()
+        if str(year).isdigit() and isinstance(periods, list)
+    }
+
+
+BEAM_TIME_RUNS = _load_beam_time_runs()
+
+
 @app.get("/api/stats/histogram")
 async def api_stats_histogram(
     year: Optional[str] = Query(None),
@@ -1834,6 +1858,15 @@ async def api_stats_histogram(
             data_matrix[period][ft] = cnt
 
         fault_types_sorted = sorted(ft_map.keys())
+
+        # Fill in known runs that had no events at all.  Only when viewing a
+        # whole year: an explicit beam-time filter must not be widened.
+        if year and not user_beam_time:
+            existing = set(periods)
+            for run in BEAM_TIME_RUNS.get(year, []):
+                if run not in existing:
+                    periods.append(run)
+                    existing.add(run)
 
         # Sort periods: years ascending, or by beam time number DESC with MS first
         def sort_key(p):
