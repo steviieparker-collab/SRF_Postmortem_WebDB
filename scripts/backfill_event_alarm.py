@@ -41,7 +41,7 @@ from src.alarm.event_link import (  # noqa: E402
     SERIES_DIR,
     WINDOW_POST_S,
     WINDOW_PRE_S,
-    _fetch_pv_range,
+    fetch_pv_range,
     _split,
     load_alarm_series,
     load_event_alarms,
@@ -164,7 +164,7 @@ def main() -> int:
             fixed_onset = None if args.onset == "auto" else float(args.onset)
             for gpv in graph_pvs:
                 try:
-                    pts, _meta = _fetch_pv_range(gpv, start, end)
+                    pts, _meta = fetch_pv_range(gpv, start, end, ref=base)
                 except Exception as e:  # noqa: BLE001
                     print(f"  {gpv}: archiver error {e}", file=sys.stderr)
                     continue

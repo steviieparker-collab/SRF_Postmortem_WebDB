@@ -16,8 +16,14 @@ from pathlib import Path
 from typing import Any, Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-ARCHIVER_BASE = "https://plsarchiver.postech.ac.kr"
+ARCHIVER_ROOT = "https://plsarchiver.postech.ac.kr"
+ARCHIVER_BASE = ARCHIVER_ROOT  # backwards-compatible alias for the current API
 KST = timezone(timedelta(hours=9))
+
+# The current archiver API only covers data from this point on.  Earlier
+# periods live in per-year legacy viewers (e.g. /2015/data/plotQueryData.php).
+ARCHIVER_CUTOVER = datetime(2025, 9, 18, 9, 0, tzinfo=KST)
+LEGACY_MIN_YEAR = 2015
 
 WINDOW_PRE_S = 60.0
 WINDOW_POST_S = 10.0
@@ -25,13 +31,107 @@ WINDOW_POST_S = 10.0
 SNAPSHOT_DIR = PROJECT_ROOT / "data" / "event_alarms"
 SERIES_DIR = PROJECT_ROOT / "data" / "alarm_series"
 
+# Legacy viewer table names.  The old PHP endpoint needs the subsystem table
+# that owns the PV; the graph PVs in alarm_pv_catalog use these prefixes.
+_LEGACY_TABLE_PREFIXES = (
+    ("SR:RF:KSU1:", "SR_RF_KSU1"),
+    ("SR:RF:KSU2:", "SR_RF_KSU2"),
+    ("SR:RF:KSU3:", "SR_RF_KSU3"),
+    ("SR:RF:CRM1:", "SR_RF_CM1"),
+    ("SR:RF:CRM2:", "SR_RF_CM2"),
+    ("SR:RF:CRM3:", "SR_RF_CM3"),
+    ("SR:RF:CRG", "SR_RF_CRG"),
+    ("SR:RF:LRF", "SR_RF_LLRF"),
+    ("SR:RF:INT_", "SR_RF_MAIN"),
+    ("SR:G00:", "SR_BSTATUS"),
+    ("SR:BEAMDOSE", "SR_BSTATUS"),
+)
+
 
 def _archiver_json(url: str):
     with urllib.request.urlopen(url, timeout=20) as r:
         return json.loads(r.read().decode("utf-8"))
 
 
-def _fetch_pv_range(pv: str, start: datetime, end: datetime):
+def _to_kst(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=KST)
+    return value.astimezone(KST)
+
+
+def archiver_base(ref: Optional[datetime] = None) -> str:
+    """Return the archiver base URL for an event reference time."""
+    if ref is None:
+        return ARCHIVER_ROOT
+    ref = _to_kst(ref)
+    if ref < ARCHIVER_CUTOVER and ref.year >= LEGACY_MIN_YEAR:
+        return f"{ARCHIVER_ROOT}/{ref.year}"
+    return ARCHIVER_ROOT
+
+
+def _legacy_table_for_pv(pv: str) -> Optional[str]:
+    for prefix, table in _LEGACY_TABLE_PREFIXES:
+        if pv.startswith(prefix):
+            return table
+    return None
+
+
+def _legacy_fetch_pv_range(pv: str, start: datetime, end: datetime, year: int):
+    table = _legacy_table_for_pv(pv)
+    if not table:
+        raise ValueError(f"no legacy archiver table mapping for PV: {pv}")
+    body = [
+        ("table[]", f"{table}_PVINFO"),
+        ("table[]", f"{table}_PVDATA"),
+        ("PVs[]", pv),
+        ("prevTime", _to_kst(start).strftime("%Y-%m-%d %H:%M:%S.0")),
+        ("nowTime", _to_kst(end).strftime("%Y-%m-%d %H:%M:%S.0")),
+    ]
+    req = urllib.request.Request(
+        f"{ARCHIVER_ROOT}/{year}/data/plotQueryData.php",
+        data=urllib.parse.urlencode(body).encode("utf-8"),
+        headers={"User-Agent": "Mozilla/5.0"},
+    )
+    with urllib.request.urlopen(req, timeout=40) as r:
+        raw = r.read().decode("utf-8", "replace")
+    if not raw:
+        return [], {}
+    try:
+        d = json.loads(raw)
+    except json.JSONDecodeError:
+        return [], {}
+    times = []
+    for t in d.get("time", []):
+        try:
+            times.append(float(t) / 1000.0)
+        except (TypeError, ValueError):
+            continue
+    keys = [k for k in d if k.startswith("d_")]
+    vals = d.get(keys[0], []) if keys else []
+    pts = []
+    for i, v in enumerate(vals):
+        if i >= len(times):
+            break
+        try:
+            fv = float(v)
+        except (TypeError, ValueError):
+            continue
+        pts.append((times[i], fv))
+    units = d.get("unit", [])
+    return pts, {"unit": units[0] if units else ""}
+
+
+def fetch_pv_range(pv: str, start: datetime, end: datetime,
+                   ref: Optional[datetime] = None):
+    """Fetch a PV range from the current or legacy archiver.
+
+    ``ref`` is the event reference time used to choose the archive period.
+    """
+    ref = ref or start
+    base = archiver_base(ref)
+    if base != ARCHIVER_ROOT:
+        return _legacy_fetch_pv_range(pv, start, end, _to_kst(ref).year)
+
     q = urllib.parse.urlencode({
         "pv": pv,
         "from": start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
@@ -46,6 +146,12 @@ def _fetch_pv_range(pv: str, start: datetime, end: datetime):
     return pts, d.get("meta", {})
 
 
+def _fetch_pv_range(pv: str, start: datetime, end: datetime,
+                    ref: Optional[datetime] = None):
+    """Backwards-compatible wrapper for fetch_pv_range."""
+    return fetch_pv_range(pv, start, end, ref=ref)
+
+
 def resolve_t0(timestamp: str) -> tuple[float, datetime]:
     """Return (t0 offset from the event timestamp, event base in KST).
 
@@ -58,10 +164,11 @@ def resolve_t0(timestamp: str) -> tuple[float, datetime]:
         base = datetime.now(KST)
     t0 = 0.0
     try:
-        pts, _ = _fetch_pv_range(
+        pts, _ = fetch_pv_range(
             "SR:G00:BEAMCURRENT_T",
             base - timedelta(minutes=10),
             base + timedelta(minutes=3),
+            ref=base,
         )
         b = base.timestamp()
         pre = [(t, v) for t, v in pts if b - 600 <= t <= b + 60]

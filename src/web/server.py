@@ -65,6 +65,7 @@ from ..alarm.event_link import (
     load_event_alarms,
     load_alarm_series,
     save_alarm_series,
+    fetch_pv_range,
 )
 
 import threading
@@ -683,16 +684,8 @@ async def api_pv_list(
 _t0_cache = {}
 
 
-def _fetch_pv_range(pv: str, frm, to):
-    q = urllib.parse.urlencode({
-        "pv": pv,
-        "from": frm.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-        "to": to.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-    })
-    d = _archiver_json(f"{ARCHIVER_BASE}/api/v1/retrieval/data?{q}")
-    pts = [(p["secs"] + p.get("nanos", 0) / 1e9, p["val"])
-           for p in d.get("data", []) if p.get("val") is not None]
-    return pts, d.get("meta", {})
+def _fetch_pv_range(pv: str, frm, to, ref=None):
+    return fetch_pv_range(pv, frm, to, ref=ref)
 
 
 def _fetch_pv(pv: str, base):
@@ -700,6 +693,7 @@ def _fetch_pv(pv: str, base):
         pv,
         base - dt.timedelta(minutes=10),
         base + dt.timedelta(minutes=3),
+        ref=base,
     )
 
 
@@ -749,6 +743,7 @@ async def api_pv_data(
             pv,
             t0_abs - dt.timedelta(seconds=pre),
             t0_abs + dt.timedelta(seconds=post),
+            ref=base,
         )
     except Exception as e:
         return JSONResponse({"available": False, "reason": str(e)}, status_code=502)
@@ -841,7 +836,7 @@ async def api_event_alarm_series(event_id: str, pvs: str = Query("")):
         if entry and entry.get("points"):
             continue
         try:
-            pts, meta = _fetch_pv_range(pv, start, end)
+            pts, meta = _fetch_pv_range(pv, start, end, ref=base)
             times = [t for t, _ in pts]
             diffs = sorted(b - a for a, b in zip(times, times[1:]) if b > a)
             resolution = round(diffs[len(diffs) // 2], 3) if diffs else None
