@@ -240,6 +240,16 @@ def interpret_sequence(
         measured.append(f"cavity90->beam99 {delay90:.0f} us")
 
     summary = class_info.get("summary_ko", "")
+    if cls == "rf_trip" and spread is not None:
+        if common_cause:
+            summary = summary.rstrip() + (
+                f" 3개 캐비티 50% 시각 차이는 {spread:.1f} us로 공통 원인을 시사한다."
+            )
+        else:
+            summary = summary.rstrip() + (
+                f" 3개 캐비티 50% 시각 차이는 {spread:.0f} us로 동시 붕괴는 아니다. "
+                "순차 quench/전파를 확인해야 한다."
+            )
     if measured:
         summary = summary.rstrip() + " 측정값: " + ", ".join(measured) + "."
 
@@ -277,7 +287,7 @@ def interpret_sequence(
                 if tau_span_us is not None else "Vgap이 빠르게 붕괴"
             )
         chain = (
-            "공통 인터록 → RF off → 3개 캐비티 "
+            "인터록/RF off → 3개 캐비티 "
             f"{decay_txt} → 빔이 매 회전 U0=1.242 MeV(≈1.32 GeV/ms)를 "
             "잃음 → momentum acceptance를 넘어 빔 손실. 캐비티가 빔보다 "
             f"{delay_txt} 먼저 움직였으므로 RF가 원인 쪽이다."

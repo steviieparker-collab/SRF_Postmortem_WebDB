@@ -10,11 +10,23 @@
     "f_rf_mhz": 499.973,
     "harmonic": 470,
     "u0_mev_per_turn": 1.242,
-    "v_total_mv": [4.5, 4.95],
-    "q0": [7.5e8, 1.1e9],
-    "qext": [1.5e5, 1.7e5],
+    "v_total_mv": [
+      4.5,
+      4.95
+    ],
+    "q0": [
+      750000000.0,
+      1100000000.0
+    ],
+    "qext": [
+      150000.0,
+      170000.0
+    ],
     "r_over_q_ohm": 100,
-    "beam_current_ma": [300, 400],
+    "beam_current_ma": [
+      300,
+      400
+    ],
     "momentum_acceptance_percent": 1.35,
     "cavities": 3
   },
@@ -29,7 +41,15 @@
       "publisher": "Wiley-VCH",
       "isbn": "978-3-527-40842-9",
       "locator": "Part I Cavity Fundamentals; Part II Performance; Part III Couplers and Tuners",
-      "topics": ["cavity figures of merit", "surface resistance", "multipacting", "thermal breakdown", "field emission", "HOM couplers", "tuners"],
+      "topics": [
+        "cavity figures of merit",
+        "surface resistance",
+        "multipacting",
+        "thermal breakdown",
+        "field emission",
+        "HOM couplers",
+        "tuners"
+      ],
       "note": "SRF cavity의 표준 교과서. 4부 구성, 각 부 끝에 연습문제."
     },
     {
@@ -41,7 +61,14 @@
       "publisher": "Wiley-VCH",
       "isbn": "978-3-527-40572-5",
       "locator": "Chapters on cavity geometry, surface resistance, multipacting, field emission, fabrication",
-      "topics": ["cavity geometry", "surface resistance", "critical field", "multipacting", "field emission", "fabrication"],
+      "topics": [
+        "cavity geometry",
+        "surface resistance",
+        "critical field",
+        "multipacting",
+        "field emission",
+        "fabrication"
+      ],
       "note": "Padamsee 2008의 단독 저자 보조 교재."
     },
     {
@@ -53,7 +80,14 @@
       "publisher": "Wiley-VCH",
       "isbn": "978-3-527-41409-3",
       "locator": "Chapters on N-doping, flux expulsion, high-field Q-slope, Nb3Sn",
-      "topics": ["N-doping", "N-infusion", "flux expulsion", "high-field Q-slope", "anti-Q-slope", "Nb3Sn"],
+      "topics": [
+        "N-doping",
+        "N-infusion",
+        "flux expulsion",
+        "high-field Q-slope",
+        "anti-Q-slope",
+        "Nb3Sn"
+      ],
       "note": "최신 동향. 2008 교과서의 보완."
     },
     {
@@ -66,7 +100,13 @@
       "doi": "10.23730/CYRSP-2024-003.1085",
       "url": "https://e-publishing.cern.ch/index.php/CYRSP/article/view/1621",
       "locator": "Sections on surface impedance, R/Q, geometry factor, measurement techniques",
-      "topics": ["surface impedance", "R/Q", "geometry factor", "Q0", "measurement"],
+      "topics": [
+        "surface impedance",
+        "R/Q",
+        "geometry factor",
+        "Q0",
+        "measurement"
+      ],
       "note": "CC-BY 4.0 오픈액세스. 기술·응용 중심."
     },
     {
@@ -79,7 +119,13 @@
       "doi": "10.5170/CERN-2006-002.183",
       "url": "https://proceedings.jacow.org/SRF2003/papers/mot01.pdf",
       "locator": "Sections on pillbox cavity, two-fluid model, BCS surface resistance",
-      "topics": ["pillbox cavity", "two-fluid model", "BCS surface resistance", "Q0", "geometry constant"],
+      "topics": [
+        "pillbox cavity",
+        "two-fluid model",
+        "BCS surface resistance",
+        "Q0",
+        "geometry constant"
+      ],
       "note": "20쪽 내외의 가장 간결한 물리 유도."
     },
     {
@@ -91,7 +137,13 @@
       "publisher": "USPAS, JLab",
       "url": "https://indico.jlab.org/event/98/contributions/7446/attachments/6320/8368/1T__3T_-_SRF_cavity_basics.pdf",
       "locator": "Slides on Q0=G/Rs, pillbox G=257 ohm, R/Q=196 ohm, fabrication and processing",
-      "topics": ["Q0", "geometry factor", "R/Q", "fabrication", "processing"],
+      "topics": [
+        "Q0",
+        "geometry factor",
+        "R/Q",
+        "fabrication",
+        "processing"
+      ],
       "note": "실무 입문 슬라이드."
     },
     {
@@ -105,7 +157,13 @@
       "doi": "10.1007/978-3-319-18317-6",
       "url": "https://link.springer.com/book/10.1007/978-3-319-18317-6",
       "locator": "Chapters on longitudinal dynamics, synchrotron motion, beam parameters and emittance",
-      "topics": ["single-particle dynamics", "longitudinal dynamics", "synchrotron motion", "emittance", "beam parameters"],
+      "topics": [
+        "single-particle dynamics",
+        "longitudinal dynamics",
+        "synchrotron motion",
+        "emittance",
+        "beam parameters"
+      ],
       "note": "CC-BY 4.0 오픈액세스. 표준 교과서."
     },
     {
@@ -117,7 +175,13 @@
       "publisher": "Wiley",
       "isbn": "978-0-471-55163-8",
       "locator": "First half single-particle motion and phase stability; second half intensity-dependent effects",
-      "topics": ["betatron motion", "phase stability", "space charge", "coherent instabilities", "emittance"],
+      "topics": [
+        "betatron motion",
+        "phase stability",
+        "space charge",
+        "coherent instabilities",
+        "emittance"
+      ],
       "note": "고에너지 가속기 입문."
     },
     {
@@ -130,7 +194,13 @@
       "publisher": "World Scientific",
       "doi": "10.1142/8335",
       "locator": "Chapters on betatron motion, synchrotron motion, linacs, beam-beam",
-      "topics": ["betatron motion", "synchrotron motion", "linacs", "beam-beam", "action-angle"],
+      "topics": [
+        "betatron motion",
+        "synchrotron motion",
+        "linacs",
+        "beam-beam",
+        "action-angle"
+      ],
       "note": "대학원 수준 교재."
     },
     {
@@ -142,7 +212,11 @@
       "edition": "3rd",
       "publisher": "World Scientific",
       "locator": "Reference tables and formulas",
-      "topics": ["accelerator physics", "engineering", "reference formulas"],
+      "topics": [
+        "accelerator physics",
+        "engineering",
+        "reference formulas"
+      ],
       "note": "공식·수치 사전."
     },
     {
@@ -154,7 +228,11 @@
       "publisher": "Cambridge University Press",
       "isbn": "978-1-107-06394-7",
       "locator": "Introductory chapters on transverse and longitudinal dynamics",
-      "topics": ["transverse dynamics", "longitudinal dynamics", "accelerator dynamics"],
+      "topics": [
+        "transverse dynamics",
+        "longitudinal dynamics",
+        "accelerator dynamics"
+      ],
       "note": "학부 수준 입문."
     },
     {
@@ -166,7 +244,11 @@
       "publisher": "GSI / JUAS lecture notes",
       "url": "https://www-bd.gsi.de/conf/juas/juas_script.pdf",
       "locator": "Section 8.3 Machine protection using beam loss detectors",
-      "topics": ["beam instrumentation", "beam loss detectors", "machine protection"],
+      "topics": [
+        "beam instrumentation",
+        "beam loss detectors",
+        "machine protection"
+      ],
       "note": "계기 일반과 BLM 기반 기계보호."
     },
     {
@@ -178,7 +260,12 @@
       "publisher": "BIW2010",
       "url": "https://proceedings.jacow.org/BIW2010/papers/thtnb01.pdf",
       "locator": "Tutorial on BLM types, simulation codes, MPS interfaces",
-      "topics": ["BLM", "ionization chambers", "scintillators", "MPS"],
+      "topics": [
+        "BLM",
+        "ionization chambers",
+        "scintillators",
+        "MPS"
+      ],
       "note": "BLM 원리와 MPS 인터페이스."
     },
     {
@@ -190,7 +277,12 @@
       "publisher": "CERN Accelerator School",
       "url": "https://indico.cern.ch/event/532397/",
       "locator": "CAS 2016 handout, LHC BLM requirements and time response",
-      "topics": ["BLM dynamic range", "time resolution", "LHC BLM", "thresholds"],
+      "topics": [
+        "BLM dynamic range",
+        "time resolution",
+        "LHC BLM",
+        "thresholds"
+      ],
       "note": "LHC BLM 100–200 us 반응, 3600 ionization chambers."
     },
     {
@@ -201,7 +293,11 @@
       "year": 2014,
       "publisher": "Joint International Accelerator School on Beam Loss and Accelerator Protection",
       "locator": "Lectures on LHC beam loss measurement and system response",
-      "topics": ["beam loss measurement", "machine protection", "LHC"],
+      "topics": [
+        "beam loss measurement",
+        "machine protection",
+        "LHC"
+      ],
       "note": "CERN beam-loss school."
     },
     {
@@ -212,7 +308,13 @@
       "year": 2016,
       "publisher": "NAPAC2016 THPOA60",
       "locator": "Table 1 main parameters",
-      "topics": ["3 GeV", "400 mA", "499.973 MHz", "3 SRF cavities", "4.5 MV"],
+      "topics": [
+        "3 GeV",
+        "400 mA",
+        "499.973 MHz",
+        "3 SRF cavities",
+        "4.5 MV"
+      ],
       "note": "PLS-II 운전 파라미터."
     },
     {
@@ -223,7 +325,11 @@
       "year": 2013,
       "publisher": "IPAC2013 WEPWO041",
       "locator": "Measured Q0 and Qext",
-      "topics": ["Q0 7.5e8–1.1e9", "Qext 1.5–1.7e5", "Vacc 2.35–2.40 MV"],
+      "topics": [
+        "Q0 7.5e8–1.1e9",
+        "Qext 1.5–1.7e5",
+        "Vacc 2.35–2.40 MV"
+      ],
       "note": "Q0/Qext 측정값의 근거."
     },
     {
@@ -235,7 +341,12 @@
       "publisher": "arXiv:1910.01861",
       "url": "https://arxiv.org/abs/1910.01861",
       "locator": "Sections on cavity voltage, forward and reflected power at 400 mA",
-      "topics": ["LLRF", "forward power 140–190 kW", "reflected power 1–5 kW", "cavity voltage 1.5–1.65 MV"],
+      "topics": [
+        "LLRF",
+        "forward power 140–190 kW",
+        "reflected power 1–5 kW",
+        "cavity voltage 1.5–1.65 MV"
+      ],
       "note": "운전 시 forward/reflect power."
     },
     {
@@ -246,7 +357,10 @@
       "year": 2001,
       "publisher": "APAC2001 WEP021",
       "locator": "RF acceptance and momentum acceptance",
-      "topics": ["momentum acceptance 1.35% at 2.5 GeV", "RF acceptance 1.58–2.18%"],
+      "topics": [
+        "momentum acceptance 1.35% at 2.5 GeV",
+        "RF acceptance 1.58–2.18%"
+      ],
       "note": "PLS 기준. PLS-II 3 GeV에는 근사값으로 사용."
     },
     {
@@ -257,7 +371,12 @@
       "year": 2015,
       "publisher": "IPAC2015 WEPMN042",
       "locator": "Sections on optimal reflected power and coupling",
-      "topics": ["400 mA", "optimal coupling", "reflected power", "window vacuum"],
+      "topics": [
+        "400 mA",
+        "optimal coupling",
+        "reflected power",
+        "window vacuum"
+      ],
       "note": "고전류 운전과 결합 최적화."
     }
   ],
@@ -266,128 +385,301 @@
       "title": "Cavity figures of merit",
       "summary_ko": "SRF cavity의 상태는 Q0, QL, R/Q, shunt impedance, coupling beta로 요약된다. Q0는 벽 손실 대비 저장에너지, QL은 외부 결합을 포함한 부하 Q, beta는 외부 결합 세기다. 빔이 있으면 빔부하가 추가되어 QL과 유효 감쇠가 달라진다.",
       "equations": [
-        {"name": "loaded Q", "expr": "1/QL = 1/Q0 + 1/Qext = (1+beta)/Q0", "note": "beta = Q0/Qext"},
-        {"name": "stored energy", "expr": "U = V^2 / (2*omega*(R/Q))", "note": "V는 gap voltage"},
-        {"name": "cavity dissipation", "expr": "Pc = V^2 / (2*(R/Q)*Q0)", "note": "벽 손실"},
-        {"name": "beam power", "expr": "Pbeam = V*I*cos(phi)", "note": "동기위상 phi"},
-        {"name": "optimal coupling", "expr": "beta_opt = 1 + Pbeam/Pc", "note": "reflected power 최소"}
+        {
+          "name": "loaded Q",
+          "expr": "1/QL = 1/Q0 + 1/Qext = (1+beta)/Q0",
+          "note": "beta = Q0/Qext"
+        },
+        {
+          "name": "stored energy",
+          "expr": "U = V^2 / (2*omega*(R/Q))",
+          "note": "V는 gap voltage"
+        },
+        {
+          "name": "cavity dissipation",
+          "expr": "Pc = V^2 / (2*(R/Q)*Q0)",
+          "note": "벽 손실"
+        },
+        {
+          "name": "beam power",
+          "expr": "Pbeam = V*I*cos(phi)",
+          "note": "동기위상 phi"
+        },
+        {
+          "name": "optimal coupling",
+          "expr": "beta_opt = 1 + Pbeam/Pc",
+          "note": "reflected power 최소"
+        }
       ],
       "citations": [
-        {"id": "padamsee2008", "locator": "Part I Cavity Fundamentals", "supports": "Q0, R/Q, geometry factor, shunt impedance의 정의"},
-        {"id": "caspers2024", "locator": "Sections on R/Q and geometry factor", "supports": "cavity figures of merit와 측정"},
-        {"id": "schmuser2003", "locator": "Sections on pillbox cavity and Q0", "supports": "Q0와 기하 인자의 유도"}
+        {
+          "id": "padamsee2008",
+          "locator": "Part I Cavity Fundamentals",
+          "supports": "Q0, R/Q, geometry factor, shunt impedance의 정의"
+        },
+        {
+          "id": "caspers2024",
+          "locator": "Sections on R/Q and geometry factor",
+          "supports": "cavity figures of merit와 측정"
+        },
+        {
+          "id": "schmuser2003",
+          "locator": "Sections on pillbox cavity and Q0",
+          "supports": "Q0와 기하 인자의 유도"
+        }
       ],
-      "caveats": ["Q0와 R/Q는 문헌/측정값이며 이벤트별 실측값이 아니다."]
+      "caveats": [
+        "Q0와 R/Q는 문헌/측정값이며 이벤트별 실측값이 아니다."
+      ]
     },
     "cavity_decay_after_rf_off": {
       "title": "RF off 이후 Vgap 감쇠",
       "summary_ko": "RF 전원이 꺼지면 캐비티 전압은 저장에너지가 벽 손실과 빔부하로 빠져나가며 감소한다. 전원이 없을 때의 자연 감쇠는 tau=2*QL/omega이고, 빔이 있으면 빔부하가 추가되어 초기 감쇠가 더 빨라진다. PLS-II는 Qext 1.5–1.7e5, Q0 7.5e8–1.1e9로 강결합되어 있어 자연 시정수는 약 95–108 us, 빔부하를 포함한 초기 시정수는 약 30–35 us가 된다.",
       "equations": [
-        {"name": "natural decay", "expr": "tau_Q = 2*QL/omega = 2*Qext/omega (beta>>1)", "note": "전원 off, 빔 없음"},
-        {"name": "beam-loaded decay", "expr": "tau_beam ~ U / (Pc + Pbeam)", "note": "초기 빔부하"},
-        {"name": "exponential", "expr": "V(t) = V0 * exp(-t/tau)", "note": "단순 근사"}
+        {
+          "name": "natural decay",
+          "expr": "tau_Q = 2*QL/omega = 2*Qext/omega (beta>>1)",
+          "note": "전원 off, 빔 없음"
+        },
+        {
+          "name": "beam-loaded decay",
+          "expr": "tau_beam ~ U / (Pc + Pbeam)",
+          "note": "초기 빔부하"
+        },
+        {
+          "name": "exponential",
+          "expr": "V(t) = V0 * exp(-t/tau)",
+          "note": "단순 근사"
+        }
       ],
       "citations": [
-        {"id": "padamsee2008", "locator": "Part I, cavity time constant and loaded Q", "supports": "tau=2QL/omega"},
-        {"id": "caspers2024", "locator": "Sections on loaded Q and decay", "supports": "loaded cavity decay"},
-        {"id": "pls2_srf2013", "locator": "Measured Q0 and Qext", "supports": "PLS-II Qext 1.5–1.7e5, Q0 7.5e8–1.1e9"}
+        {
+          "id": "padamsee2008",
+          "locator": "Part I, cavity time constant and loaded Q",
+          "supports": "tau=2QL/omega"
+        },
+        {
+          "id": "caspers2024",
+          "locator": "Sections on loaded Q and decay",
+          "supports": "loaded cavity decay"
+        },
+        {
+          "id": "pls2_srf2013",
+          "locator": "Measured Q0 and Qext",
+          "supports": "PLS-II Qext 1.5–1.7e5, Q0 7.5e8–1.1e9"
+        }
       ],
-      "caveats": ["실제 감쇠는 빔전류가 줄면서 빔부하가 사라지는 과도과정이라 단일 지수함수가 아니다."]
+      "caveats": [
+        "실제 감쇠는 빔전류가 줄면서 빔부하가 사라지는 과도과정이라 단일 지수함수가 아니다."
+      ]
     },
     "beam_energy_loss_after_rf_trip": {
       "title": "RF trip 이후 빔 에너지 손실",
       "summary_ko": "RF가 꺼지면 빔은 매 회전마다 동기복사 에너지 U0를 잃는다. PLS-II는 U0=1.242 MeV/turn, T_rev=0.940 us이므로 dE/dt≈1.32 GeV/ms다. 1% 에너지 손실은 약 23 us, 5%는 약 113 us, 10%는 약 227 us다. 빔은 momentum acceptance(수 %)를 넘는 순간 손실되기 시작하므로, 캐비티 붕괴 후 수십~수백 us 안에 빔전류가 떨어진다.",
       "equations": [
-        {"name": "energy loss rate", "expr": "dE/dt = -U0/T_rev", "note": "RF off"},
-        {"name": "integrated loss with decay", "expr": "dE(t) = (U0/T_rev)*[t - tau*(1-exp(-t/tau))]", "note": "V(t)=V0*exp(-t/tau)"}
+        {
+          "name": "energy loss rate",
+          "expr": "dE/dt = -U0/T_rev",
+          "note": "RF off"
+        },
+        {
+          "name": "integrated loss with decay",
+          "expr": "dE(t) = (U0/T_rev)*[t - tau*(1-exp(-t/tau))]",
+          "note": "V(t)=V0*exp(-t/tau)"
+        }
       ],
       "citations": [
-        {"id": "wiedemann2015", "locator": "Chapters on longitudinal dynamics and synchrotron motion", "supports": "에너지 손실과 동기운동"},
-        {"id": "lee2011", "locator": "Chapters on synchrotron motion", "supports": "종방향 역학"},
-        {"id": "pls2_momentum2001", "locator": "Momentum acceptance", "supports": "PLS momentum acceptance 1.35% at 2.5 GeV"}
+        {
+          "id": "wiedemann2015",
+          "locator": "Chapters on longitudinal dynamics and synchrotron motion",
+          "supports": "에너지 손실과 동기운동"
+        },
+        {
+          "id": "lee2011",
+          "locator": "Chapters on synchrotron motion",
+          "supports": "종방향 역학"
+        },
+        {
+          "id": "pls2_momentum2001",
+          "locator": "Momentum acceptance",
+          "supports": "PLS momentum acceptance 1.35% at 2.5 GeV"
+        }
       ],
-      "caveats": ["PLS-II 3 GeV의 momentum acceptance는 PLS 2.5 GeV 값의 근사다. DCCT/scope 응답이 관측 시간을 늘릴 수 있다."]
+      "caveats": [
+        "PLS-II 3 GeV의 momentum acceptance는 PLS 2.5 GeV 값의 근사다. DCCT/scope 응답이 관측 시간을 늘릴 수 있다."
+      ]
     },
     "machine_protection_timescales": {
       "title": "BLM/MPS 시간 규모",
       "summary_ko": "BLM은 손실 입자가 만드는 신호를 us–ms 안에 검출하고 MPS 인터록을 건다. LHC BLM은 100–200 us 반응으로 설계되며, PLS-II 같은 저장링도 인터록→RF off→빔 손실이 ms 이하로 진행될 수 있다. 따라서 1 Hz 아카이브는 원인과 결과를 같은 샘플에 묶어버리며, 순서를 알려면 fast scope나 turn-by-turn 계측이 필요하다.",
       "equations": [],
       "citations": [
-        {"id": "forck_juas", "locator": "Section 8.3 Machine protection using beam loss detectors", "supports": "BLM 기반 기계보호"},
-        {"id": "zhukov2010", "locator": "BLM tutorial", "supports": "BLM 종류와 MPS 인터페이스"},
-        {"id": "holzer2016", "locator": "LHC BLM requirements", "supports": "100–200 us 반응과 동적범위"},
-        {"id": "dehning2014", "locator": "Machine protection instrumentation", "supports": "LHC BLM 시스템"}
+        {
+          "id": "forck_juas",
+          "locator": "Section 8.3 Machine protection using beam loss detectors",
+          "supports": "BLM 기반 기계보호"
+        },
+        {
+          "id": "zhukov2010",
+          "locator": "BLM tutorial",
+          "supports": "BLM 종류와 MPS 인터페이스"
+        },
+        {
+          "id": "holzer2016",
+          "locator": "LHC BLM requirements",
+          "supports": "100–200 us 반응과 동적범위"
+        },
+        {
+          "id": "dehning2014",
+          "locator": "Machine protection instrumentation",
+          "supports": "LHC BLM 시스템"
+        }
       ],
-      "caveats": ["PLS-II의 실제 BLM/MPS 반응 시간은 문서화된 값이 아니라 설계 일반론이다."]
+      "caveats": [
+        "PLS-II의 실제 BLM/MPS 반응 시간은 문서화된 값이 아니라 설계 일반론이다."
+      ]
     },
     "transverse_instability": {
       "title": "횡방향 불안정과 궤도",
       "summary_ko": "횡방향 불안정은 betatron 진동 진폭이 지수적으로 자라며 BLM 손실을 만든다. 성장 시간은 수 ms~수십 ms일 수 있어 1 Hz BPM(1초 평균)으로는 직접 볼 수 없다. 1 Hz/10 Hz BPM에서 보이는 것은 초 단위의 궤도 drift나 corrector/FOFB 이상이며, 이는 ms급 불안정과 구분해야 한다.",
       "equations": [
-        {"name": "exponential growth", "expr": "x(t) = x0 * exp(t/tau_g)", "note": "tau_g는 성장 시간"},
-        {"name": "betatron tune", "expr": "nu = f_beta / f_rev", "note": "turn-by-turn에서 측정"}
+        {
+          "name": "exponential growth",
+          "expr": "x(t) = x0 * exp(t/tau_g)",
+          "note": "tau_g는 성장 시간"
+        },
+        {
+          "name": "betatron tune",
+          "expr": "nu = f_beta / f_rev",
+          "note": "turn-by-turn에서 측정"
+        }
       ],
       "citations": [
-        {"id": "wiedemann2015", "locator": "Chapters on transverse dynamics and perturbations", "supports": "betatron motion과 불안정"},
-        {"id": "edwards1993", "locator": "Second half, coherent instabilities", "supports": "집단 불안정"},
-        {"id": "forck_juas", "locator": "Beam instrumentation", "supports": "BPM과 turn-by-turn 계측"}
+        {
+          "id": "wiedemann2015",
+          "locator": "Chapters on transverse dynamics and perturbations",
+          "supports": "betatron motion과 불안정"
+        },
+        {
+          "id": "edwards1993",
+          "locator": "Second half, coherent instabilities",
+          "supports": "집단 불안정"
+        },
+        {
+          "id": "forck_juas",
+          "locator": "Beam instrumentation",
+          "supports": "BPM과 turn-by-turn 계측"
+        }
       ],
-      "caveats": ["turn-by-turn BPM 데이터가 없으면 ms급 성장 시간을 확정할 수 없다."]
+      "caveats": [
+        "turn-by-turn BPM 데이터가 없으면 ms급 성장 시간을 확정할 수 없다."
+      ]
     },
     "beam_dump_sequence_classes": {
       "title": "빔덤프 인과 순서의 세 가지 유형",
       "summary_ko": "Fast scope 313건에서 (1) 3개 캐비티가 수 us 안에 동시에 붕괴하고 캐비티가 빔보다 약 300 us 앞서는 RF-first, (2) 빔이 먼저 사라지고 캐비티가 부분적으로(60–75%) 하강하며 forward가 유지되는 beam-first, (3) 캐비티 변화 없이 빔만 사라지는 beam-only가 구분된다. 1개/2개 캐비티만 붕괴하는 quench 유형도 별도로 존재한다.",
       "equations": [],
       "citations": [
-        {"id": "padamsee2008", "locator": "Part II, quench and cavity performance", "supports": "단일 캐비티 quench"},
-        {"id": "forck_juas", "locator": "Section 8.3", "supports": "RF-first의 기계보호 연쇄"},
-        {"id": "wiedemann2015", "locator": "Longitudinal dynamics", "supports": "beam-first/beam-only의 빔 역학"}
+        {
+          "id": "padamsee2008",
+          "locator": "Part II, quench and cavity performance",
+          "supports": "단일 캐비티 quench"
+        },
+        {
+          "id": "forck_juas",
+          "locator": "Section 8.3",
+          "supports": "RF-first의 기계보호 연쇄"
+        },
+        {
+          "id": "wiedemann2015",
+          "locator": "Longitudinal dynamics",
+          "supports": "beam-first/beam-only의 빔 역학"
+        }
       ],
-      "caveats": ["Class는 fast scope 313건에서 측정한 서술적 분류이며, 원인 라벨과 1:1 대응하지 않는다."]
+      "caveats": [
+        "Class는 fast scope 313건에서 측정한 서술적 분류이며, 원인 라벨과 1:1 대응하지 않는다."
+      ]
     },
     "pls2_operating_point": {
       "title": "PLS-II 운전점",
       "summary_ko": "PLS-II는 3 GeV, 400 mA, 499.973 MHz, 3개 SRF cavity, 총 4.5–4.95 MV로 운전된다. 회당 에너지 손실은 1.242 MeV, 회전주파수는 1.0638 MHz다. 300–400 mA에서 캐비티는 강하게 결합되어 Qext 1.5–1.7e5, Q0 7.5e8–1.1e9를 보인다.",
       "equations": [],
       "citations": [
-        {"id": "pls2_status2016", "locator": "Table 1", "supports": "3 GeV, 400 mA, 499.973 MHz, 3 cavities"},
-        {"id": "pls2_srf2013", "locator": "Measured Q0/Qext", "supports": "Q0/Qext"},
-        {"id": "pls2_llrf2019", "locator": "Cavity voltage and power", "supports": "1.5–1.65 MV/cavity, forward power"},
-        {"id": "pls2_srf2015", "locator": "400 mA operation", "supports": "고전류 결합 최적화"}
+        {
+          "id": "pls2_status2016",
+          "locator": "Table 1",
+          "supports": "3 GeV, 400 mA, 499.973 MHz, 3 cavities"
+        },
+        {
+          "id": "pls2_srf2013",
+          "locator": "Measured Q0/Qext",
+          "supports": "Q0/Qext"
+        },
+        {
+          "id": "pls2_llrf2019",
+          "locator": "Cavity voltage and power",
+          "supports": "1.5–1.65 MV/cavity, forward power"
+        },
+        {
+          "id": "pls2_srf2015",
+          "locator": "400 mA operation",
+          "supports": "고전류 결합 최적화"
+        }
       ],
-      "caveats": ["운전점은 시기별로 조금씩 다르다. 이벤트별 실제 값은 아카이브 PV를 봐야 한다."]
+      "caveats": [
+        "운전점은 시기별로 조금씩 다르다. 이벤트별 실제 값은 아카이브 PV를 봐야 한다."
+      ]
     }
   },
   "classes": {
     "rf_trip": {
       "title_ko": "RF-first (전체 RF trip)",
-      "summary_ko": "3개 캐비티가 거의 동시에(수 us 차이) 0으로 붕괴하고, 캐비티 50%가 빔 50%보다 수백 us 앞선다. 인터록이 RF를 끄고, Vgap이 수십~수백 us 규모로 감쇠하며, 빔이 에너지를 잃고 dump된다.",
-      "citations": ["cavity_decay_after_rf_off", "beam_energy_loss_after_rf_trip", "machine_protection_timescales"]
+      "summary_ko": "3개 캐비티가 붕괴하고, 캐비티 50%가 빔 50%보다 수백 us 앞선다. 인터록이 RF를 끄고, Vgap이 수십~수백 us 규모로 감쇠하며, 빔이 에너지를 잃고 dump된다.",
+      "citations": [
+        "cavity_decay_after_rf_off",
+        "beam_energy_loss_after_rf_trip",
+        "machine_protection_timescales"
+      ]
     },
     "beam_first_rf_trip": {
       "title_ko": "Beam-first (빔 손실 후 RF trip)",
       "summary_ko": "빔전류가 먼저 떨어지고 캐비티는 그 뒤에 붕괴한다. Forward가 유지되면 빔 손실이 원인이고 RF trip은 결과다. 캐비티 전압의 부분적 하강은 빔부하 변화로 설명된다.",
-      "citations": ["cavity_figures_of_merit", "transverse_instability", "beam_dump_sequence_classes"]
+      "citations": [
+        "cavity_figures_of_merit",
+        "transverse_instability",
+        "beam_dump_sequence_classes"
+      ]
     },
     "beam_only": {
       "title_ko": "Beam-only (RF 무관)",
       "summary_ko": "캐비티는 20% 아래로 내려가지 않는다. RF는 원인이 아니며 beam line, kicker, 궤도, 횡방향 손실을 봐야 한다.",
-      "citations": ["transverse_instability", "machine_protection_timescales"]
+      "citations": [
+        "transverse_instability",
+        "machine_protection_timescales"
+      ]
     },
     "single_cavity_quench": {
       "title_ko": "단일 캐비티 quench",
       "summary_ko": "1개 캐비티만 0으로 붕괴하고 캐비티가 빔보다 먼저 움직인다. 해당 CM의 quench를 의심하고 QUEN 채널과 그 캐비티의 forward/reflect를 확인한다.",
-      "citations": ["cavity_decay_after_rf_off", "padamsee2008"]
+      "citations": [
+        "cavity_decay_after_rf_off",
+        "padamsee2008"
+      ]
     },
     "dual_cavity_quench": {
       "title_ko": "2개 캐비티 quench",
       "summary_ko": "2개 캐비티가 붕괴하고 캐비티가 빔보다 먼저 움직인다. 공통 냉각/진공/LLRF 이상 또는 연쇄 quench를 의심한다.",
-      "citations": ["cavity_decay_after_rf_off", "padamsee2008"]
+      "citations": [
+        "cavity_decay_after_rf_off",
+        "padamsee2008"
+      ]
     },
     "mixed": {
       "title_ko": "혼합/판정 보류",
       "summary_ko": "캐비티 변화는 있으나 순서가 명확하지 않다. fast scope의 cavity/forward/reflect와 digital 전이를 함께 봐야 한다.",
-      "citations": ["beam_dump_sequence_classes"]
+      "citations": [
+        "beam_dump_sequence_classes"
+      ]
     }
   },
   "caveats": [
