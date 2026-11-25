@@ -1817,12 +1817,20 @@ async def api_stats_histogram(
         where_clause = "WHERE " + " AND ".join(conditions)
 
         eff = "CASE WHEN user_fault_type != '' THEN user_fault_type WHEN fault_type IS NOT NULL THEN fault_type ELSE 'Unknown' END"
+        # NOTE: the effective fault type is computed in a subquery so that the
+        # outer GROUP BY references the *derived* value.  Referring to the
+        # alias `fault_type` directly would bind to the raw events.fault_type
+        # column (SQLite prefers real columns over select aliases), splitting a
+        # period into several rows that the matrix builder then overwrites.
         cursor = conn.execute(
             f"""
-            SELECT {period_expr} as period, {eff} as fault_type, COUNT(*) as cnt
-            FROM events
-            {where_clause}
-            GROUP BY {period_expr}, fault_type
+            SELECT period, fault_type, COUNT(*) as cnt
+            FROM (
+                SELECT {period_expr} as period, {eff} as fault_type
+                FROM events
+                {where_clause}
+            )
+            GROUP BY period, fault_type
             ORDER BY period, fault_type
             """,
             params,
@@ -1850,7 +1858,10 @@ async def api_stats_histogram(
 
             if period not in data_matrix:
                 data_matrix[period] = {}
-            data_matrix[period][ft] = cnt
+            # Accumulate defensively: the query already returns one row per
+            # (period, fault_type), but overwriting here silently dropped
+            # counts when duplicate rows appeared.
+            data_matrix[period][ft] = data_matrix[period].get(ft, 0) + cnt
 
         fault_types_sorted = sorted(ft_map.keys())
 
