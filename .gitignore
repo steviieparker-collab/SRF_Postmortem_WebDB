@@ -13,6 +13,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Virtual environments
+.venv/
+venv/
+venv-*/
+
 # Config (contains passwords, emails, API keys)
 config/config.yaml
 config/config_backup.yaml

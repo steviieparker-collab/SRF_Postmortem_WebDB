@@ -1,0 +1,216 @@
+/* Full-screen 4-quadrant waveform viewer. */
+
+body:has(#wfg-page) {
+    overflow: hidden;
+}
+body:has(#wfg-page) footer {
+    display: none;
+}
+body:has(#wfg-page) nav.navbar {
+    margin-bottom: 0 !important;
+}
+body:has(#wfg-page) main.container-fluid {
+    padding: 0 !important;
+}
+
+#wfg-page {
+    height: calc(100vh - 57px);
+    box-sizing: border-box;
+    padding: .45rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: .45rem;
+    background: #0d1117;
+}
+
+/* ── Info box (top-left) ─────────────────────────────────── */
+.wfg-info {
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: .7rem .85rem;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    font-size: .86rem;
+}
+.wfg-title {
+    font-weight: 600;
+    color: #e6edf3;
+    letter-spacing: .01em;
+}
+.wfg-year {
+    width: auto;
+    min-width: 7.5rem;
+    background-color: #0d1117;
+    border-color: #30363d;
+    color: #e6edf3;
+}
+.wfg-year:focus {
+    border-color: #58a6ff;
+    box-shadow: 0 0 0 .15rem rgba(88, 166, 255, .25);
+}
+.wfg-counter {
+    font-size: .78rem;
+    white-space: nowrap;
+}
+.wfg-event-link {
+    color: #58a6ff;
+    text-decoration: none;
+    font-size: 1.02rem;
+}
+.wfg-event-link:hover {
+    text-decoration: underline;
+}
+.wfg-field {
+    display: flex;
+    align-items: baseline;
+    gap: .4rem;
+    margin-top: .4rem;
+}
+.wfg-field-label {
+    color: #8b949e;
+    font-size: .78rem;
+    min-width: 6.2rem;
+}
+.wfg-field-value {
+    color: #e6edf3;
+    font-size: .86rem;
+}
+.wfg-details {
+    margin-top: .55rem;
+    border-top: 1px solid #21262d;
+    padding-top: .45rem;
+}
+.wfg-details > summary {
+    cursor: pointer;
+    color: #8b949e;
+    font-size: .78rem;
+    user-select: none;
+}
+.wfg-details > summary:hover {
+    color: #c9d1d9;
+}
+.wfg-detail-body {
+    margin-top: .45rem;
+}
+.wfg-section-title {
+    margin-top: .5rem;
+    margin-bottom: .15rem;
+    color: #8b949e;
+    font-size: .75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+.wfg-notes {
+    white-space: pre-wrap;
+    color: #c9d1d9;
+    max-height: 9rem;
+    overflow-y: auto;
+    padding-right: .25rem;
+}
+.wfg-seq-title {
+    font-weight: 600;
+    font-size: .78rem;
+    margin-top: .2rem;
+}
+.wfg-seq-list {
+    list-style: none;
+    margin: 0 0 .15rem 0;
+    padding-left: .5rem;
+    font-size: .78rem;
+    color: #c9d1d9;
+}
+.wfg-status {
+    margin-top: .4rem;
+    min-height: 1em;
+}
+
+/* ── Image panels ───────────────────────────────────────── */
+.wfg-panel {
+    position: relative;
+    min-height: 0;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    background: #0f1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.wfg-panel[data-scope="forward"] { grid-column: 2; grid-row: 1; }
+.wfg-panel[data-scope="cavity"]  { grid-column: 1; grid-row: 2; }
+.wfg-panel[data-scope="reflect"] { grid-column: 2; grid-row: 2; }
+
+.wfg-panel img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    -webkit-user-drag: none;
+    user-select: none;
+}
+.wfg-label {
+    position: absolute;
+    top: .45rem;
+    left: .55rem;
+    z-index: 2;
+    padding: .1rem .45rem;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    color: #c9d1d9;
+    background: rgba(13, 17, 23, .78);
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    pointer-events: none;
+}
+.wfg-empty {
+    display: none;
+    color: #6e7681;
+    font-size: .85rem;
+}
+.wfg-panel.is-empty .wfg-empty {
+    display: block;
+}
+
+/* ── Mobile: three images stacked, info first ────────────── */
+@media (max-width: 900px) {
+    body:has(#wfg-page) {
+        overflow: auto;
+    }
+    #wfg-page {
+        height: auto;
+        min-height: calc(100vh - 57px);
+        display: flex;
+        flex-direction: column;
+        gap: .5rem;
+        padding: .4rem;
+    }
+    .wfg-info {
+        order: 0;
+        overflow: visible;
+        max-height: none;
+    }
+    .wfg-panel[data-scope="forward"] { order: 1; }
+    .wfg-panel[data-scope="cavity"]  { order: 2; }
+    .wfg-panel[data-scope="reflect"] { order: 3; }
+    .wfg-panel {
+        width: 100%;
+        height: auto;
+    }
+    .wfg-panel img {
+        width: 100%;
+        height: auto;
+        max-height: none;
+    }
+    .wfg-notes {
+        max-height: 14rem;
+    }
+}

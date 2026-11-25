@@ -714,7 +714,7 @@ function saveSelection() {
     }));
     const job = async () => {
         try {
-            const r = await fetch(`/api/events/${encodeURIComponent(EVENT_ID)}/pv-selection`, {
+            const r = await srfAdminFetch(`/api/events/${encodeURIComponent(EVENT_ID)}/pv-selection`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({items})
@@ -740,7 +740,7 @@ async function saveNotes() {
     try {
         // Persist the selection in the shared DB and the note/stamps sidecar.
         const selectionOk = await saveSelection();
-        const r = await fetch(`/api/events/${encodeURIComponent(EVENT_ID)}/pv-notes`, {
+        const r = await srfAdminFetch(`/api/events/${encodeURIComponent(EVENT_ID)}/pv-notes`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({items, note, stamps: stampsPayload})

@@ -344,9 +344,9 @@ async function createManualEvent() {
     if (!pw) { msg.textContent = ''; return; }
 
     try {
-        const resp = await fetch('/api/events/manual-create?password=' + encodeURIComponent(pw), {
+        const resp = await fetch('/api/events/manual-create', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-Postmortem-Password': pw },
             body: JSON.stringify({
                 timestamp: ts,
                 fault_type: ft,
@@ -433,9 +433,9 @@ function batchDelete() {
     if (!pw) return;
     if (!confirm('Delete ' + ids.length + ' events? This cannot be undone.')) return;
 
-    fetch('/api/events/batch-delete?password=' + encodeURIComponent(pw), {
+    fetch('/api/events/batch-delete', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Postmortem-Password': pw },
         body: JSON.stringify({ event_ids: ids })
     })
     .then(r => r.json())
@@ -455,9 +455,9 @@ function batchBeamTime() {
     const pw = prompt('Enter password:');
     if (!pw) return;
 
-    fetch('/api/events/batch-beamtime?password=' + encodeURIComponent(pw), {
+    fetch('/api/events/batch-beamtime', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Postmortem-Password': pw },
         body: JSON.stringify({ event_ids: ids, beam_time: bt })
     })
     .then(r => r.json())
@@ -477,9 +477,9 @@ function batchFaultType() {
     const pw = prompt('Enter password:');
     if (pw === null) return;
 
-    fetch('/api/events/batch-fault-type?password=' + encodeURIComponent(pw), {
+    fetch('/api/events/batch-fault-type', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Postmortem-Password': pw },
         body: JSON.stringify({ event_ids: ids, fault_type: ft })
     })
     .then(r => r.json())

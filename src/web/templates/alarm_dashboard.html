@@ -842,9 +842,9 @@ async function saveMapping() {
         severity: document.getElementById('edit-severity').value,
     };
     try {
-        const r = await fetch(`/api/alarm/catalog/${encodeURIComponent(DASH.editingPv)}?password=${encodeURIComponent(pw)}`, {
+        const r = await fetch(`/api/alarm/catalog/${encodeURIComponent(DASH.editingPv)}`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: {'Content-Type': 'application/json', 'X-Postmortem-Password': pw},
             body: JSON.stringify(body),
         });
         const d = await r.json();

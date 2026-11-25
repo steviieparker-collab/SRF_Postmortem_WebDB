@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}SRF Postmortem Chat{% endblock %}
+
+{% block extra_head %}
+<style>
+    #chat-log { background:#0d1117; }
+    .chat-msg { max-width: 92%; margin-bottom: .9rem; padding: .7rem .9rem; border-radius: .6rem; }
+    .chat-user { margin-left: auto; background:#1f6feb; color:#fff; }
+    .chat-assistant { background:#161b22; border:1px solid #30363d; }
+    .chat-assistant h6 { font-size:.85rem; text-transform:uppercase; letter-spacing:.04em; }
+    .chat-assistant a.badge { font-weight:500; }
+    .source-item { border-bottom:1px solid #21262d; padding:.35rem 0; }
+    .source-item:last-child { border-bottom:0; }
+    #chat-input { resize: vertical; min-height: 62px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card border-secondary">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-chat-dots-fill text-info me-1"></i> SRF Postmortem Assistant</span>
+                <span class="badge bg-dark border border-secondary" id="rag-model">{{ model }}</span>
+            </div>
+            <div class="card-body" id="chat-log" style="height:62vh; overflow-y:auto;">
+                <div class="chat-msg chat-assistant">
+                    <div class="small text-secondary mb-1">assistant</div>
+                    이벤트 노트, 분류, 알람/PV 정보를 근거로 답합니다. 모든 답변에는 이벤트/PV 출처가 붙습니다.
+                    오른쪽 예시 질문을 눌러 시작해 보세요.
+                </div>
+            </div>
+            <div class="card-footer">
+                <div class="d-flex gap-2">
+                    <textarea id="chat-input" class="form-control bg-dark text-light border-secondary"
+                              placeholder="예: 2025-11-03 KSU3 유량 부족 이벤트의 원인과 알람 PV는? (Shift+Enter 줄바꿈)"></textarea>
+                    <button id="chat-send" class="btn btn-info align-self-stretch px-4">
+                        <i class="bi bi-send-fill"></i>
+                    </button>
+                </div>
+                <div class="small text-secondary mt-2" id="chat-meta"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card border-secondary mb-3">
+            <div class="card-header py-2"><i class="bi bi-lightbulb"></i> 예시 질문</div>
+            <div class="card-body p-2" id="suggestions">
+                <div class="small text-secondary p-2">불러오는 중…</div>
+            </div>
+        </div>
+
+        <div class="card border-secondary">
+            <div class="card-header py-2 d-flex justify-content-between">
+                <span><i class="bi bi-link-45deg"></i> 출처</span>
+                <span class="badge bg-dark border border-secondary" id="index-badge">index</span>
+            </div>
+            <div class="card-body p-2" id="sources">
+                <div class="small text-secondary p-2">답변 후 출처가 표시됩니다.</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+window.RAG_STATUS = {{ rag_status|tojson }};
+window.RAG_MODEL = {{ model|tojson }};
+</script>
+<script src="/static/js/chat.js?v={{ static_version('js/chat.js') }}"></script>
+{% endblock %}

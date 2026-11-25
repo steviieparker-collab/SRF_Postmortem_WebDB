@@ -21,6 +21,7 @@ from src.pipeline.classifier import AcceleratorEventClassifier as PipelineClassi
 from src.pipeline.visualizer import Visualizer
 from src.pipeline.reporter import ReportGenerator
 from src.pipeline.email_sender import EmailSender
+from src.pipeline.waveform_images import ensure_image_set as _ensure_waveform_images
 from src.db.schema import init_db_sync, get_sync_connection
 from src.db.repository import create_event, get_event, list_events
 
@@ -148,6 +149,18 @@ class SRFOrchestrator:
 
         graph_files = []
         for merged_file in all_files:
+            # Per-event narrow images for the Waveform Viewer.  This is also
+            # the fallback for batch imports where the monitor's per-scope
+            # graph_only images do not exist.  The viewer only covers events
+            # from late May 2025 (when the NAS narrow JPGs start), so do not
+            # backfill older merged files here.
+            _event_id = merged_file.stem.replace("event_", "", 1)
+            if _event_id[:8] >= "20250529":
+                try:
+                    _ensure_waveform_images(_event_id, merged_file)
+                except Exception:
+                    logger.warning("Waveform images failed for %s", _event_id, exc_info=True)
+
             wide = self.paths.graphs_dir / f"{merged_file.stem}_wide_el.jpg"
             narrow = self.paths.graphs_dir / f"{merged_file.stem}_narrow_el.jpg"
             if wide.exists() and narrow.exists():

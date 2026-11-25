@@ -26,6 +26,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.core.config import load_config, reset_config
 from src.core.logger import get_logger
+from src.pipeline.waveform_images import (
+    SCOPE_INDEX,
+    ensure_image_set,
+)
 
 logger = get_logger(__name__)
 
@@ -1136,6 +1140,24 @@ def start_watchdog_only(config_path: str = "config/config.yaml"):
                         new_paths.append(str(dest))
 
                     _pipeline_status.update(_ts(f"Running classifier/visualizer/reporter on {len(new_paths)} new files..."))
+
+                    # Persist the per-scope narrow images (rendered from the
+                    # raw CSV at 1 us) in the Waveform Viewer's event-keyed
+                    # folder before run_visualizer falls back to parquet.
+                    scope_sources = {
+                        SCOPE_INDEX[sidx]: Path(img)
+                        for sidx, img in _narrow_graph_paths.items()
+                        if sidx in SCOPE_INDEX
+                    }
+                    for merged_path in new_paths:
+                        event_id = Path(merged_path).stem.replace("event_", "", 1)
+                        try:
+                            ensure_image_set(event_id, merged_path, sources=scope_sources)
+                        except Exception:
+                            logger.warning(
+                                "waveform images failed for %s", event_id, exc_info=True
+                            )
+
                     orch.run_classifier(merged_files=new_paths)
                     _pipeline_status.update(_ts("Classifier done."))
                     orch.run_visualizer(merged_files=new_paths)

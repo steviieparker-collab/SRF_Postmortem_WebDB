@@ -1,0 +1,223 @@
+[
+  {
+    "id": "q01",
+    "question": "2025-11-03 KSU3 유량 부족 이벤트의 원인과 알람 PV는?",
+    "intent": "alarm_pv",
+    "expected_events": ["20251103_115812"],
+    "expected_terms": ["AI_LOW_FAULT40", "AI24", "유량"]
+  },
+  {
+    "id": "q02",
+    "question": "KSU3 ion pump current too high 이력을 연도별로 보여줘.",
+    "intent": "aggregate",
+    "expected_events": [
+      "20160529_163900", "20160530_061800", "20160530_135000",
+      "20160615_210200", "20170723_120300", "20180521_185400",
+      "20180524_162000"
+    ],
+    "expected_terms": ["2016", "2017", "2018", "7건"]
+  },
+  {
+    "id": "q03",
+    "question": "2024년 CM1 quench 이벤트 목록을 보여줘.",
+    "intent": "search",
+    "expected_events": [
+      "20240227_121438", "20240826_233522", "20240907_025313",
+      "20241002_171719", "20241028_035836", "20241111_044552",
+      "20241130_000319", "20241211_175400"
+    ],
+    "expected_terms": ["2024", "quench"]
+  },
+  {
+    "id": "q04",
+    "question": "2025년 CM1 quench 이벤트 목록을 보여줘.",
+    "intent": "search",
+    "expected_events": [
+      "20250221_210600", "20250306_195900", "20250409_022500",
+      "20250912_115742"
+    ],
+    "expected_terms": ["2025", "quench"]
+  },
+  {
+    "id": "q05",
+    "question": "2021년 CM2 quench 이벤트 목록을 보여줘.",
+    "intent": "search",
+    "expected_events": [
+      "20210529_013700", "20210604_091800", "20210605_092000"
+    ],
+    "expected_terms": ["2021", "CM2", "quench"]
+  },
+  {
+    "id": "q06",
+    "question": "2023-12-10 KSU1 water flow sensor error 조치 내용은?",
+    "intent": "event_detail",
+    "expected_events": ["20231210_114914"],
+    "expected_terms": ["KSU#1", "Water Flow", "Sensor"]
+  },
+  {
+    "id": "q07",
+    "question": "2026-10-25 HEX 온도 인터락의 PV와 임계값은?",
+    "intent": "alarm_pv",
+    "expected_events": ["20261025_201922"],
+    "expected_terms": ["BPT01", "35", "HEX"]
+  },
+  {
+    "id": "q08",
+    "question": "2026-06-21 KLY1 body water flow low 이벤트의 원인은?",
+    "intent": "event_detail",
+    "expected_events": ["20260621_103828"],
+    "expected_terms": ["KLY1", "water flow", "AI29"]
+  },
+  {
+    "id": "q09",
+    "question": "2026-06-23 KSU3 HVPS water flow low 이벤트의 알람 PV는?",
+    "intent": "alarm_pv",
+    "expected_events": ["20260623_110438"],
+    "expected_terms": ["AI_LOW_FAULT40", "AI24"]
+  },
+  {
+    "id": "q10",
+    "question": "2026-09-21 KSU2 DC24V SMPS fault 이벤트를 알려줘.",
+    "intent": "event_detail",
+    "expected_events": ["20260921_162300"],
+    "expected_terms": ["SMPS", "KSU2"]
+  },
+  {
+    "id": "q11",
+    "question": "2025-06-24 KSU1 cooling fan failed 이벤트는?",
+    "intent": "event_detail",
+    "expected_events": ["20250624_132954"],
+    "expected_terms": ["KSU#1", "cooling fan"]
+  },
+  {
+    "id": "q12",
+    "question": "2023-07-25 KSU2 blower belt 파손 이벤트는?",
+    "intent": "event_detail",
+    "expected_events": ["20230725_055000"],
+    "expected_terms": ["KSU#2", "Blower"]
+  },
+  {
+    "id": "q13",
+    "question": "2020-08-02 KSU1 cathode current high 이벤트는?",
+    "intent": "event_detail",
+    "expected_events": ["20200802_235000"],
+    "expected_terms": ["KSU#1", "Cathode"]
+  },
+  {
+    "id": "q14",
+    "question": "2020-11-18 KSU1 LP noise 이벤트는?",
+    "intent": "event_detail",
+    "expected_events": ["20201118_222700"],
+    "expected_terms": ["KSU#1", "LP"]
+  },
+  {
+    "id": "q15",
+    "question": "2022-04-01 KSU2 focus power supply fault 이벤트는?",
+    "intent": "event_detail",
+    "expected_events": ["20220401_222000"],
+    "expected_terms": ["KSU#2", "Focus"]
+  },
+  {
+    "id": "q16",
+    "question": "2018-04-09 KSU1 klystron body water inlet temp low 이벤트는?",
+    "intent": "event_detail",
+    "expected_events": ["20180409_032500"],
+    "expected_terms": ["KSU#1", "water inlet"]
+  },
+  {
+    "id": "q17",
+    "question": "2017-06-01 CM2 FBT ion pump controller failed 이벤트는?",
+    "intent": "event_detail",
+    "expected_events": ["20170601_063600"],
+    "expected_terms": ["CM2", "Ion Pump"]
+  },
+  {
+    "id": "q18",
+    "question": "2018-05-08 CM2 ion pump off 이벤트는?",
+    "intent": "event_detail",
+    "expected_events": ["20180508_194500"],
+    "expected_terms": ["CM#2", "Ion Pump"]
+  },
+  {
+    "id": "q19",
+    "question": "2018-12-04 CM2 flowmeter out of order 이벤트는?",
+    "intent": "event_detail",
+    "expected_events": ["20181204_003300"],
+    "expected_terms": ["CM#2", "Flowmeter"]
+  },
+  {
+    "id": "q20",
+    "question": "2021-05-27 CM1 flowmeter 교체 이벤트는?",
+    "intent": "event_detail",
+    "expected_events": ["20210527_234800"],
+    "expected_terms": ["CM1", "Flowmeter"]
+  },
+  {
+    "id": "q21",
+    "question": "2017-06-21 CM2 water flowmeter sensor malfunction 이벤트는?",
+    "intent": "event_detail",
+    "expected_events": ["20170621_043300"],
+    "expected_terms": ["CM2", "Flowmeter"]
+  },
+  {
+    "id": "q22",
+    "question": "2024-08-20 CM1 Arc 이벤트는?",
+    "intent": "event_detail",
+    "expected_events": ["20240820_214436"],
+    "expected_terms": ["CM#1", "Arc"]
+  },
+  {
+    "id": "q23",
+    "question": "2019-05-06 KSU3 load Arc 이벤트는?",
+    "intent": "event_detail",
+    "expected_events": ["20190506_112900"],
+    "expected_terms": ["KSU#3", "Arc"]
+  },
+  {
+    "id": "q24",
+    "question": "2022-10-06 KSU3 Ion Pump Failed 이벤트는?",
+    "intent": "event_detail",
+    "expected_events": ["20221006_061900"],
+    "expected_terms": ["KSU#3", "Ion Pump"]
+  },
+  {
+    "id": "q25",
+    "question": "가장 많은 fault type과 건수는?",
+    "intent": "aggregate",
+    "expected_events": [],
+    "expected_terms": ["Case 3", "225"]
+  },
+  {
+    "id": "q26",
+    "question": "현재 알람 모니터 상태와 마지막 heartbeat는?",
+    "intent": "alarm_status",
+    "expected_events": [],
+    "expected_terms": ["521", "heartbeat"]
+  },
+  {
+    "id": "q27",
+    "question": "2026-10-13 CM3 ARC 인터락 이벤트의 PV는?",
+    "intent": "alarm_pv",
+    "expected_events": ["20261013_212628"],
+    "expected_terms": ["BPR01", "AIP01p", "ARC"]
+  },
+  {
+    "id": "q28",
+    "question": "2027년 SRF 빔덤프 이벤트를 보여줘.",
+    "intent": "search",
+    "expected_events": [],
+    "expected_terms": [],
+    "should_refuse": true
+  },
+  {
+    "id": "q29",
+    "question": "2026년 KSU관련 빔덤프는?",
+    "intent": "search",
+    "expected_events": [
+      "20260207_213822", "20260208_200024", "20260226_102316",
+      "20260407_043923", "20260407_061149", "20260427_134618",
+      "20260621_103828", "20260623_110438", "20260921_162300"
+    ],
+    "expected_terms": ["9건", "2026", "KSU"]
+  }
+]

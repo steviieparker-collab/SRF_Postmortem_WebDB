@@ -56,6 +56,11 @@
         </div>
         <!-- Prev / Next buttons -->
         <div class="col-auto d-flex gap-1">
+            <a href="/waveforms?event={{ event.id }}"
+               class="btn btn-sm btn-outline-secondary"
+               title="Open this event in the Waveform Viewer">
+                <i class="bi bi-images"></i> Waveforms
+            </a>
             {% if prev_event_id %}
             <a href="/events/{{ prev_event_id }}{% if filter_query %}?{{ filter_query }}{% endif %}"
                class="btn btn-sm btn-outline-secondary"
@@ -403,7 +408,7 @@ async function updateUserFaultType() {
     const value = select.value;
     status.textContent = 'Saving...';
     try {
-        const resp = await fetch('/api/events/{{ event.id }}/user-fault-type', {
+        const resp = await srfAdminFetch('/api/events/{{ event.id }}/user-fault-type', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({value: value}),
@@ -428,7 +433,7 @@ async function resetUserFaultType() {
     const status = document.getElementById('uft-status');
     status.textContent = 'Resetting...';
     try {
-        const resp = await fetch('/api/events/{{ event.id }}/user-fault-type', {
+        const resp = await srfAdminFetch('/api/events/{{ event.id }}/user-fault-type', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({value: ''}),
@@ -464,7 +469,7 @@ function deleteEvent() {
     if (!confirm('Delete this event permanently?\n\n{{ event.id }}')) return;
     const pw = prompt('Enter password to delete:');
     if (pw === null || pw === '') return;
-    fetch('/api/events/{{ event.id }}?password=' + encodeURIComponent(pw), { method: 'DELETE' })
+    fetch('/api/events/{{ event.id }}', { method: 'DELETE', headers: {'X-Postmortem-Password': pw} })
         .then(r => r.json())
         .then(d => {
             if (d.ok) {
@@ -558,7 +563,7 @@ async function uploadAttachments(files) {
     }
     
     try {
-        const resp = await fetch('/api/events/{{ event.id }}/attachments', {
+        const resp = await srfAdminFetch('/api/events/{{ event.id }}/attachments', {
             method: 'POST',
             body: formData,
         });
@@ -578,8 +583,9 @@ async function deleteAttachment(attachmentId) {
     if (!pw) return;
     
     try {
-        const resp = await fetch('/api/attachments/' + attachmentId + '?password=' + encodeURIComponent(pw), {
+        const resp = await fetch('/api/attachments/' + attachmentId, {
             method: 'DELETE',
+            headers: {'X-Postmortem-Password': pw},
         });
         const data = await resp.json();
         if (data.ok) {

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Waveform Viewer | SRF Postmortem{% endblock %}
+
+{% block extra_head %}
+<link href="/static/css/waveform_gallery.css?v={{ static_version('css/waveform_gallery.css') }}" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div id="wfg-page"
+     data-initial-event="{{ initial_event }}"
+     data-initial-year="{{ initial_year }}">
+
+    <!-- Top-left: read-only event information + navigation -->
+    <section class="wfg-info" id="wfg-info">
+        <div class="d-flex align-items-center justify-content-between gap-2">
+            <div class="wfg-title"><i class="bi bi-images me-1"></i>Waveform Viewer</div>
+            <select id="wfg-year" class="form-select form-select-sm wfg-year" title="연도 선택"></select>
+        </div>
+
+        <div class="d-flex align-items-center gap-1 mt-2">
+            <button id="wfg-prev" class="btn btn-sm btn-outline-secondary" title="이전 (최신 방향)">
+                <i class="bi bi-chevron-left"></i>
+            </button>
+            <button id="wfg-next" class="btn btn-sm btn-outline-secondary" title="다음 (과거 방향)">
+                <i class="bi bi-chevron-right"></i>
+            </button>
+            <span id="wfg-counter" class="wfg-counter ms-auto text-secondary"></span>
+        </div>
+
+        <div class="d-flex align-items-baseline gap-2 flex-wrap mt-2">
+            <a id="wfg-detail-link" href="#" class="wfg-event-link"><strong id="wfg-event-id">—</strong></a>
+            <span id="wfg-time" class="text-secondary small"></span>
+            <span id="wfg-latest" class="badge bg-info text-dark d-none">최신</span>
+        </div>
+
+        <div class="mt-2">
+            <span id="wfg-fault" class="badge fs-6 case-badge-0">—</span>
+            <span id="wfg-fault-note" class="small text-info ms-1 d-none"><i class="bi bi-pencil"></i> 수기</span>
+            <span id="wfg-conf" class="small text-secondary ms-1"></span>
+        </div>
+
+        <div class="wfg-field">
+            <span class="wfg-field-label">User beamtime</span>
+            <span id="wfg-beamtime" class="wfg-field-value">—</span>
+        </div>
+
+        <details id="wfg-details" class="wfg-details">
+            <summary>상세 정보</summary>
+            <div class="wfg-detail-body">
+                <div class="wfg-section-title">Event Sequence</div>
+                <div id="wfg-sequence" class="small"></div>
+
+                <div class="wfg-section-title">Notes</div>
+                <div id="wfg-notes" class="wfg-notes small">—</div>
+
+                <div class="wfg-section-title">Fault Diagnosis</div>
+                <div id="wfg-diagnosis" class="small">—</div>
+            </div>
+        </details>
+
+        <div id="wfg-status" class="wfg-status small text-secondary"></div>
+    </section>
+
+    <!-- Top-right: Forward -->
+    <figure class="wfg-panel" data-scope="forward">
+        <figcaption class="wfg-label">Forward</figcaption>
+        <img id="wfg-img-forward" alt="Forward narrow waveform" draggable="false" decoding="async">
+        <div class="wfg-empty" id="wfg-empty-forward">Forward 이미지 없음</div>
+    </figure>
+
+    <!-- Bottom-left: Cavity -->
+    <figure class="wfg-panel" data-scope="cavity">
+        <figcaption class="wfg-label">Cavity</figcaption>
+        <img id="wfg-img-cavity" alt="Cavity narrow waveform" draggable="false" decoding="async">
+        <div class="wfg-empty" id="wfg-empty-cavity">Cavity 이미지 없음</div>
+    </figure>
+
+    <!-- Bottom-right: Reflect -->
+    <figure class="wfg-panel" data-scope="reflect">
+        <figcaption class="wfg-label">Reflect</figcaption>
+        <img id="wfg-img-reflect" alt="Reflect narrow waveform" draggable="false" decoding="async">
+        <div class="wfg-empty" id="wfg-empty-reflect">Reflect 이미지 없음</div>
+    </figure>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/waveform_gallery.js?v={{ static_version('js/waveform_gallery.js') }}"></script>
+{% endblock %}

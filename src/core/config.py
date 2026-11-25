@@ -355,3 +355,10 @@ def get_settings() -> AppConfig:
 def reset_config() -> None:
     global _config
     _config = None
+
+
+def reload_config(config_path: Optional[Union[str, Path]] = None) -> AppConfig:
+    """Force-reload the config from disk (e.g. after a manual edit)."""
+    global _config
+    _config = load_config(config_path)
+    return _config

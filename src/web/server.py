@@ -9,11 +9,15 @@ Provides:
 
 import datetime as dt
 import hashlib
+import ipaddress
 import json
+import logging
 import math
 import os
 import re
+import secrets
 import shutil
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -26,7 +30,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from ..core.config import get_config, reset_config
+from ..core.config import get_config, reset_config, reload_config
 from ..db.schema import init_db_sync, get_sync_connection, seed_fault_types
 from ..db.repository import (
     get_event,
@@ -62,11 +66,14 @@ from ..alarm.manager import (
     ensure_clean as ensure_alarm_monitor_clean,
 )
 from ..alarm.event_link import (
+    is_valid_event_id,
     load_event_alarms,
     load_alarm_series,
     save_alarm_series,
     fetch_pv_range,
+    resolve_t0,
 )
+from ..rag.web import build_router as build_rag_router
 
 import threading
 import yaml
@@ -77,15 +84,178 @@ import mimetypes
 from typing import List as TypingList
 
 
-# ── Simple Auth (password prompt) ────────────────────────────
+# ── Simple Auth (password + rate limit + admin session) ──────
 
-def _check_password(input_pw: str) -> bool:
-    """Verify password against config."""
+_ADMIN_COOKIE = "srf_admin"
+_admin_tokens: dict[str, float] = {}
+_auth_lock = threading.Lock()
+_pw_failures: dict[str, dict[str, Any]] = {}
+_PW_MAX_FAILS = 5          # 60초 창 안에서 허용되는 실패 횟수
+_PW_WINDOW = 60.0
+_PW_BLOCK = 900.0          # 15분 차단
+_cfg_mtime: float = 0.0
+_cfg_lock = threading.Lock()
+
+
+def _refresh_config_if_changed() -> None:
+    """config.yaml을 직접 수정해도 재시작 없이 반영되게 한다."""
+    global _cfg_mtime
+    path = Path(__file__).resolve().parent.parent.parent / "config" / "config.yaml"
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return
+    if mtime == _cfg_mtime:
+        return
+    with _cfg_lock:
+        if mtime == _cfg_mtime:
+            return
+        try:
+            reload_config(path)
+            _cfg_mtime = mtime
+        except Exception:
+            logging.getLogger(__name__).warning("config reload failed", exc_info=True)
+
+
+class _PasswordRedactFilter(logging.Filter):
+    """접속 로그에서 password=... 값을 ***로 가린다."""
+    _pattern = re.compile(r"(?i)(password=)[^&\s\"']+")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            if isinstance(record.msg, str):
+                record.msg = self._pattern.sub(r"\1***", record.msg)
+            if isinstance(record.args, tuple):
+                record.args = tuple(
+                    self._pattern.sub(r"\1***", a) if isinstance(a, str) else a
+                    for a in record.args
+                )
+        except Exception:
+            pass
+        return True
+
+
+# 전달 헤더를 신뢰할 프록시 소스(기본: loopback = Cloudflare Tunnel/로컬 프록시).
+# POSTECH 리버스 프록시로 옮길 때 TRUSTED_PROXY_CIDRS 에 그 IP/CIDR을 추가한다.
+_TRUSTED_PROXY_NETS = []
+for _cidr in (os.getenv("TRUSTED_PROXY_CIDRS", "127.0.0.1/32,::1/128") or "").split(","):
+    _cidr = _cidr.strip()
+    if not _cidr:
+        continue
+    try:
+        _TRUSTED_PROXY_NETS.append(ipaddress.ip_network(_cidr, strict=False))
+    except ValueError:
+        pass
+
+
+def _is_trusted_proxy(ip: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(addr in net for net in _TRUSTED_PROXY_NETS)
+
+
+def _client_ip(request: Request) -> str:
+    """신뢰 프록시 뒤에서만 전달 헤더를 사용한다.
+
+    직접 접속한 클라이언트가 Cf-Connecting-IP 등을 위조해 rate limit을
+    우회하지 못하도록, peer가 신뢰 프록시일 때만 헤더를 채택한다.
+    """
+    peer = request.client.host if request.client else ""
+    if _is_trusted_proxy(peer):
+        cf = request.headers.get("cf-connecting-ip")
+        if cf:
+            return cf.strip()
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            return xff.split(",")[0].strip()
+        xr = request.headers.get("x-real-ip")
+        if xr:
+            return xr.strip()
+    return peer or "unknown"
+
+
+def _request_password(request: Request) -> str:
+    """비밀번호는 헤더 우선, 구버전 호환으로 query도 허용."""
+    return (request.headers.get("x-postmortem-password")
+            or request.query_params.get("password") or "").strip()
+
+
+def _admin_session_valid(request: Request) -> bool:
+    token = request.cookies.get(_ADMIN_COOKIE)
+    if not token:
+        return False
+    now = time.time()
+    with _auth_lock:
+        expires = _admin_tokens.get(token, 0.0)
+        if expires <= now:
+            _admin_tokens.pop(token, None)
+            return False
+    return True
+
+
+def _issue_admin_session(request: Request, response: JSONResponse) -> None:
+    cfg = get_config()
+    ttl = int(getattr(cfg.access, "session_ttl_minutes", 60) or 60)
+    token = secrets.token_urlsafe(32)
+    now = time.time()
+    with _auth_lock:
+        for key in [k for k, v in _admin_tokens.items() if v <= now]:
+            _admin_tokens.pop(key, None)
+        _admin_tokens[token] = now + ttl * 60
+    secure = request.headers.get("x-forwarded-proto", "").split(",")[0].strip() == "https"
+    response.set_cookie(_ADMIN_COOKIE, token, max_age=ttl * 60, httponly=True,
+                        samesite="strict", secure=secure, path="/")
+
+
+def _auth_block_remaining(request: Request) -> int:
+    """남은 차단 시간(초). 0이면 차단 아님."""
+    ip = _client_ip(request)
+    now = time.time()
+    with _auth_lock:
+        rec = _pw_failures.get(ip)
+        if rec and rec.get("until", 0.0) > now:
+            return int(rec["until"] - now)
+    return 0
+
+
+def _check_password(input_pw: str, request: Request | None = None,
+                    allow_session: bool = True) -> bool:
+    """Verify password against config. Per-IP rate limit + optional admin cookie."""
+    _refresh_config_if_changed()
     cfg = get_config()
     expected = getattr(cfg.access, "password", "")
     if not expected:
         return True  # no password configured = no auth required
-    return input_pw == expected
+    if request is not None and allow_session and _admin_session_valid(request):
+        return True
+
+    ip = _client_ip(request) if request is not None else "-"
+    now = time.time()
+    with _auth_lock:
+        rec = _pw_failures.get(ip)
+        if rec and rec.get("until", 0.0) > now:
+            return False
+
+    try:
+        ok = secrets.compare_digest(input_pw or "", expected)
+    except TypeError:
+        ok = (input_pw or "") == expected
+    with _auth_lock:
+        if ok:
+            _pw_failures.pop(ip, None)
+        else:
+            rec = _pw_failures.get(ip) or {"fails": [], "until": 0.0}
+            fails = [t for t in rec.get("fails", []) if now - t < _PW_WINDOW]
+            fails.append(now)
+            if len(fails) >= _PW_MAX_FAILS:
+                _pw_failures[ip] = {"fails": fails[-_PW_MAX_FAILS:], "until": now + _PW_BLOCK}
+            else:
+                _pw_failures[ip] = {"fails": fails, "until": 0.0}
+    if not ok:
+        time.sleep(0.4)
+    return ok
 
 
 def _event_id_to_utc_file_stem(event_id: str) -> str:
@@ -155,13 +325,23 @@ def _cleanup_event_attachments(event_id: str):
         pass
 
 
-app = FastAPI(title="SRF Postmortem Viewer")
+app = FastAPI(title="SRF Postmortem Viewer", docs_url=None, redoc_url=None, openapi_url=None)
 
 # ── Suppress access log for pipeline status polling ────────────
 import logging
 uvicorn_access = logging.getLogger("uvicorn.access")
 uvicorn_access.disabled = True
 uvicorn_access.propagate = False
+
+
+@app.on_event("startup")
+def _install_access_log_redaction():
+    """uvicorn이 로깅을 재설정한 뒤 필터를 다시 붙인다."""
+    lg = logging.getLogger("uvicorn.access")
+    lg.disabled = False
+    lg.propagate = True
+    if not any(isinstance(f, _PasswordRedactFilter) for f in lg.filters):
+        lg.addFilter(_PasswordRedactFilter())
 
 @app.middleware("http")
 async def page_view_middleware(request: Request, call_next):
@@ -173,6 +353,22 @@ async def page_view_middleware(request: Request, call_next):
         _count_page_view(path)
     if path in ("/api/pipeline/status", "/api/import/status"):
         response.headers["X-Accel-Buffering"] = "no"
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault(
+        "Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    response.headers.setdefault(
+        "Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdn.plot.ly; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.plot.ly; "
+        "img-src 'self' data: blob: https:; "
+        "font-src 'self' data: https://cdn.jsdelivr.net; "
+        "connect-src 'self'; object-src 'none'; base-uri 'self'; "
+        "form-action 'self'; frame-ancestors 'none'")
     return response
 
 # ── Page view counter ────────────────────────────────────────
@@ -218,9 +414,25 @@ async def api_today_views():
 
 @app.post("/api/verify-password")
 async def api_verify_password(request: Request):
-    """Verify password (simple check, no sessions)."""
+    """Verify password. On success issues an HttpOnly admin session cookie."""
     data = await request.json()
-    return {"ok": _check_password(data.get("password", ""))}
+    remaining = _auth_block_remaining(request)
+    if remaining > 0:
+        return JSONResponse({"ok": False, "error": "rate_limited",
+                             "retry_after": remaining}, status_code=429)
+    ok = _check_password(str(data.get("password", "")), request, allow_session=False)
+    response = JSONResponse({"ok": ok})
+    if ok:
+        _issue_admin_session(request, response)
+    return response
+
+
+@app.post("/api/logout")
+async def api_logout():
+    """Clear the admin session cookie."""
+    response = JSONResponse({"ok": True})
+    response.delete_cookie(_ADMIN_COOKIE, path="/")
+    return response
 
 
 # ── Static / Templates ───────────────────────────────────────
@@ -255,6 +467,12 @@ def static_version(rel_path: str) -> str:
 templates.env.globals["static_version"] = static_version
 
 app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+
+# Read-only RAG assistant (/chat, /api/chat, /api/rag/*).
+# 2026-11-23: 공개 챗봇 표면 제거(무인증 LLM 과금/DB 조회). MCP(postmortem_*)로 일원화.
+# 다시 켜려면 RAG_WEB_ENABLED=1 로 실행한다.
+if os.getenv("RAG_WEB_ENABLED", "0") == "1":
+    app.include_router(build_rag_router(templates))
 
 
 # ── Startup ──────────────────────────────────────────────────
@@ -515,6 +733,194 @@ async def event_detail(
     )
 
 
+# ── Waveform Viewer ───────────────────────────────────────────
+# Static narrow scope images live outside the repo's static/ tree so the
+# pipeline can write them without a restart: data/waveforms/<event_id>/
+# <forward|cavity|reflect>_narrow.jpg
+_WFG_MIN_TS = "2025-05-29"  # NAS narrow JPGs start at the end of May 2025
+_WFG_SCOPES = ("forward", "cavity", "reflect")
+_WFG_IMAGE_RE = re.compile(r"(forward|cavity|reflect)_narrow\.jpg")
+
+
+def _waveforms_dir() -> Path:
+    return Path(__file__).resolve().parent.parent.parent / "data" / "waveforms"
+
+
+def _waveform_image_index() -> dict[str, dict[str, Path]]:
+    """event_id -> {scope: path} for events with at least one image."""
+    index: dict[str, dict[str, Path]] = {}
+    root = _waveforms_dir()
+    if not root.is_dir():
+        return index
+    try:
+        children = list(root.iterdir())
+    except OSError:
+        return index
+    for child in children:
+        if not child.is_dir() or not is_valid_event_id(child.name):
+            continue
+        images: dict[str, Path] = {}
+        for scope in _WFG_SCOPES:
+            path = child / f"{scope}_narrow.jpg"
+            try:
+                if path.is_file() and path.stat().st_size > 0:
+                    images[scope] = path
+            except OSError:
+                continue
+        if images:
+            index[child.name] = images
+    return index
+
+
+def _wf_image_urls(event_id: str, images: dict[str, Path]) -> dict[str, str]:
+    urls: dict[str, str] = {}
+    for scope, path in images.items():
+        try:
+            version = int(path.stat().st_mtime)
+        except OSError:
+            version = 0
+        urls[scope] = f"/api/waveforms/{event_id}/{scope}_narrow.jpg?v={version}"
+    return urls
+
+
+def _wf_case_id(fault: str) -> int:
+    match = re.match(r"^Case (\d+)", fault or "")
+    return int(match.group(1)) if match else 0
+
+
+@app.get("/waveforms", response_class=HTMLResponse, include_in_schema=False)
+async def waveform_gallery(
+    request: Request,
+    event: Optional[str] = Query(None),
+    year: Optional[int] = Query(None),
+):
+    """Full-screen waveform viewer (newest event first)."""
+    return templates.TemplateResponse(
+        request,
+        "waveform_gallery.html",
+        {
+            "initial_event": event or "",
+            "initial_year": year or "",
+            "today_views": _get_today_views(),
+        },
+    )
+
+
+@app.get("/api/waveforms")
+async def api_waveform_list(year: Optional[int] = Query(None)):
+    """Compact list of events that have waveform images, newest first."""
+    index = _waveform_image_index()
+    if not index:
+        return {"total": 0, "years": [], "year_counts": {}, "events": []}
+
+    conn = get_sync_connection()
+    try:
+        rows = list(
+            conn.execute(
+                "SELECT id, timestamp, fault_type, user_fault_type, case_id, "
+                "user_beam_time, notes, fault_confidence "
+                "FROM events ORDER BY timestamp DESC"
+            )
+        )
+    finally:
+        conn.close()
+
+    all_events = []
+    year_counts: dict[str, int] = {}
+    for row in rows:
+        event_id = row["id"]
+        images = index.get(event_id)
+        if not images:
+            continue
+        timestamp = row["timestamp"] or ""
+        if timestamp < _WFG_MIN_TS:
+            continue
+        event_year = timestamp[:4]
+        year_counts[event_year] = year_counts.get(event_year, 0) + 1
+        if year and event_year != str(year):
+            continue
+
+        effective = (row["user_fault_type"] or "").strip() or (row["fault_type"] or "").strip() or "Unknown"
+        case_id = row["case_id"] or _wf_case_id(effective)
+        all_events.append(
+            {
+                "id": event_id,
+                "timestamp": timestamp,
+                "year": event_year,
+                "fault_type": row["fault_type"] or "",
+                "user_fault_type": row["user_fault_type"] or "",
+                "effective_fault": effective,
+                "case_id": case_id,
+                "fault_confidence": row["fault_confidence"] or 0.0,
+                "user_beam_time": row["user_beam_time"] or "",
+                "has_notes": bool((row["notes"] or "").strip()),
+                "images": _wf_image_urls(event_id, images),
+                "missing": [s for s in _WFG_SCOPES if s not in images],
+            }
+        )
+
+    return {
+        "total": len(all_events),
+        "years": sorted(year_counts, reverse=True),
+        "year_counts": year_counts,
+        "events": all_events,
+    }
+
+
+@app.get("/api/waveforms/{event_id}")
+async def api_waveform_event(event_id: str):
+    """Info-panel data for one gallery event (read-only)."""
+    if not is_valid_event_id(event_id):
+        return JSONResponse({"error": "Invalid event id"}, status_code=400)
+
+    conn = get_sync_connection()
+    try:
+        event = get_event(conn, event_id)
+    finally:
+        conn.close()
+
+    if not event:
+        return JSONResponse({"error": "Event not found"}, status_code=404)
+
+    images = _waveform_image_index().get(event_id, {})
+    effective = (event.user_fault_type or "").strip() or (event.fault_type or "").strip() or "Unknown"
+    return {
+        "id": event.id,
+        "timestamp": event.timestamp,
+        "fault_type": event.fault_type or "",
+        "user_fault_type": event.user_fault_type or "",
+        "effective_fault": effective,
+        "case_id": event.case_id or _wf_case_id(effective),
+        "fault_confidence": event.fault_confidence or 0.0,
+        "user_beam_time": event.user_beam_time or "",
+        "notes": event.notes or "",
+        "case_description": event.case_description or "",
+        "case_fault": event.case_fault or "",
+        "time_groups": event.time_groups,
+        "images": _wf_image_urls(event_id, images),
+        "missing": [s for s in _WFG_SCOPES if s not in images],
+    }
+
+
+@app.get("/api/waveforms/{event_id}/{filename}")
+async def api_waveform_image(event_id: str, filename: str):
+    """Serve one narrow scope image from data/waveforms."""
+    if not is_valid_event_id(event_id):
+        return JSONResponse({"error": "Invalid event id"}, status_code=400)
+    if not _WFG_IMAGE_RE.fullmatch(filename):
+        return JSONResponse({"error": "Invalid image"}, status_code=404)
+
+    path = _waveforms_dir() / event_id / filename
+    if not path.is_file():
+        return JSONResponse({"error": "Image not found"}, status_code=404)
+
+    return FileResponse(
+        str(path),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=604800"},
+    )
+
+
 @app.get("/stats", response_class=HTMLResponse, include_in_schema=False)
 async def stats_page(
     request: Request,
@@ -617,6 +1023,8 @@ async def api_get_similar(event_id: str):
 @app.get("/api/events/{event_id}/pv-evidence")
 async def api_get_pv_evidence(event_id: str):
     """JSON endpoint: read-only PV evidence sidecar (if present)."""
+    if not is_valid_event_id(event_id):
+        return JSONResponse({"error": "invalid event_id"}, status_code=400)
     project_root = Path(__file__).resolve().parent.parent.parent
     path = project_root / "data" / "pv_evidence" / f"{event_id}.json"
     if not path.exists():
@@ -635,6 +1043,8 @@ async def api_get_pv_evidence(event_id: str):
 @app.get("/api/events/{event_id}/pv-series")
 async def api_get_pv_series(event_id: str):
     """JSON endpoint: PV time series for an event (read-only)."""
+    if not is_valid_event_id(event_id):
+        return JSONResponse({"error": "invalid event_id"}, status_code=400)
     project_root = Path(__file__).resolve().parent.parent.parent
     path = project_root / "data" / "pv_series" / f"{event_id}.json"
     if not path.exists():
@@ -698,21 +1108,17 @@ def _fetch_pv(pv: str, base):
 
 
 def _event_t0(event_id: str, base):
-    """빔전류 최대값 이후 99% 아래로 처음 떨어지는 시각 (event 기준 초)."""
+    """빔전류가 최대값의 50% 아래로 지속 하강한 시각 (event 기준 초).
+
+    event_link.resolve_t0()와 동일한 규칙을 쓴다.  과거 1% 기준은 덤프 전
+    작은 딥에도 반응해 t0가 1~2초 빨라졌다.
+    """
     if event_id in _t0_cache:
         return _t0_cache[event_id]
-    t0 = 0.0
     try:
-        pts, _ = _fetch_pv("SR:G00:BEAMCURRENT_T", base)
-        b = base.timestamp()
-        pre = [(t, v) for t, v in pts if b - 600 <= t <= b + 60]
-        if pre:
-            mx = max(pre, key=lambda x: x[1])
-            hit = next((t for t, v in pts if t > mx[0] and v < mx[1] * 0.99), None)
-            if hit is not None:
-                t0 = round(hit - b, 3)
+        t0, _ = resolve_t0(base.isoformat())
     except Exception:
-        pass
+        t0 = 0.0
     _t0_cache[event_id] = t0
     return t0
 
@@ -764,6 +1170,8 @@ def _split_semicolon(value: str) -> list[str]:
 @app.get("/api/events/{event_id}/alarms")
 async def api_event_alarms(event_id: str):
     """Alarm onset snapshot for an event (sidecar, DB fallback)."""
+    if not is_valid_event_id(event_id):
+        return JSONResponse({"error": "invalid event_id"}, status_code=400)
     doc = load_event_alarms(event_id)
     if doc is not None:
         return JSONResponse(doc)
@@ -803,6 +1211,8 @@ async def api_event_alarms(event_id: str):
 @app.get("/api/events/{event_id}/alarm-series")
 async def api_event_alarm_series(event_id: str, pvs: str = Query("")):
     """Archiver series for the alarm graph PVs (-60s .. +10s around t0)."""
+    if not is_valid_event_id(event_id):
+        return JSONResponse({"error": "invalid event_id"}, status_code=400)
     conn = get_sync_connection()
     try:
         event = get_event(conn, event_id)
@@ -893,6 +1303,8 @@ async def api_get_event_pv_selection(event_id: str):
 @app.post("/api/events/{event_id}/pv-selection")
 async def api_save_event_pv_selection(event_id: str, request: Request):
     """Replace the saved PV selection for one event."""
+    if not _check_password(_request_password(request), request):
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
     data = await request.json()
     raw_items = data.get("items", [])
     if not isinstance(raw_items, list):
@@ -934,6 +1346,8 @@ async def api_save_event_pv_selection(event_id: str, request: Request):
 
 @app.get("/api/events/{event_id}/pv-notes")
 async def api_get_pv_notes(event_id: str):
+    if not is_valid_event_id(event_id):
+        return JSONResponse({"error": "invalid event_id"}, status_code=400)
     project_root = Path(__file__).resolve().parent.parent.parent
     path = project_root / "data" / "pv_notes" / f"{event_id}.json"
     if not path.exists():
@@ -956,6 +1370,10 @@ async def api_get_pv_notes(event_id: str):
 
 @app.post("/api/events/{event_id}/pv-notes")
 async def api_save_pv_notes(event_id: str, request: Request):
+    if not _check_password(_request_password(request), request):
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+    if not is_valid_event_id(event_id):
+        return JSONResponse({"error": "invalid event_id"}, status_code=400)
     data = await request.json()
     project_root = Path(__file__).resolve().parent.parent.parent
     out_dir = project_root / "data" / "pv_notes"
@@ -1149,8 +1567,8 @@ async def api_alarm_monitor_status():
 
 @app.post("/api/alarm/monitor/start")
 async def api_alarm_monitor_start(request: Request):
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request)
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
     config_path = str(Path(__file__).parent.parent.parent / "config" / "config.yaml")
     return start_alarm_monitor(config_path)
@@ -1158,8 +1576,8 @@ async def api_alarm_monitor_start(request: Request):
 
 @app.post("/api/alarm/monitor/stop")
 async def api_alarm_monitor_stop(request: Request):
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request)
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
     return stop_alarm_monitor()
 
@@ -1167,8 +1585,8 @@ async def api_alarm_monitor_stop(request: Request):
 @app.post("/api/alarm/catalog/{pv}")
 async def api_alarm_catalog_update(pv: str, request: Request):
     """Update one alarm's graph-PV mapping (password required)."""
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request)
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
     data = await request.json()
     conn = get_sync_connection()
@@ -1226,8 +1644,8 @@ async def api_set_notes(event_id: str, request: Request):
 async def api_delete_event(event_id: str, request: Request):
     """Delete an event. Password in query param or body."""
     data = await request.json() if request.headers.get("content-type") == "application/json" else {}
-    pw = request.query_params.get("password", "") or data.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request) or str(data.get("password", "") or "")
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
     conn = get_sync_connection()
     try:
@@ -1249,6 +1667,8 @@ async def api_delete_event(event_id: str, request: Request):
 @app.post("/api/events/{event_id}/attachments")
 async def api_upload_attachments(event_id: str, request: Request):
     """Upload file attachments for an event. Accepts multipart/form-data."""
+    if not _check_password(_request_password(request), request):
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
     conn = get_sync_connection()
     try:
         event = get_event(conn, event_id)
@@ -1352,8 +1772,8 @@ async def api_download_attachment(attachment_id: int):
 @app.delete("/api/attachments/{attachment_id}")
 async def api_delete_attachment(attachment_id: int, request: Request):
     """Delete an attachment. Password in query param."""
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request)
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
 
     conn = get_sync_connection()
@@ -1387,8 +1807,8 @@ async def api_delete_attachment(attachment_id: int, request: Request):
 async def api_batch_delete(request: Request):
     """Batch delete events. Password in query param or body."""
     data = await request.json()
-    pw = request.query_params.get("password", "") or data.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request) or str(data.get("password", "") or "")
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
     event_ids = data.get("event_ids", [])
     if not event_ids:
@@ -1416,8 +1836,8 @@ async def api_batch_delete(request: Request):
 async def api_batch_beamtime(request: Request):
     """Batch set user_beam_time for events."""
     data = await request.json()
-    pw = request.query_params.get("password", "") or data.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request) or str(data.get("password", "") or "")
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
     event_ids = data.get("event_ids", [])
     beam_time = data.get("beam_time", "")
@@ -1445,8 +1865,8 @@ async def api_batch_beamtime(request: Request):
 async def api_batch_fault_type(request: Request):
     """Batch set user_fault_type (manual case designation) for events."""
     data = await request.json()
-    pw = request.query_params.get("password", "") or data.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request) or str(data.get("password", "") or "")
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
     event_ids = data.get("event_ids", [])
     fault_type = (data.get("fault_type") or "").strip()
@@ -1478,8 +1898,8 @@ async def api_batch_fault_type(request: Request):
 async def api_manual_create_event(request: Request):
     """Create a manual event without CSV/waveform data."""
     data = await request.json()
-    pw = request.query_params.get("password", "") or data.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request) or str(data.get("password", "") or "")
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
 
     timestamp = data.get("timestamp", "")
@@ -1535,6 +1955,8 @@ async def api_manual_create_event(request: Request):
 @app.post("/api/events/{event_id}/user-fault-type")
 async def api_set_user_fault_type(event_id: str, request: Request):
     """Update user_fault_type for an event."""
+    if not _check_password(_request_password(request), request):
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
     data = await request.json()
     value = data.get("value", "")
     conn = get_sync_connection()
@@ -1907,8 +2329,10 @@ _import_status: dict = {"running": False, "last_result": None}
 
 
 @app.post("/api/import")
-async def api_import_events():
+async def api_import_events(request: Request):
     """Import parquet files from data/merged/, classify, and store in DB."""
+    if not _check_password(_request_password(request), request):
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
     global _import_status
 
     if _import_status.get("running"):
@@ -1953,7 +2377,8 @@ from .pipeline_manager import (
 @app.get("/settings", response_class=HTMLResponse, include_in_schema=False)
 async def settings_page(request: Request, password: Optional[str] = Query(None)):
     """Settings and pipeline control page."""
-    authed = password and _check_password(password)
+    pw = _request_password(request) or (password or "")
+    authed = bool(_check_password(pw, request))
     if not authed:
         return templates.TemplateResponse(request, "settings.html", {"auth_required": True})
     cfg = get_config()
@@ -1978,8 +2403,10 @@ async def settings_page(request: Request, password: Optional[str] = Query(None))
 
 
 @app.get("/api/config")
-async def api_get_config():
-    """Get current configuration as JSON."""
+async def api_get_config(request: Request):
+    """Get current configuration as JSON. Admin session/password required."""
+    if not _check_password(_request_password(request), request):
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
     cfg = get_config()
     config_path = Path(__file__).parent.parent.parent / "config" / "config.yaml"
     config_text = config_path.read_text() if config_path.exists() else ""
@@ -2001,8 +2428,8 @@ async def api_get_config():
 @app.post("/api/config")
 async def api_save_config(request: Request):
     """Update config.yaml with new values."""
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request)
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
     try:
         data = await request.json()
@@ -2049,8 +2476,8 @@ async def api_save_config(request: Request):
 @app.post("/api/pipeline/batch")
 async def api_pipeline_batch(request: Request):
     """Run full batch pipeline."""
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request)
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
     data = await request.json() if request.headers.get("content-type") == "application/json" else {}
     input_dirs = data.get("input_dirs")
@@ -2061,8 +2488,8 @@ async def api_pipeline_batch(request: Request):
 @app.post("/api/pipeline/import")
 async def api_pipeline_import(request: Request):
     """Run import only."""
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request)
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
     config_path = str(Path(__file__).parent.parent.parent / "config" / "config.yaml")
     return run_import_only(config_path=config_path)
@@ -2071,8 +2498,8 @@ async def api_pipeline_import(request: Request):
 @app.post("/api/pipeline/monitor/start")
 async def api_monitor_start(request: Request):
     """Start folder monitoring (full pipeline: watchdog -> preprocess -> grouper -> classifier -> DB)."""
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request)
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
     config_path = str(Path(__file__).parent.parent.parent / "config" / "config.yaml")
     return start_monitor(config_path=config_path)
@@ -2081,8 +2508,8 @@ async def api_monitor_start(request: Request):
 @app.post("/api/pipeline/monitor/stop")
 async def api_monitor_stop(request: Request):
     """Stop folder monitoring."""
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request)
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
     return stop_monitor()
 
@@ -2096,8 +2523,8 @@ async def api_pipeline_status():
 @app.post("/api/pipeline/stop")
 async def api_pipeline_stop(request: Request):
     """Force stop batch or monitor pipeline."""
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request)
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
 
     stop_monitor()
@@ -2109,8 +2536,8 @@ async def api_pipeline_stop(request: Request):
 @app.post("/api/pipeline/append")
 async def api_pipeline_append(request: Request):
     """Run append pipeline (preprocess→merge→classify→import) with specified input dirs."""
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request)
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
     data = await request.json()
     input_dirs = data.get("input_dirs", [])
@@ -2131,8 +2558,8 @@ async def api_get_append_dirs():
 
 @app.post("/api/db/backup")
 async def api_db_backup(request: Request):
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request)
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Auth"}, status_code=401)
 
     cfg = get_config()
@@ -2145,8 +2572,8 @@ async def api_db_backup(request: Request):
 @app.get("/api/db/backups")
 async def api_list_backups(request: Request):
     """List available backup files."""
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request)
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Auth"}, status_code=401)
 
     cfg = get_config()
@@ -2169,8 +2596,8 @@ async def api_list_backups(request: Request):
 @app.post("/api/db/restore")
 async def api_db_restore(request: Request):
     """Restore database from a backup file."""
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request)
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Auth"}, status_code=401)
 
     data = await request.json()
@@ -2187,8 +2614,8 @@ async def api_db_restore(request: Request):
 @app.post("/api/pipeline/reset")
 async def api_pipeline_reset(request: Request):
     """Reload config from file."""
-    pw = request.query_params.get("password", "")
-    if not _check_password(pw):
+    pw = _request_password(request)
+    if not _check_password(pw, request):
         return JSONResponse({"error": "Authentication required"}, status_code=401)
     try:
         reset_config()

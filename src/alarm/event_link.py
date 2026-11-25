@@ -9,9 +9,18 @@ page.
 from __future__ import annotations
 
 import json
+import re
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+
+_EVENT_ID_RE = re.compile(r"^\d{8}_\d{6}$")
+
+
+def is_valid_event_id(event_id: str) -> bool:
+    """event_id는 YYYYMMDD_HHMMSS 형식만 허용한다(경로 traversal 방지)."""
+    return bool(_EVENT_ID_RE.fullmatch(str(event_id or "")))
 from pathlib import Path
 from typing import Any, Optional
 
@@ -121,17 +130,23 @@ def _legacy_fetch_pv_range(pv: str, start: datetime, end: datetime, year: int):
     return pts, {"unit": units[0] if units else ""}
 
 
-def fetch_pv_range(pv: str, start: datetime, end: datetime,
-                   ref: Optional[datetime] = None):
-    """Fetch a PV range from the current or legacy archiver.
+def _lrf_name_variant(pv: str, legacy: bool) -> Optional[str]:
+    """Return the LRF PV spelling used by the requested archive era.
 
-    ``ref`` is the event reference time used to choose the archive period.
+    The current API names LLRF PVs with an ``_ARCH`` suffix
+    (``SR:RF:LRF1:GMES_ARCH``); the per-year legacy viewer stores the same
+    signal without it (``SR:RF:LRF1:GMES``).  Asking the current API for the
+    legacy spelling makes it return HTTP 500, so callers should not have to
+    know which era a PV name belongs to.
     """
-    ref = ref or start
-    base = archiver_base(ref)
-    if base != ARCHIVER_ROOT:
-        return _legacy_fetch_pv_range(pv, start, end, _to_kst(ref).year)
+    if not pv.startswith("SR:RF:LRF"):
+        return None
+    if legacy:
+        return pv[:-5] if pv.endswith("_ARCH") else None
+    return None if pv.endswith("_ARCH") else f"{pv}_ARCH"
 
+
+def _fetch_current(pv: str, start: datetime, end: datetime):
     q = urllib.parse.urlencode({
         "pv": pv,
         "from": start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
@@ -146,17 +161,75 @@ def fetch_pv_range(pv: str, start: datetime, end: datetime,
     return pts, d.get("meta", {})
 
 
+def fetch_pv_range(pv: str, start: datetime, end: datetime,
+                   ref: Optional[datetime] = None):
+    """Fetch a PV range from the current or legacy archiver.
+
+    ``ref`` is the event reference time used to choose the archive period.
+    LRF PV names are normalized to the era's spelling automatically, so both
+    ``SR:RF:LRF1:GMES`` and ``SR:RF:LRF1:GMES_ARCH`` work for any year.
+    """
+    ref = ref or start
+    base = archiver_base(ref)
+    if base != ARCHIVER_ROOT:
+        year = _to_kst(ref).year
+        pts, meta = _legacy_fetch_pv_range(pv, start, end, year)
+        alt = _lrf_name_variant(pv, legacy=True)
+        if not pts and alt:
+            try:
+                pts, meta = _legacy_fetch_pv_range(alt, start, end, year)
+            except ValueError:
+                pass
+        return pts, meta
+
+    try:
+        pts, meta = _fetch_current(pv, start, end)
+    except urllib.error.HTTPError:
+        alt = _lrf_name_variant(pv, legacy=False)
+        if not alt:
+            raise
+        pts, meta = _fetch_current(alt, start, end)
+        return pts, meta
+
+    if not pts:
+        alt = _lrf_name_variant(pv, legacy=False)
+        if alt:
+            try:
+                apts, ameta = _fetch_current(alt, start, end)
+                if apts:
+                    return apts, ameta
+            except urllib.error.HTTPError:
+                pass
+    return pts, meta
+
+
 def _fetch_pv_range(pv: str, start: datetime, end: datetime,
                     ref: Optional[datetime] = None):
     """Backwards-compatible wrapper for fetch_pv_range."""
     return fetch_pv_range(pv, start, end, ref=ref)
 
 
+def _sustained_drop(pts, threshold: float):
+    """First sample below ``threshold`` that is confirmed by the next sample.
+
+    A lone dip is not a beam dump.  The confirmation step matters because the
+    legacy archive is 1 Hz and a 1% fluctuation just before the dump used to
+    move t0 1-2 s earlier.
+    """
+    for i, (t, v) in enumerate(pts):
+        if v < threshold and (i + 1 >= len(pts) or pts[i + 1][1] < threshold):
+            return t
+    return None
+
+
 def resolve_t0(timestamp: str) -> tuple[float, datetime]:
     """Return (t0 offset from the event timestamp, event base in KST).
 
-    Uses the same beam-current-drop rule as the pv-explorer.  If the archiver
-    is unreachable, t0 falls back to 0 (the event timestamp).
+    t0 is the first sustained drop below 50% of the beam current maximum in
+    the 10-minute pre-window.  The old 1%-drop rule triggered on small
+    pre-dump dips (e.g. 20241002 was 2 s early) and misaligned Archiver series
+    against the oscilloscope waveform.  If the archiver is unreachable, or no
+    50% drop exists, t0 falls back to 0 (the event timestamp).
     """
     try:
         base = datetime.fromisoformat(timestamp).replace(tzinfo=KST)
@@ -173,10 +246,12 @@ def resolve_t0(timestamp: str) -> tuple[float, datetime]:
         b = base.timestamp()
         pre = [(t, v) for t, v in pts if b - 600 <= t <= b + 60]
         if pre:
-            mx = max(pre, key=lambda x: x[1])
-            hit = next((t for t, v in pts if t > mx[0] and v < mx[1] * 0.99), None)
-            if hit is not None:
-                t0 = round(hit - b, 3)
+            mx_t, mx_v = max(pre, key=lambda x: x[1])
+            if mx_v > 0:
+                after = [(t, v) for t, v in pts if t > mx_t]
+                hit = _sustained_drop(after, mx_v * 0.5)
+                if hit is not None:
+                    t0 = round(hit - b, 3)
     except Exception:
         pass
     return t0, base
@@ -303,6 +378,8 @@ def attach_event_alarms(conn, event_id: str, timestamp: str) -> dict[str, Any]:
 
 
 def load_event_alarms(event_id: str) -> Optional[dict[str, Any]]:
+    if not is_valid_event_id(event_id):
+        return None
     path = SNAPSHOT_DIR / f"{event_id}.json"
     if not path.exists():
         return None
@@ -313,6 +390,8 @@ def load_event_alarms(event_id: str) -> Optional[dict[str, Any]]:
 
 
 def load_alarm_series(event_id: str) -> Optional[dict[str, Any]]:
+    if not is_valid_event_id(event_id):
+        return None
     path = SERIES_DIR / f"{event_id}.json"
     if not path.exists():
         return None
@@ -323,6 +402,8 @@ def load_alarm_series(event_id: str) -> Optional[dict[str, Any]]:
 
 
 def save_alarm_series(event_id: str, doc: dict[str, Any]) -> None:
+    if not is_valid_event_id(event_id):
+        raise ValueError(f"invalid event_id: {event_id}")
     SERIES_DIR.mkdir(parents=True, exist_ok=True)
     (SERIES_DIR / f"{event_id}.json").write_text(
         json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8"
