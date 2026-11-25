@@ -314,6 +314,10 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
 | `src/rag/index.py` | RAG 인덱스 |
 | `src/features/` | 파형 특징, 보고서, quench, 벡터 스토어 |
 | `config/domain_glossary.json` | 도메인 배경지식 정본 |
+| `config/physics_references.json` | 교과서/강의록/PLS-II 문헌 20개, physics topic 7개 |
+| `src/features/physics.py` | 순차 class → 물리 해석·PLS-II check·citation |
+| `docs/PHYSICS_REFERENCES.md` | 교과서 내용 사람이 읽는 정리 |
+| `scripts/build_event_physics.py` | per-event physics JSONL 생성 |
 | `requirements-mcp.txt` | MCP 의존성 |
 | `.env.example` | 환경변수 템플릿 (비밀값 없음) |
 | `scripts/mcp_smoke.py`, `scripts/mcp_http_smoke.py` | 스모크 테스트 |
