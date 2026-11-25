@@ -202,18 +202,36 @@ def interpret_sequence(
 
     expected = _expected()
     tau_lo, tau_hi = expected["tau_natural_us"]
-    tau_is_rf = cls in ("rf_trip", "single_cavity_quench", "dual_cavity_quench")
+    tau_check_applicable = cls == "rf_trip"
+    spans = [
+        (block.get("t10_s") - block.get("t90_s"))
+        for block in collapsed.values()
+        if block.get("t10_s") is not None and block.get("t90_s") is not None
+    ]
+    tau_span_us = _median(spans) * 1e6 if spans else None
+    # A 90-10 % span longer than 2 ms means a two-stage decay / slow tail,
+    # not the single-exponential RF-off time constant.
+    tau_reliable = tau_span_us is not None and tau_span_us <= 2000.0
     tau_consistent = (
         tau_med is not None
-        and 0.3 * tau_lo <= tau_med <= 1.2 * tau_hi
-    ) if tau_is_rf else None
+        and 0.3 * tau_lo <= tau_med <= 1.5 * tau_hi
+    ) if (tau_check_applicable and tau_reliable) else None
     common_cause = spread is not None and spread <= 20.0
     cavity_first = delay50 is not None and delay50 > 0
 
     measured = []
     if tau_med is not None:
-        label = "cavity tau(90-10%)" if tau_is_rf else "post-beam cavity collapse"
-        measured.append(f"{label} {tau_med:.0f} us")
+        if tau_reliable:
+            label = (
+                "cavity tau(90-10%)" if tau_check_applicable
+                else "cavity tau(90-10%, quench)"
+            )
+            measured.append(f"{label} {tau_med:.0f} us")
+        else:
+            measured.append(
+                f"cavity 90-10% span {tau_span_us:.0f} us "
+                "(two-stage, tau not quoted)"
+            )
     if spread is not None:
         measured.append(f"collapsed-cavity spread {spread:.1f} us")
     if delay50 is not None:
@@ -247,12 +265,20 @@ def interpret_sequence(
         steps.append((beam_t10, f"beam 10% at {float(beam_t10) * 1e6:+.0f} us"))
     steps.sort(key=lambda x: x[0])
 
-    tau_txt = f"{tau_med:.0f} us" if tau_med is not None else "수십~수백 us"
+    tau_txt = f"{tau_med:.0f} us" if (tau_med is not None and tau_reliable) else None
     delay_txt = f"{delay50:.0f} us" if delay50 is not None else "수백 us"
     if cls == "rf_trip":
+        if tau_txt:
+            decay_txt = f"Vgap이 tau≈{tau_txt}로 감쇠"
+        else:
+            decay_txt = (
+                "Vgap이 빠르게 50%까지 붕괴한 뒤 느린 꼬리를 보임"
+                f"(90-10% span {tau_span_us:.0f} us, 단일 tau 인용 안 함)"
+                if tau_span_us is not None else "Vgap이 빠르게 붕괴"
+            )
         chain = (
-            "공통 인터록 → RF off → 3개 캐비티 Vgap이 tau≈"
-            f"{tau_txt}로 감쇠 → 빔이 매 회전 U0=1.242 MeV(≈1.32 GeV/ms)를 "
+            "공통 인터록 → RF off → 3개 캐비티 "
+            f"{decay_txt} → 빔이 매 회전 U0=1.242 MeV(≈1.32 GeV/ms)를 "
             "잃음 → momentum acceptance를 넘어 빔 손실. 캐비티가 빔보다 "
             f"{delay_txt} 먼저 움직였으므로 RF가 원인 쪽이다."
         )
@@ -288,6 +314,11 @@ def interpret_sequence(
         caveats.append(
             "3개 캐비티가 20 us 안에 붕괴하면 공통 원인(인터록)이지 독립 quench가 아니다."
         )
+    if not tau_reliable:
+        caveats.append(
+            "90-10% span이 2 ms를 넘어 단일 지수 감쇠가 아니다. tau 값은 인용하지 않고 "
+            "cavity 50% 시각을 기준으로 해석한다."
+        )
     if cls in ("beam_first_rf_trip", "beam_only"):
         caveats.append(
             "캐비티 전압의 부분 하강은 빔부하 변화로 설명된다. Forward가 유지되면 "
@@ -314,9 +345,9 @@ def interpret_sequence(
         },
         "checks": {
             "cavity_tau_observed_us": tau_med,
-            "cavity_tau_interpretation": (
-                "rf_decay" if tau_is_rf else "post_beam_collapse"
-            ),
+            "cavity_tau_span_us": tau_span_us,
+            "tau_check_applicable": tau_check_applicable,
+            "tau_reliable": tau_reliable,
             "cavity_tau_expected_natural_us": expected["tau_natural_us"],
             "cavity_tau_expected_beam_loaded_us": expected["tau_beam_us"],
             "cavity_tau_consistent": tau_consistent,
