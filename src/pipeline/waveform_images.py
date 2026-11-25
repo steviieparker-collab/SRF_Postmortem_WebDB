@@ -326,7 +326,9 @@ def _render_merged(merged_path: Path, dest_dir: Path, event_id: str) -> None:
                 lo = float(np.nanmin(merged)) if len(merged) else 0.0
             else:
                 peak, lo = 1.0, 0.0
-            top = float(np.clip(peak, 1.15, 2.0))
+            # No upper cap: reflect spikes (and low-baseline channels) must not
+            # be clipped.  The viewer's zoom handles the compressed 0-1 region.
+            top = float(max(peak, 1.15))
             clipped = bool(all_norm) and (peak > top + 1e-9)
             ax_a.set_ylim(min(lo, 0.0) - 0.05, top + 0.05)
             ax_a.axhline(1.0, color="#8b949e", lw=0.8, ls=":", alpha=0.8)

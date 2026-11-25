@@ -501,6 +501,26 @@ async def startup():
     except Exception as e:
         logging.getLogger(__name__).warning("Alarm monitor start failed: %s", e)
 
+    # The CSV pipeline monitor used to require a manual "Start Monitor" click
+    # from /settings.  Start it with the service so a restart never misses
+    # events.  Set PIPELINE_AUTOSTART=0 to disable.
+    if os.getenv("PIPELINE_AUTOSTART", "1") == "1":
+        try:
+            config_path = str(
+                Path(__file__).resolve().parent.parent.parent / "config" / "config.yaml"
+            )
+            result = start_monitor(config_path=config_path)
+            if isinstance(result, dict) and result.get("error"):
+                logging.getLogger(__name__).warning(
+                    "Pipeline monitor autostart skipped: %s", result["error"]
+                )
+            else:
+                logging.getLogger(__name__).info("Pipeline monitor auto-started")
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                "Pipeline monitor autostart failed: %s", e
+            )
+
 
 @app.on_event("shutdown")
 async def shutdown():
