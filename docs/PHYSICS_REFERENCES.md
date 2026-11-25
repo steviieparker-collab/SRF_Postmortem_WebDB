@@ -136,6 +136,8 @@ data/features/event_physics_interpretations.jsonl
 ```
 
 313줄. 각 줄은 `event_id`, `fault_type`, `class`, `physics`를 가진다.
+`event_physics_summary.csv`는 같은 내용을 한 줄 요약(class, tau, delay,
+ citation ids)으로 담은 313행 표다.
 재생성:
 
 ```bash
