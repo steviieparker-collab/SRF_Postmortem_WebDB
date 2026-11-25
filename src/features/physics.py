@@ -252,8 +252,8 @@ def interpret_sequence(
     if cls == "rf_trip":
         chain = (
             "공통 인터록 → RF off → 3개 캐비티 Vgap이 tau≈"
-            f"{tau_txt}로 감쇠 → 빔이 매 회전 U0=1.242 MeV를 잃음 → "
-            "momentum acceptance를 넘어 빔 손실. 캐비티가 빔보다 "
+            f"{tau_txt}로 감쇠 → 빔이 매 회전 U0=1.242 MeV(≈1.32 GeV/ms)를 "
+            "잃음 → momentum acceptance를 넘어 빔 손실. 캐비티가 빔보다 "
             f"{delay_txt} 먼저 움직였으므로 RF가 원인 쪽이다."
         )
     elif cls == "beam_first_rf_trip":
