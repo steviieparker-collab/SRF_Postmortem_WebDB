@@ -319,6 +319,11 @@ def interpret_sequence(
             "90-10% span이 2 ms를 넘어 단일 지수 감쇠가 아니다. tau 값은 인용하지 않고 "
             "cavity 50% 시각을 기준으로 해석한다."
         )
+    if tau_consistent is False:
+        caveats.append(
+            "관측 tau가 PLS-II Qext 기반 밴드(약 29-162 us) 밖이다. LLRF ramp나 "
+            "2단 감쇠 가능성을 확인해야 한다."
+        )
     if cls in ("beam_first_rf_trip", "beam_only"):
         caveats.append(
             "캐비티 전압의 부분 하강은 빔부하 변화로 설명된다. Forward가 유지되면 "
