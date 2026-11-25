@@ -75,7 +75,7 @@ db/events.db (read-only)  +  data/feature_store.sqlite3  +  data/rag/rag.sqlite3
 | 9 | `postmortem_list_fault_types` | fault type 목록 |
 | 10 | `postmortem_list_beam_times` | 빔타임 목록 |
 | 11 | `postmortem_get_pv_series` | PV 시계열 |
-| 12 | `postmortem_analyze_waveform` | 파형 분석 (t0, signature, beam_fall, digital) |
+| 12 | `postmortem_analyze_waveform` | 파형 분석 (t0, signature, beam_fall, sequence, digital) |
 | 13 | `postmortem_find_similar_waveforms` | 유사 파형 |
 | 14 | `postmortem_search_reports` | 보고서/이미지 검색 (캡션/OCR 포함) |
 | 15 | `postmortem_analyze_quench` | quench 통합 분석 (파형+PV+하이라이트) |
@@ -256,6 +256,11 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
    예: `"20261116_185917 이벤트는 Case 2: MPS입니다. (자동분류는 Case 1: Beam_loss로 판정)"`
 4. **`data_as_of`** — capabilities/aggregate에 최신 이벤트 시각, 최신 ingest,
    기준일, 총계/비MS 총계, 문구를 포함. 하드코딩 제거.
+5. **`waveform.sequence`** — `postmortem_analyze_waveform` 응답에 캐비티
+   90/50/10% 도달 시각, 빔전류 99/50/10% 시각, 캐비티→빔 지연,
+   3개 캐비티 붕괴 시각 차이, 원인 class(`rf_trip`, `beam_first_rf_trip`,
+   `beam_only`, `single/dual_cavity_quench`)를 추가. fast scope 313건 기준.
+   상세 계산과 PLS-II cavity 시정수 검증은 `beamdump/docs/SEQUENCE_PHYSICS_ANALYSIS.md`.
 
 ---
 
@@ -271,7 +276,7 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
 | T5 | search Case 2: MPS | `effective_fault_type` 유지, `classification_note` 표시 |
 | T6 | beam_time 2026-11차 | 3건 |
 | T7 | pv BCL01 | 15건 |
-| T8 | analyze_waveform | `waveform_analysis`, t0/signature/beam_fall/digital |
+| T8 | analyze_waveform | `waveform_analysis`, t0/signature/beam_fall/sequence/digital |
 | T9 | search_reports | `kinds`에 image 포함 |
 | T10 | analyze_quench | waveform/pv/highlights/caveats, BCL03 delta 양수 |
 

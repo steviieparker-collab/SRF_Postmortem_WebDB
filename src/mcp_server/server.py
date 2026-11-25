@@ -188,7 +188,10 @@ TOOL_DESCRIPTIONS = {
     "postmortem_analyze_waveform":
         "Return numeric waveform features for one event from the static feature store: "
         "t0, beam-current fall timing, CM1/2/3 cavity sag, reflect rise, forward trip, "
-        "digital interlock transitions, quench unit, and data caveats. Covers 311/866 "
+        "digital interlock transitions, quench unit, and data caveats. The "
+        "'sequence' block adds cavity 90/50/10% crossing times, the cavity-to-beam "
+        "delay, the 3-cavity collapse spread, and a cause class (rf_trip, "
+        "beam_first_rf_trip, beam_only, single/dual_cavity_quench). Covers 313/866 "
         "events (2023+, parquet only). Values are computed by code, not an LLM. Returns "
         "response_type='waveform_analysis'. Use postmortem_find_similar_waveforms to "
         "compare waveforms; use postmortem_get_event for notes/alarms.",
@@ -1184,6 +1187,9 @@ def postmortem_analyze_waveform(event_id: str) -> dict[str, Any]:
         "Waveform features describe a 100 ms window (±50 ms around the scope trigger).",
         "t0 is the trace-local 50% beam-current sustained drop (same rule as "
         "resolve_t0), not the Archiver t0 offset.",
+        "sequence times are relative to t0; negative cavity times mean the "
+        "cavity moved before the beam current. delay_*_us is positive when "
+        "the cavity precedes the beam.",
         "All values are computed by code from the parquet trace; no LLM inference.",
     ]
     if not t0.get("found"):
@@ -1229,6 +1235,7 @@ def postmortem_analyze_waveform(event_id: str) -> dict[str, Any]:
             ),
             "missing_channels": missing,
             "beam_fall": features.get("beam_fall"),
+            "sequence": features.get("sequence"),
             "signature": features.get("signature"),
             "analog": features.get("analog"),
             "digital": digital,

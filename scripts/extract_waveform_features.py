@@ -269,19 +269,20 @@ def analog_features(t: np.ndarray, v: np.ndarray, t0: float) -> dict[str, Any]:
 def beam_features(
     t: np.ndarray, beam: np.ndarray, t0: float, channel: dict[str, Any]
 ) -> dict[str, Any]:
-    """Beam fall timing: 90/50/10 % crossings and the 90->10 fall time.
+    """Beam fall timing: 99/90/50/10 % crossings and the 90->10 fall time.
 
     Crossings are searched over the whole trace, not just after t0: by
     definition t0 is already the 50 % point, so a post-t0-only search would
     report fall_90/fall_50 as 0.0 and hide the real edge.
     """
     ref = channel.get("ref")
-    out = {"fall_90_s": None, "fall_50_s": None, "fall_10_s": None,
-           "fall_90_10_s": None}
+    out = {"fall_99_s": None, "fall_90_s": None, "fall_50_s": None,
+           "fall_10_s": None, "fall_90_10_s": None}
     if ref is None or abs(ref) < 1e-9:
         return out
     crossings: dict[str, Optional[float]] = {}
-    for pct, key in ((0.90, "fall_90_s"), (0.50, "fall_50_s"), (0.10, "fall_10_s")):
+    for pct, key in ((0.99, "fall_99_s"), (0.90, "fall_90_s"),
+                     (0.50, "fall_50_s"), (0.10, "fall_10_s")):
         hit = _first_below_any(t, beam, pct * ref)
         crossings[key] = hit
         out[key] = _num(None if hit is None else hit - t0, 9)
@@ -289,6 +290,104 @@ def beam_features(
         out["fall_90_10_s"] = _num(
             crossings["fall_10_s"] - crossings["fall_90_s"], 9
         )
+    return out
+
+
+def sequence_features(
+    t: np.ndarray,
+    columns: dict[str, np.ndarray],
+    analog: dict[str, dict[str, Any]],
+    beam_fall: dict[str, Any],
+    t0: float,
+) -> dict[str, Any]:
+    """Cavity/beam crossing order and a coarse cause class.
+
+    Times are seconds relative to the trace-local beam-current t0 (50 % drop).
+    A negative cavity time means the cavity moved first.  ``delay_*_us`` is
+    positive when the cavity precedes the beam.
+    """
+    out: dict[str, Any] = {
+        "cavities": {},
+        "n_cavities_collapsed": 0,
+        "cavity_collapse_spread_us": None,
+        "delay_cav50_to_beam50_us": None,
+        "delay_cav90_to_beam99_us": None,
+        "class": None,
+        "class_rule": None,
+    }
+    collapsed_t50: list[float] = []
+    collapsed_t90: list[float] = []
+    collapsed_min: list[float] = []
+
+    for unit, n in (("CM1", 1), ("CM2", 2), ("CM3", 3)):
+        ch = f"Cavity_SRF{n}"
+        block = analog.get(ch, {})
+        v = columns.get(f"{ch}_v")
+        ref = block.get("ref")
+        rec: dict[str, Any] = {
+            "pre_med": block.get("pre_med"),
+            "min_ratio": block.get("min_ratio"),
+            "t90_s": None, "t50_s": None, "t10_s": None,
+            "tau_us": None, "collapsed": False,
+        }
+        if not block.get("missing") and v is not None and ref is not None \
+                and abs(ref) > 1e-9 and (block.get("pre_med") or 0) > 0.05:
+            for pct, key in ((0.90, "t90_s"), (0.50, "t50_s"), (0.10, "t10_s")):
+                hit = _first_below_any(t, v, pct * ref)
+                rec[key] = _num(None if hit is None else hit - t0, 9)
+            if rec["t90_s"] is not None and rec["t10_s"] is not None:
+                dt = rec["t10_s"] - rec["t90_s"]
+                if dt > 0:
+                    rec["tau_us"] = _num(dt / math.log(9) * 1e6, 2)
+            min_ratio = block.get("min_ratio")
+            rec["collapsed"] = bool(min_ratio is not None and min_ratio < 0.2)
+            if rec["collapsed"]:
+                collapsed_min.append(float(min_ratio))
+                if rec["t50_s"] is not None:
+                    collapsed_t50.append(float(rec["t50_s"]))
+                if rec["t90_s"] is not None:
+                    collapsed_t90.append(float(rec["t90_s"]))
+        out["cavities"][unit] = rec
+
+    out["n_cavities_collapsed"] = len(collapsed_min)
+    if len(collapsed_t50) >= 2:
+        out["cavity_collapse_spread_us"] = _num(
+            (max(collapsed_t50) - min(collapsed_t50)) * 1e6, 1
+        )
+    if collapsed_t50:
+        out["delay_cav50_to_beam50_us"] = _num(
+            -float(np.median(collapsed_t50)) * 1e6, 1
+        )
+    if collapsed_t90 and beam_fall.get("fall_99_s") is not None:
+        out["delay_cav90_to_beam99_us"] = _num(
+            (beam_fall["fall_99_s"] - float(np.median(collapsed_t90))) * 1e6, 1
+        )
+
+    fwd_ratios = []
+    for n in (1, 2, 3):
+        fwd = analog.get(f"Forward_SRF{n}", {})
+        if not fwd.get("missing") and fwd.get("min_ratio") is not None:
+            fwd_ratios.append(float(fwd["min_ratio"]))
+    fwd_med = float(np.median(fwd_ratios)) if fwd_ratios else None
+    out["forward_median_ratio"] = _num(fwd_med)
+    cav_min = float(np.median(collapsed_min)) if collapsed_min else None
+    n_coll = out["n_cavities_collapsed"]
+    delay = out["delay_cav50_to_beam50_us"]
+
+    if n_coll == 0:
+        cls, rule = "beam_only", "no cavity below 20%"
+    elif delay is not None and delay <= 0:
+        cls, rule = "beam_first_rf_trip", "cavity 50% after beam 50%"
+    elif n_coll == 3 and cav_min is not None and cav_min < 0.1:
+        cls, rule = "rf_trip", "3 cavities to <10%, cavity first"
+    elif n_coll == 1 and cav_min is not None and cav_min < 0.1:
+        cls, rule = "single_cavity_quench", "1 cavity to <10%, cavity first"
+    elif n_coll == 2 and cav_min is not None and cav_min < 0.1:
+        cls, rule = "dual_cavity_quench", "2 cavities to <10%, cavity first"
+    else:
+        cls, rule = "mixed", "cavity sag without a clear order"
+    out["class"] = cls
+    out["class_rule"] = rule
     return out
 
 
@@ -532,6 +631,7 @@ def extract_event(
         },
         "analog": analog,
         "beam_fall": beam_block,
+        "sequence": sequence_features(t, columns, analog, beam_block, t0),
         "signature": signatures,
         "digital": digital,
         "quench_unit": quench_unit,

@@ -121,6 +121,7 @@ def _waveform_summary(record: Optional[dict[str, Any]]) -> Optional[dict[str, An
         "quench_unit_source": features.get("quench_unit_source"),
         "signature": features.get("signature") or {},
         "beam_fall": features.get("beam_fall") or {},
+        "sequence": features.get("sequence") or {},
         "quen": quen,
         "missing_channels": features.get("missing_channels") or [],
         "warnings": features.get("warnings") or [],
