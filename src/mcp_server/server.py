@@ -832,11 +832,26 @@ def postmortem_get_event(event_id: str) -> dict[str, Any]:
         }
         for s in (ctx.get("similar") or [])
     ]
+    physics = interpret_sequence(None)
+    try:
+        record = get_waveform_features(str(event_id))
+        if record:
+            feats = record.get("features") or {}
+            physics = interpret_sequence(
+                feats.get("sequence"), feats.get("beam_fall")
+            )
+    except Exception as exc:  # noqa: BLE001 - physics is optional context
+        physics = {
+            "available": False,
+            "error": f"physics interpretation unavailable: {type(exc).__name__}: {exc}",
+            "caveats": ["Use postmortem_get_glossary for the physics background."],
+        }
     return {
         "response_type": "event_detail",
         "event": ev,
         "classification": ctx.get("classification") or {},
         "waveform": ctx.get("waveform") or {},
+        "physics": physics,
         "attachments": ctx.get("attachments") or [],
         "similar": similar_items,
         "similar_count": len(similar_items),
