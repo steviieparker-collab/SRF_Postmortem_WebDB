@@ -82,6 +82,8 @@ def reference_bundle(topic: Optional[str] = None) -> dict[str, Any]:
             for key, value in (doc.get("topics") or {}).items()
         },
         "references": doc.get("references", []),
+        "classes": doc.get("classes", {}),
+        "pls2": doc.get("pls2", {}),
         "caveats": doc.get("caveats", []),
     }
 
