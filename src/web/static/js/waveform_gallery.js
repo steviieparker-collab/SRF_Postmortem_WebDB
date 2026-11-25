@@ -34,6 +34,162 @@
         return 'case-badge-' + id;
     }
 
+    // ── Image zoom / pan (wheel, drag, pinch, double-click reset) ──
+    const MAX_ZOOM = 8;
+    const zoomStates = new WeakMap();
+
+    function zoomState(img) {
+        let st = zoomStates.get(img);
+        if (!st) {
+            st = {
+                scale: 1, x: 0, y: 0,
+                dragging: false,
+                startX: 0, startY: 0, origX: 0, origY: 0,
+                pinchStart: 0, pinchScale: 1,
+                lastTap: 0,
+            };
+            zoomStates.set(img, st);
+        }
+        return st;
+    }
+
+    function applyZoom(img) {
+        const st = zoomState(img);
+        img.style.transform =
+            'translate(' + st.x + 'px,' + st.y + 'px) scale(' + st.scale + ')';
+        const zoomed = st.scale > 1.01;
+        img.classList.toggle('is-zoomed', zoomed);
+        const panel = img.closest('.wfg-panel');
+        if (panel) panel.classList.toggle('is-zoomed', zoomed);
+    }
+
+    function resetZoom(img) {
+        if (!img) return;
+        const st = zoomState(img);
+        st.scale = 1;
+        st.x = 0;
+        st.y = 0;
+        st.dragging = false;
+        st.pinchStart = 0;
+        applyZoom(img);
+    }
+
+    function anyZoomed() {
+        return SCOPES.some((scope) => {
+            const img = $('wfg-img-' + scope);
+            return img && zoomState(img).scale > 1.01;
+        });
+    }
+
+    function setupZoom(img) {
+        if (!img) return;
+        img.title = '휠: 확대/축소 · 드래그: 이동 · 더블클릭: 초기화';
+
+        img.addEventListener('wheel', (event) => {
+            event.preventDefault();
+            const st = zoomState(img);
+            const rect = img.getBoundingClientRect();
+            const px = event.clientX - rect.left;
+            const py = event.clientY - rect.top;
+            const factor = Math.exp(-event.deltaY * 0.0015);
+            const next = Math.min(MAX_ZOOM, Math.max(1, st.scale * factor));
+            if (next === st.scale) return;
+            const ratio = next / st.scale;
+            st.x = px - (px - st.x) * ratio;
+            st.y = py - (py - st.y) * ratio;
+            st.scale = next;
+            if (st.scale <= 1.01) {
+                st.scale = 1;
+                st.x = 0;
+                st.y = 0;
+            }
+            applyZoom(img);
+        }, { passive: false });
+
+        img.addEventListener('dblclick', () => resetZoom(img));
+
+        // Mouse drag to pan when zoomed.
+        img.addEventListener('pointerdown', (event) => {
+            if (event.pointerType === 'touch') return;
+            const st = zoomState(img);
+            if (st.scale <= 1.01) return;
+            event.preventDefault();
+            img.setPointerCapture(event.pointerId);
+            st.dragging = true;
+            st.startX = event.clientX;
+            st.startY = event.clientY;
+            st.origX = st.x;
+            st.origY = st.y;
+        });
+        img.addEventListener('pointermove', (event) => {
+            if (event.pointerType === 'touch') return;
+            const st = zoomState(img);
+            if (!st.dragging) return;
+            st.x = st.origX + (event.clientX - st.startX);
+            st.y = st.origY + (event.clientY - st.startY);
+            applyZoom(img);
+        });
+        img.addEventListener('pointerup', (event) => {
+            if (event.pointerType === 'touch') return;
+            zoomState(img).dragging = false;
+        });
+
+        // Touch: two-finger pinch zoom, one-finger pan when zoomed.
+        img.addEventListener('touchstart', (event) => {
+            const st = zoomState(img);
+            if (event.touches.length === 2) {
+                event.preventDefault();
+                const dx = event.touches[0].clientX - event.touches[1].clientX;
+                const dy = event.touches[0].clientY - event.touches[1].clientY;
+                st.pinchStart = Math.hypot(dx, dy);
+                st.pinchScale = st.scale;
+            } else if (event.touches.length === 1 && st.scale > 1.01) {
+                st.dragging = true;
+                st.startX = event.touches[0].clientX;
+                st.startY = event.touches[0].clientY;
+                st.origX = st.x;
+                st.origY = st.y;
+            }
+        }, { passive: false });
+
+        img.addEventListener('touchmove', (event) => {
+            const st = zoomState(img);
+            if (event.touches.length === 2 && st.pinchStart) {
+                event.preventDefault();
+                const dx = event.touches[0].clientX - event.touches[1].clientX;
+                const dy = event.touches[0].clientY - event.touches[1].clientY;
+                const dist = Math.hypot(dx, dy);
+                const next = Math.min(MAX_ZOOM,
+                    Math.max(1, st.pinchScale * dist / st.pinchStart));
+                st.scale = next;
+                if (st.scale <= 1.01) {
+                    st.scale = 1;
+                    st.x = 0;
+                    st.y = 0;
+                }
+                applyZoom(img);
+            } else if (event.touches.length === 1 && st.dragging) {
+                event.preventDefault();
+                st.x = st.origX + (event.touches[0].clientX - st.startX);
+                st.y = st.origY + (event.touches[0].clientY - st.startY);
+                applyZoom(img);
+            }
+        }, { passive: false });
+
+        img.addEventListener('touchend', (event) => {
+            const st = zoomState(img);
+            if (event.touches.length < 2) st.pinchStart = 0;
+            if (event.touches.length === 0) {
+                st.dragging = false;
+                const now = Date.now();
+                if (now - st.lastTap < 300 && st.scale > 1.01) {
+                    resetZoom(img);
+                }
+                st.lastTap = now;
+            }
+        }, { passive: true });
+    }
+
     // ── List loading ────────────────────────────────────────
     async function loadList(year) {
         setStatus('목록을 불러오는 중…');
@@ -86,6 +242,7 @@
             panel.classList.add('is-empty');
         };
         if (img.getAttribute('src') !== url) {
+            resetZoom(img);
             img.src = url;
         }
     }
@@ -301,7 +458,14 @@
     });
 
     page.addEventListener('touchstart', (event) => {
-        if (event.touches.length !== 1) return;
+        if (event.touches.length > 1) {
+            // A pinch gesture is in progress: never treat it as a swipe.
+            state.multiTouch = true;
+            state.touch = null;
+            return;
+        }
+        state.multiTouch = false;
+        if (anyZoomed()) return;
         state.touch = {
             x: event.touches[0].clientX,
             y: event.touches[0].clientY,
@@ -309,7 +473,16 @@
     }, { passive: true });
 
     page.addEventListener('touchend', (event) => {
+        if (state.multiTouch) {
+            state.multiTouch = false;
+            state.touch = null;
+            return;
+        }
         if (!state.touch) return;
+        if (anyZoomed()) {
+            state.touch = null;
+            return;
+        }
         const touch = event.changedTouches[0];
         const dx = touch.clientX - state.touch.x;
         const dy = touch.clientY - state.touch.y;
@@ -330,6 +503,8 @@
             setStatus('목록을 불러오지 못했습니다.');
         }
     });
+
+    SCOPES.forEach((scope) => setupZoom($('wfg-img-' + scope)));
 
     // Keep the details block open on desktop, collapsed on phones.
     function syncDetails() {

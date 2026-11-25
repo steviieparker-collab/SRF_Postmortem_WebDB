@@ -155,6 +155,20 @@ body:has(#wfg-page) main.container-fluid {
     object-fit: contain;
     -webkit-user-drag: none;
     user-select: none;
+    transform-origin: 0 0;
+    cursor: zoom-in;
+    touch-action: pan-y;
+    will-change: transform;
+}
+.wfg-panel img.is-zoomed {
+    cursor: grab;
+    touch-action: none;
+}
+.wfg-panel img.is-zoomed:active {
+    cursor: grabbing;
+}
+.wfg-panel.is-zoomed .wfg-label {
+    opacity: .35;
 }
 .wfg-label {
     position: absolute;

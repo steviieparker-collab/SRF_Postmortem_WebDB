@@ -28,6 +28,25 @@ SCOPE_PREFIX = {"forward": "Forward", "cavity": "Cavity", "reflect": "Reflect"}
 SCOPE_INDEX = {1: "forward", 2: "cavity", 3: "reflect"}
 NARROW_MS = 1.0
 
+# The raw scope CSVs split the interlocks: forward has the 10 INT_/RDY_KSU
+# channels, cavity has the 15 CM channels, and reflect has none.  The merged
+# parquet contains the union (25), so each panel shows only its own set.
+FORWARD_DIGITAL = (
+    "INT_MIS1_IC_d", "INT_MIS2_IC_d", "INT_IN_FC3_d", "INT_IC_FC2_d",
+    "INT_IC_FC1_d", "RDY_KSU3_IC_d", "RDY_KSU2_IC_d", "RDY_KSU1_IC_d",
+    "INT_PSI2_IC_d", "INT_PSI1_IC_d",
+)
+
+
+def _scope_digital_cols(scope: str, digital_cols: list[str]) -> list[str]:
+    if scope == "forward":
+        wanted = set(FORWARD_DIGITAL)
+        return [c for c in digital_cols if c in wanted]
+    if scope == "cavity":
+        wanted = set(FORWARD_DIGITAL)
+        return [c for c in digital_cols if c not in wanted]
+    return []
+
 # Matplotlib is not thread-safe.  The monitoring pipeline renders in one
 # worker and the backfill script is sequential, but keep a guard anyway.
 _GEN_LOCK = threading.Lock()
@@ -258,68 +277,74 @@ def _render_merged(merged_path: Path, dest_dir: Path, event_id: str) -> None:
                 logger.warning("waveform images: no analog columns for %s/%s", event_id, scope)
                 continue
 
-            fig, ax = plt.subplots(figsize=(15, 8))
-            fig.patch.set_facecolor(bg)
+            scope_digital = _scope_digital_cols(scope, digital_cols)
 
-            analog_scaled: list = []
-            for name, key, scale in specs:
+            # 2448x1374 px at 150 dpi -> ~1.3x the previous width, 16:9.
+            fig = plt.figure(figsize=(19.5, 9.3))
+            fig.patch.set_facecolor(bg)
+            if scope_digital:
+                # Digital on top, analog below (same order as the raw scope CSV).
+                # Size the digital panel so the 12pt label boxes almost touch
+                # (~30 px pitch at 150 dpi).
+                _axes_px = 9.3 * 150 * 0.87
+                _f = min(0.75, 30.0 * (len(scope_digital) + 0.8) / _axes_px)
+                digital_h = max(0.8, 4.0 * _f / (1.0 - _f))
+                gs = fig.add_gridspec(2, 1, height_ratios=[digital_h, 4], hspace=0.08)
+                ax_d = fig.add_subplot(gs[0])
+                ax_a = fig.add_subplot(gs[1], sharex=ax_d)
+                ax_a.set_facecolor(panel)
+                ax_d.set_facecolor(panel)
+                ax_d.tick_params(labelbottom=False)
+            else:
+                ax_a = fig.add_subplot(1, 1, 1)
+                ax_d = None
+                ax_a.set_facecolor(panel)
+
+            # ── Analog: all traces share one normalised axis ──
+            all_norm: list = []
+            for name, key, _scale in specs:
                 values = np.asarray(table.column(name).to_pylist(), dtype=float)
-                values = np.nan_to_num(values, nan=0.0)
-                scaled = scale(values)
-                analog_scaled.append(scaled[mask])
+                values = np.nan_to_num(values, nan=0.0, posinf=0.0, neginf=0.0)
+                window = values[mask]
+                # Baseline-relative normalisation: the pre-event level (first
+                # 10% of the narrow window) becomes 1.0.  Every trace is drawn
+                # on the same axis, so overlapping shows which signal reacts
+                # first.
+                n = max(1, len(window) // 10)
+                baseline = float(np.nanmedian(window[:n])) if len(window) else 1.0
+                if not np.isfinite(baseline) or abs(baseline) < 1e-6:
+                    baseline = float(np.nanmax(np.abs(window))) or 1.0
+                norm = window / baseline
+                all_norm.append(norm)
                 color = _ANALOG_COLORS[key]
                 label = name.replace("_v", "")
-                ax.plot(tv_ms, scaled[mask], color=color, lw=2.2, alpha=0.85, label=label)
-                ax.plot(tv_ms, scaled[mask], color=color, lw=0.7, alpha=1.0, label="_nolegend_")
+                ax_a.plot(tv_ms, norm, color=color, lw=4.0, alpha=0.9, label=label)
 
-                # Left-edge marker with the pre-event level (as in the monitor plots).
-                try:
-                    base = float(scale(np.array([values[0]], dtype=float))[0])
-                    ax.plot(
-                        x_min, base, marker="<", ms=11, mfc=color, mec="white",
-                        mew=1.2, zorder=6, clip_on=False,
-                    )
-                    ax.annotate(
-                        f"{values[0]:.3f}", (x_min, base), xytext=(6, 0),
-                        textcoords="offset points", fontsize=7.5, color=color,
-                        alpha=0.85, va="center",
-                    )
-                except Exception:
-                    pass
-
-            gap, sy = 1.2, 38.0
-            for i, name in enumerate(digital_cols):
-                values = np.asarray(table.column(name).to_pylist(), dtype=float)
-                values = np.nan_to_num(values, nan=0.0)
-                y_base = sy - i * gap
-                color = _DIGITAL_PALETTE[i % len(_DIGITAL_PALETTE)]
-                ax.axhspan(y_base - 0.05, y_base + 1.1, alpha=0.04, color=color, zorder=0)
-                ax.step(tv_ms, values[mask] + y_base, where="post", color=color, lw=1.1, alpha=0.9)
-                ax.text(
-                    x_min, y_base + 0.25, name.replace("_d", ""), fontsize=8,
-                    color=color, ha="left", va="bottom",
-                    bbox=dict(boxstyle="round,pad=0.15", fc=panel, ec=color, alpha=0.7, lw=0.6),
-                )
-
-            ax.set_xlabel("Time (ms)")
-            ax.set_ylabel("Amplitude (a.u.)")
-            ax.set_title(
-                f"SRF Postmortem | {prefix} | -{NARROW_MS:.1f}~+{NARROW_MS:.1f}ms | {title_time}",
-                fontsize=12, color=title, fontweight="bold",
-            )
-            if analog_scaled:
-                lo = min(float(np.nanmin(v)) for v in analog_scaled if len(v))
-                ax.set_ylim(min(lo - 1.0, -1.0), 41.0)
+            if all_norm:
+                merged = np.concatenate([a for a in all_norm if len(a)])
+                peak = float(np.nanmax(merged)) if len(merged) else 1.0
+                lo = float(np.nanmin(merged)) if len(merged) else 0.0
             else:
-                ax.set_ylim(-1.0, 41.0)
-            ax.set_xlim(x_min, x_max)
-            ax.grid(True)
-            for spine in ax.spines.values():
+                peak, lo = 1.0, 0.0
+            top = float(np.clip(peak, 1.15, 2.0))
+            clipped = bool(all_norm) and (peak > top + 1e-9)
+            ax_a.set_ylim(min(lo, 0.0) - 0.05, top + 0.05)
+            ax_a.axhline(1.0, color="#8b949e", lw=0.8, ls=":", alpha=0.8)
+            ax_a.axhline(0.0, color="#8b949e", lw=0.8, ls=":", alpha=0.5)
+            ax_a.axvline(0.0, color="#8b949e", lw=0.8, ls="--", alpha=0.55)
+            ax_a.annotate("start = 1.0", (x_min, 1.0), xytext=(4, 5),
+                          textcoords="offset points", fontsize=8, color="#c9d1d9")
+            if clipped:
+                ax_a.annotate(f"peaks > {top:.2f} clipped", (x_max, top),
+                              xytext=(-4, -12), textcoords="offset points",
+                              fontsize=7.5, color="#8b949e", ha="right")
+            ax_a.set_ylabel("Normalized (start=1)")
+            ax_a.grid(True)
+            for spine in ax_a.spines.values():
                 spine.set_edgecolor(grid)
-
-            legend = ax.legend(
-                loc="upper left", bbox_to_anchor=(1.02, 1), frameon=True,
-                handlelength=2.0, handleheight=1.2, labelspacing=0.6,
+            legend = ax_a.legend(
+                loc="upper right", frameon=True,
+                handlelength=2.0, handleheight=1.2, labelspacing=0.5,
             )
             legend.get_frame().set_facecolor(panel)
             legend.get_frame().set_edgecolor(grid)
@@ -327,7 +352,39 @@ def _render_merged(merged_path: Path, dest_dir: Path, event_id: str) -> None:
             for text in legend.get_texts():
                 text.set_color("white")
 
-            fig.subplots_adjust(left=0.05, right=0.78, top=0.92, bottom=0.08)
+            # ── Digital: only the scope's own interlock set ──
+            ndig = len(scope_digital)
+            if ax_d is not None and ndig:
+                gap_d, amp_d = 1.0, 0.6
+                for i, name in enumerate(scope_digital):
+                    values = np.asarray(table.column(name).to_pylist(), dtype=float)
+                    values = np.nan_to_num(values, nan=0.0, posinf=0.0, neginf=0.0)
+                    y_base = (ndig - 1 - i) * gap_d
+                    color = _DIGITAL_PALETTE[i % len(_DIGITAL_PALETTE)]
+                    ax_d.axhspan(y_base - 0.05, y_base + amp_d + 0.05,
+                                 alpha=0.03, color=color, zorder=0)
+                    ax_d.step(tv_ms, values[mask] * amp_d + y_base, where="post",
+                              color=color, lw=1.0, alpha=0.9)
+                    ax_d.text(
+                        x_min, y_base + amp_d / 2, name.replace("_d", ""), fontsize=12.0,
+                        color=color, ha="left", va="center",
+                        bbox=dict(boxstyle="round,pad=0.1", fc=panel, ec=color,
+                                  alpha=0.72, lw=0.4),
+                    )
+                ax_d.set_ylim(-0.1, (ndig - 1) * gap_d + amp_d + 0.1)
+                ax_d.set_yticks([])
+                ax_d.axvline(0.0, color="#8b949e", lw=0.8, ls="--", alpha=0.55)
+                ax_d.grid(True, axis="x")
+                for spine in ax_d.spines.values():
+                    spine.set_edgecolor(grid)
+
+            ax_a.set_xlabel("Time (ms)")
+            ax_a.set_xlim(x_min, x_max)
+            fig.suptitle(
+                f"SRF Postmortem | {prefix} | -{NARROW_MS:.1f}~+{NARROW_MS:.1f}ms | {title_time}",
+                fontsize=13, color=title, fontweight="bold", y=0.975,
+            )
+            fig.subplots_adjust(left=0.06, right=0.84, top=0.93, bottom=0.06)
             out = dest_dir / image_filename(scope)
             fig.savefig(str(out), dpi=150, bbox_inches="tight", facecolor=bg)
             plt.close(fig)

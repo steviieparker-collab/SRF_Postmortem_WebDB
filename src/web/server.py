@@ -737,7 +737,6 @@ async def event_detail(
 # Static narrow scope images live outside the repo's static/ tree so the
 # pipeline can write them without a restart: data/waveforms/<event_id>/
 # <forward|cavity|reflect>_narrow.jpg
-_WFG_MIN_TS = "2025-05-29"  # NAS narrow JPGs start at the end of May 2025
 _WFG_SCOPES = ("forward", "cavity", "reflect")
 _WFG_IMAGE_RE = re.compile(r"(forward|cavity|reflect)_narrow\.jpg")
 
@@ -833,8 +832,6 @@ async def api_waveform_list(year: Optional[int] = Query(None)):
         if not images:
             continue
         timestamp = row["timestamp"] or ""
-        if timestamp < _WFG_MIN_TS:
-            continue
         event_year = timestamp[:4]
         year_counts[event_year] = year_counts.get(event_year, 0) + 1
         if year and event_year != str(year):
