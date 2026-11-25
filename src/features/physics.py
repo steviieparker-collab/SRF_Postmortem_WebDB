@@ -232,6 +232,53 @@ def interpret_sequence(
         block = (doc.get("topics") or {}).get(topic_id, {})
         citations.extend(_resolve_citations(block.get("citations", []), refs))
 
+    steps: list[tuple[float, str]] = []
+    for unit, block in collapsed.items():
+        for key, label in (("t90_s", "90%"), ("t50_s", "50%"), ("t10_s", "10%")):
+            if block.get(key) is not None:
+                steps.append((
+                    float(block[key]),
+                    f"{unit} cavity {label} at {float(block[key]) * 1e6:+.0f} us",
+                ))
+    if beam_t99 is not None:
+        steps.append((beam_t99, f"beam 99% at {beam_t99 * 1e6:+.0f} us"))
+    steps.append((0.0, "beam 50% (t0)"))
+    if beam_t10 is not None:
+        steps.append((beam_t10, f"beam 10% at {float(beam_t10) * 1e6:+.0f} us"))
+    steps.sort(key=lambda x: x[0])
+
+    tau_txt = f"{tau_med:.0f} us" if tau_med is not None else "수십~수백 us"
+    delay_txt = f"{delay50:.0f} us" if delay50 is not None else "수백 us"
+    if cls == "rf_trip":
+        chain = (
+            "공통 인터록 → RF off → 3개 캐비티 Vgap이 tau≈"
+            f"{tau_txt}로 감쇠 → 빔이 매 회전 U0=1.242 MeV를 잃음 → "
+            "momentum acceptance를 넘어 빔 손실. 캐비티가 빔보다 "
+            f"{delay_txt} 먼저 움직였으므로 RF가 원인 쪽이다."
+        )
+    elif cls == "beam_first_rf_trip":
+        chain = (
+            "빔전류가 먼저 감소 → 빔부하가 줄어 캐비티 전압이 부분적으로 "
+            "하강 → 뒤늦게 RF trip. Forward가 유지되면 RF 계통은 원인이 아니다. "
+            f"캐비티 50%가 빔 50%보다 {abs(delay50 or 0):.0f} us 늦다."
+        )
+    elif cls == "beam_only":
+        chain = (
+            "캐비티 전압이 20% 아래로 내려가지 않았다. RF는 원인이 아니며 "
+            "beam line, kicker, 궤도, 횡방향 손실을 봐야 한다."
+        )
+    elif cls in ("single_cavity_quench", "dual_cavity_quench"):
+        chain = (
+            f"{len(collapsed)}개 캐비티만 0으로 붕괴했고 캐비티가 빔보다 "
+            f"{delay_txt} 먼저 움직였다. 해당 CM의 quench와 QUEN/forward/reflect를 "
+            "확인한다."
+        )
+    else:
+        chain = (
+            "캐비티 변화는 있으나 순서가 명확하지 않다. cavity/forward/reflect와 "
+            "digital 전이를 함께 봐야 한다."
+        )
+
     caveats = list(doc.get("caveats", []))
     caveats.append(
         "sequence 시간은 trace-local beam 50% t0 기준이다. 음수 캐비티 시간은 "
@@ -252,6 +299,8 @@ def interpret_sequence(
         "class": cls,
         "title_ko": class_info.get("title_ko", cls),
         "summary_ko": summary,
+        "chain_ko": chain,
+        "steps_ko": [text for _, text in steps],
         "class_rule": sequence.get("class_rule"),
         "timeline": {
             "cavities": cavities,

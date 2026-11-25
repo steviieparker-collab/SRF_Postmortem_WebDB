@@ -264,7 +264,8 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
 6. **`waveform.physics` + 교과서 인용** — `config/physics_references.json`에
    SRF/빔물리/BLM/PLS-II 문헌 20개와 7개 physics topic을 정리했다.
    `postmortem_analyze_waveform`/`postmortem_analyze_quench`는 class별
-   `summary_ko`, timeline, PLS-II 파라미터 check, `citations`를 반환한다.
+   `summary_ko`, `chain_ko`, `steps_ko`, timeline, PLS-II 파라미터 check,
+   `citations`를 반환한다.
    `postmortem_get_glossary(topic=...)`로 topic별 equations/citations을
    조회할 수 있다. per-event 저장본은
    `data/features/event_physics_interpretations.jsonl` (313줄).

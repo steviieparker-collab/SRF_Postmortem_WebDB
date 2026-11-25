@@ -126,7 +126,7 @@ DCCT/scope 응답 지연을 포함한 값으로 본다.
 - `postmortem_get_glossary()`는 도메인 glossary와 함께 `physics` 라이브러리를
   반환한다.
 - `postmortem_analyze_waveform(event_id)`는 `waveform.physics`에
-  class, summary_ko, timeline, checks, citations, caveats를 넣는다.
+  class, summary_ko, chain_ko, steps_ko, timeline, checks, citations, caveats를 넣는다.
 - `postmortem_analyze_quench(event_id)`도 `waveform.physics`를 포함한다.
 
 Per-event 저장본:
