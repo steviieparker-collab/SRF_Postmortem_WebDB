@@ -1161,6 +1161,7 @@ def postmortem_analyze_waveform(event_id: str) -> dict[str, Any]:
             "error": f"feature store unavailable: {exc}",
             "note": "Build data/feature_store.sqlite3 with "
                     "scripts/build_feature_store.py.",
+            "physics": interpret_sequence(None),
         }
     if record is None:
         return {
@@ -1168,8 +1169,9 @@ def postmortem_analyze_waveform(event_id: str) -> dict[str, Any]:
             "available": False,
             "event_id": event_id,
             "error": "no waveform feature record for this event",
-            "note": "Only 311/866 events (2023+) have parquet waveforms. "
+            "note": "Only 313/866 events (2023+) have parquet waveforms. "
                     "Use postmortem_get_event for notes, alarms, and attachments.",
+            "physics": interpret_sequence(None),
         }
     features = record.get("features") or {}
     t0 = features.get("t0") or {}
@@ -1537,7 +1539,7 @@ def resource_quickstart() -> str:
                 "Use postmortem_get_capabilities first.",
                 "Cite [E:], [A:], [PVS:], [PV:], [R:].",
                 "Use aggregate tools for counts, not vector search.",
-                "Only 311/866 events have waveform features; check available.",
+                "Only 313/866 events have waveform features; check available.",
                 "Reports are text-only; image captions are pending.",
             ],
         },
@@ -1559,7 +1561,7 @@ def prompt_event_analysis(event_id: str) -> str:
         "postmortem_get_pv_series. "
         "Distinguish recorded alarms [A:...] from "
         "catalog mappings [PV:...] and manual PV selections [PVS:...]. "
-        "Say explicitly when an event has no waveform (only 311/866 do). "
+        "Say explicitly when an event has no waveform (only 313/866 do). "
         "Cite every factual claim with [E:...] or [PV:...]. If the event has no "
         "recorded alarm snapshot, say so explicitly."
     )
@@ -1582,7 +1584,7 @@ def prompt_compare_events(event_a: str, event_b: str) -> str:
     return (
         f"Compare SRF beam-dump events {event_a} and {event_b}. "
         "Call postmortem_get_event for both. If both have parquet waveforms "
-        "(311/866 events, 2023+), call postmortem_analyze_waveform for each and "
+        "(313/866 events, 2023+), call postmortem_analyze_waveform for each and "
         "compare t0, beam fall, cavity sag, reflect rise, forward trip, and "
         "digital transitions; then call postmortem_find_similar_waveforms. "
         "Call postmortem_search_reports for the maintenance reports attached to "
