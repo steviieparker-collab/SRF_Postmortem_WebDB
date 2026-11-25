@@ -75,12 +75,12 @@ db/events.db (read-only)  +  data/feature_store.sqlite3  +  data/rag/rag.sqlite3
 | 9 | `postmortem_list_fault_types` | fault type 목록 |
 | 10 | `postmortem_list_beam_times` | 빔타임 목록 |
 | 11 | `postmortem_get_pv_series` | PV 시계열 |
-| 12 | `postmortem_analyze_waveform` | 파형 분석 (t0, signature, beam_fall, sequence, digital) |
+| 12 | `postmortem_analyze_waveform` | 파형 분석 (t0, signature, beam_fall, sequence, physics, digital) |
 | 13 | `postmortem_find_similar_waveforms` | 유사 파형 |
 | 14 | `postmortem_search_reports` | 보고서/이미지 검색 (캡션/OCR 포함) |
 | 15 | `postmortem_analyze_quench` | quench 통합 분석 (파형+PV+하이라이트) |
 | 16 | `postmortem_compare_quench_events` | quench 이벤트 비교 |
-| 17 | `postmortem_get_glossary` | 도메인 배경지식 (topic별) |
+| 17 | `postmortem_get_glossary` | 도메인 배경지식 + 물리 topic/citation (topic별) |
 
 ---
 
@@ -261,6 +261,14 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
    3개 캐비티 붕괴 시각 차이, 원인 class(`rf_trip`, `beam_first_rf_trip`,
    `beam_only`, `single/dual_cavity_quench`)를 추가. fast scope 313건 기준.
    상세 계산과 PLS-II cavity 시정수 검증은 `beamdump/docs/SEQUENCE_PHYSICS_ANALYSIS.md`.
+6. **`waveform.physics` + 교과서 인용** — `config/physics_references.json`에
+   SRF/빔물리/BLM/PLS-II 문헌 20개와 7개 physics topic을 정리했다.
+   `postmortem_analyze_waveform`/`postmortem_analyze_quench`는 class별
+   `summary_ko`, timeline, PLS-II 파라미터 check, `citations`를 반환한다.
+   `postmortem_get_glossary(topic=...)`로 topic별 equations/citations을
+   조회할 수 있다. per-event 저장본은
+   `data/features/event_physics_interpretations.jsonl` (313줄).
+   사람이 읽는 정리는 `docs/PHYSICS_REFERENCES.md`.
 
 ---
 

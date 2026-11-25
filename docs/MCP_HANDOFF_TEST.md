@@ -136,7 +136,9 @@ MS 기간을 정말 볼 때만 `hide_ms=false`를 함께 넘긴다.
 
 ### T8. 파형
 `postmortem_analyze_waveform("20240907_025313")` → `response_type="waveform_analysis"`,
-`t0`, `signature.CM1`, `beam_fall`, `digital` 포함.
+`t0`, `signature.CM1`, `beam_fall`, `sequence`, `physics`, `digital` 포함.
+`physics.class`가 `rf_trip`/`single_cavity_quench` 등이고,
+`physics.citations`에 `padamsee2008`, `caspers2024` 같은 id가 있어야 한다.
 
 ### T9. 보고서 검색
 `postmortem_search_reports("KLY Ion Pump 알람", top_k=5)` → `kinds`에 `image` 포함.
@@ -144,7 +146,13 @@ MS 기간을 정말 볼 때만 `hide_ms=false`를 함께 넘긴다.
 
 ### T10. Quench 통합
 `postmortem_analyze_quench("20240907_025313")` → `waveform`, `pv`, `highlights`, `caveats`.
+`waveform.physics.class`와 `citations`가 포함되는지 확인.
 `pv`의 BCL03 delta가 양수(온도 상승)인지 확인.
+
+### T11. 물리 glossary/citation
+`postmortem_get_glossary(topic="cavity_decay_after_rf_off")` →
+`summary_ko`, `equations`(3개), `citations`(padamsee2008, caspers2024, pls2_srf2013) 포함.
+`postmortem_get_glossary()` → `physics` 블록에 7개 topic과 reference 목록 포함.
 
 ## 4. 해석 규칙 — 틀리면 답이 틀어진다
 

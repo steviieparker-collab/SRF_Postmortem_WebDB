@@ -20,6 +20,7 @@ from typing import Any, Optional
 from mcp.server.mcpserver import MCPServer
 
 from ..alarm.event_link import fetch_pv_range, resolve_t0
+from ..features.physics import interpret_sequence, reference_bundle as physics_reference_bundle
 from ..features.store import (
     feature_store_stats,
     find_similar_waveforms,
@@ -191,7 +192,9 @@ TOOL_DESCRIPTIONS = {
         "digital interlock transitions, quench unit, and data caveats. The "
         "'sequence' block adds cavity 90/50/10% crossing times, the cavity-to-beam "
         "delay, the 3-cavity collapse spread, and a cause class (rf_trip, "
-        "beam_first_rf_trip, beam_only, single/dual_cavity_quench). Covers 313/866 "
+        "beam_first_rf_trip, beam_only, single/dual_cavity_quench). The "
+        "'physics' block adds a deterministic textbook-grounded interpretation "
+        "with PLS-II parameter checks and citations. Covers 313/866 "
         "events (2023+, parquet only). Values are computed by code, not an LLM. Returns "
         "response_type='waveform_analysis'. Use postmortem_find_similar_waveforms to "
         "compare waveforms; use postmortem_get_event for notes/alarms.",
@@ -230,14 +233,19 @@ TOOL_DESCRIPTIONS = {
         "assert, report titles. Use postmortem_analyze_quench for PV/temperature "
         "evidence; this table is fast and does not call the Archiver.",
     "postmortem_get_glossary":
-        "Return the SRF interlock background knowledge: system overview, interlock "
-        "hierarchy (external MIS/PSI vs internal CM/KSU), the standard MIS beam-dump "
-        "trip sequence, analog/digital signal definitions with active_low/active_high "
-        "polarity, actual channel names, and the data rules (MS exclusion, manual "
-        "case priority, first-interlock rule, relay delay). Parameters: topic "
-        "(optional; one of system, hierarchy, trip_sequence, signals, naming, "
-        "data_rules, answer_style). Omit topic to get the whole document. Use this "
-        "before interpreting waveform features or writing a causal explanation.",
+        "Return the SRF interlock and beam-dump physics background knowledge. "
+        "Domain topics: system overview, interlock hierarchy (external MIS/PSI vs "
+        "internal CM/KSU), the standard MIS beam-dump trip sequence, analog/digital "
+        "signal definitions with active_low/active_high polarity, actual channel "
+        "names, and data rules (MS exclusion, manual case priority, first-interlock "
+        "rule, relay delay). Physics topics: cavity_figures_of_merit, "
+        "cavity_decay_after_rf_off, beam_energy_loss_after_rf_trip, "
+        "machine_protection_timescales, transverse_instability, "
+        "beam_dump_sequence_classes, pls2_operating_point. Each physics topic "
+        "returns equations, caveats, and citations to the textbooks/lecture notes "
+        "in config/physics_references.json. Parameters: topic (optional). Omit "
+        "topic to get both documents; the physics library is under 'physics'. Use "
+        "this before interpreting waveform features or writing a causal explanation.",
 }
 
 TOOL_META = {
@@ -1236,6 +1244,9 @@ def postmortem_analyze_waveform(event_id: str) -> dict[str, Any]:
             "missing_channels": missing,
             "beam_fall": features.get("beam_fall"),
             "sequence": features.get("sequence"),
+            "physics": interpret_sequence(
+                features.get("sequence"), features.get("beam_fall")
+            ),
             "signature": features.get("signature"),
             "analog": features.get("analog"),
             "digital": digital,
@@ -1340,12 +1351,21 @@ def postmortem_compare_quench_events(
 @server.tool(description=TOOL_DESCRIPTIONS["postmortem_get_glossary"],
              meta=TOOL_META["postmortem_get_glossary"])
 def postmortem_get_glossary(topic: Optional[str] = None) -> dict[str, Any]:
-    """Return the SRF interlock background knowledge document.
+    """Return SRF interlock and beam-dump physics background knowledge.
 
-    topic: optional key of the glossary document. Known keys: system_overview,
-    interlock_hierarchy, trip_sequence, signals, naming, data_rules,
-    answer_style, authority, caveats. Omit to return the whole document.
+    topic: optional key. Domain keys: system_overview, interlock_hierarchy,
+    trip_sequence, signals, naming, data_rules, answer_style, authority,
+    caveats. Physics keys: cavity_figures_of_merit,
+    cavity_decay_after_rf_off, beam_energy_loss_after_rf_trip,
+    machine_protection_timescales, transverse_instability,
+    beam_dump_sequence_classes, pls2_operating_point. Omit to return both
+    documents (the physics library is under ``physics``).
     """
+    if topic:
+        phys = physics_reference_bundle(topic.strip())
+        if phys.get("available"):
+            return {"response_type": "glossary", "source": "physics_references", **phys}
+
     doc = _domain_glossary()
     if not doc.get("available", True):
         return {"response_type": "glossary", **doc}
@@ -1365,8 +1385,13 @@ def postmortem_get_glossary(topic: Optional[str] = None) -> dict[str, Any]:
             "available": False,
             "error": "unknown topic",
             "topics": [k for k in doc if k not in ("version", "updated", "title")],
+            "physics_topics": list((physics_reference_bundle().get("topics") or {})),
         }
-    return {"response_type": "glossary", **doc}
+    result = {"response_type": "glossary", **doc}
+    phys = physics_reference_bundle()
+    if phys.get("available"):
+        result["physics"] = phys
+    return result
 
 
 # ── Resources ───────────────────────────────────────────────
