@@ -426,6 +426,21 @@
           "id": "schmuser2003",
           "locator": "Sections on pillbox cavity and Q0",
           "supports": "Q0와 기하 인자의 유도"
+        },
+        {
+          "id": "padamsee2009",
+          "locator": "Chapters on cavity geometry and surface resistance",
+          "supports": "cavity geometry and surface resistance"
+        },
+        {
+          "id": "padamsee2023",
+          "locator": "Chapters on high-field Q-slope and N-doping",
+          "supports": "modern cavity performance limits"
+        },
+        {
+          "id": "geng2015",
+          "locator": "Slides on Q0=G/Rs, geometry factor and R/Q",
+          "supports": "cavity figures of merit"
         }
       ],
       "caveats": [
@@ -503,6 +518,16 @@
           "id": "pls2_momentum2001",
           "locator": "Momentum acceptance",
           "supports": "PLS momentum acceptance 1.35% at 2.5 GeV"
+        },
+        {
+          "id": "chao2023",
+          "locator": "Beam dynamics formulas",
+          "supports": "longitudinal dynamics reference"
+        },
+        {
+          "id": "peggs2017",
+          "locator": "Introductory chapters on longitudinal dynamics",
+          "supports": "beam dynamics"
         }
       ],
       "caveats": [
@@ -569,6 +594,16 @@
           "id": "forck_juas",
           "locator": "Beam instrumentation",
           "supports": "BPM과 turn-by-turn 계측"
+        },
+        {
+          "id": "chao2023",
+          "locator": "Beam dynamics formulas",
+          "supports": "transverse dynamics reference"
+        },
+        {
+          "id": "peggs2017",
+          "locator": "Introductory chapters on transverse dynamics",
+          "supports": "beam dynamics"
         }
       ],
       "caveats": [
@@ -638,7 +673,8 @@
       "citations": [
         "cavity_decay_after_rf_off",
         "beam_energy_loss_after_rf_trip",
-        "machine_protection_timescales"
+        "machine_protection_timescales",
+        "pls2_operating_point"
       ]
     },
     "beam_first_rf_trip": {
