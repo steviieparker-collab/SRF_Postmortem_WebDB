@@ -267,7 +267,10 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
    `summary_ko`, `chain_ko`, `steps_ko`, timeline, PLS-II 파라미터 check,
    `citations`를 반환한다.
    `postmortem_get_glossary(topic=...)`로 topic별 equations/citations을
-   조회할 수 있다. per-event 저장본은
+   조회할 수 있다. `topic='list'`는 16개 addressable topic index를 반환한다.
+   PLS-II fundamental R/Q는 89 Ω(문헌의 100 Ω은 HOM R/Q 문맥)이다.
+   2020-04-05 500 MHz CESR-B 수직시험은 문헌 인용과 분리해
+   `internal_test_notes`에 1건 기록했다. per-event 저장본은
    `data/features/event_physics_interpretations.jsonl` (313줄)와
    `data/features/event_physics_summary.csv` (313행 요약).
    사람이 읽는 정리는 `docs/PHYSICS_REFERENCES.md`.

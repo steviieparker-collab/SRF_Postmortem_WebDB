@@ -30,17 +30,17 @@ tau_Q = 2*QL/omega            (전원 off, 빔 없음)
 tau_beam ~ U/(Pc+Pbeam)       (초기 빔부하)
 ```
 
-PLS-II 값(Qext 1.5–1.7e5, Q0 7.5e8–1.1e9, V_c 1.45–1.65 MV, I 300–400 mA)을
-넣으면:
+PLS-II 값(Qext 1.5–1.7e5, Q0 7.5e8–1.1e9, R/Q=89 Ω, V_c 1.45–1.65 MV,
+I 300–400 mA)을 넣으면:
 
 | 양 | 값 |
 |---|---:|
-| U | 3.3–4.3 J |
-| Pc | 12–16 W |
-| Pbeam | 110–124 kW |
+| U | 3.8–4.9 J |
+| Pc | 11–20 W |
+| Pbeam | 120–166 kW |
 | beta | 4,400–7,300 |
 | tau_Q | 95–108 µs |
-| tau_beam | 30–35 µs |
+| tau_beam | ≈31 µs (24–39 µs) |
 | 관측 tau (90→10%) | **55–76 µs, 중앙값 66 µs** |
 
 관측값은 자연 감쇠와 빔부하 감쇠 사이에 있고, 빔전류가 줄면서 빔부하가
@@ -67,6 +67,10 @@ U0 = 1.242 MeV/turn, T_rev = 0.940 us  ->  1.32 GeV/ms
 5%  (150 MeV) : 113 us
 10% (300 MeV) : 227 us
 ```
+
+위 세 값은 RF 감쇠를 무시한 상수 손실률 기준이다. 실제 Vgap은 지수 감쇠하므로
+손실률이 점점 커진다. 지수 감쇠(τ≈66 us)를 적분하면 1.35% momentum acceptance
+(3 GeV 기준 40.5 MeV)까지 약 75 us가 걸린다.
 
 캐비티 전압이 tau로 지수 감쇠한다고 보고 적분하면:
 
@@ -98,11 +102,30 @@ DCCT/scope 응답 지연을 포함한 값으로 본다.
 
 | id | 문헌 | 값 |
 |---|---|---|
-| `pls2_status2016` | NAPAC2016 THPOA60, Status of PLS-II Operation | 3 GeV, 400 mA, 499.973 MHz, 3 SRF cavities, 4.5 MV |
-| `pls2_srf2013` | IPAC2013 WEPWO041 | Q0 7.5e8–1.1e9, Qext 1.5–1.7e5, Vacc 2.35–2.40 MV |
+| `pls2_status2016` | NAPAC2016 THPOA60, Status of PLS-II Operation | 3 GeV, 400 mA, 499.973 MHz, 3 SRF cavities, gap voltage 4.5 MV (공칭) |
+| `pls2_srf2013` | IPAC2013 WEPWO041 | Q0 7.5e8–1.1e9 @ 2 MV, Qext 1.5–1.7e5, Vacc 2.35–2.40 MV/cavity (2013년 2대 운전) |
 | `pls2_llrf2019` | arXiv:1910.01861 | 1.5–1.65 MV/cavity, forward 140–190 kW, reflected 1–5 kW |
 | `pls2_srf2015` | IPAC2015 WEPMN042 | 400 mA, optimal coupling, reflected power |
 | `pls2_momentum2001` | APAC2001 WEP021 | momentum acceptance 1.35% at 2.5 GeV |
+
+### 4.1 내부 수직시험 기록 (문헌 인용 아님)
+
+`2020-04-05` 500 MHz CESR-B type cavity vertical test (원본 xlsx: `20261127-022809-2204-1-vertical test-20200405.xlsx`). SN과 Date 셀은 비어 있다.
+
+| 항목 | 값 |
+|---|---:|
+| R/Q | 89 Ω |
+| Epk/Eacc | 2.5 |
+| L | 0.3 m |
+| Q0 (저전계) | 1.845e9 |
+| Q0 @ 6.67 MV/m | ≈1.30e9 |
+| Q0 @ 9.33 MV/m | ≈9.0e8 |
+| 최고 Eacc | 11.06 MV/m @ Q0≈6.3e8 |
+| X-ray 최대 | 14,800 mR/hr |
+| tau (power) | 0.139–0.216 s |
+| beta (저전계) | 1.769 |
+
+인수 기준 `Q0 ≥ 1e9 at 6.67 MV/m (2.0 MV)`, `Q0 ≥ 5e8 at 9.33 MV/m (2.8 MV)`를 모두 통과했다. 단, 수직시험은 빔이 없고 β≈1.77의 약한 결합이므로, PLS-II 운전점(β≈5,000, Qext 1.5–1.7e5, 전압 시정수 ≈100 µs)의 감쇠 해석에 직접 쓰지 않는다. 상승/하강 스윕 Q0가 다르고(7.3 MV/m에서 9.3e8 vs 1.28e9), 내장 스크린샷 일부 파워 값은 시트 Step3 셀과 일치하지 않는다.
 
 ---
 
@@ -124,7 +147,10 @@ DCCT/scope 응답 지연을 포함한 값으로 본다.
 - `postmortem_get_glossary(topic="cavity_decay_after_rf_off")` 등
   7개 physics topic이 equations/citations/caveats를 반환한다.
 - `postmortem_get_glossary()`는 도메인 glossary와 함께 `physics` 라이브러리를
-  반환한다.
+  반환한다. `physics`에는 `internal_test_notes`(2020-04-05 수직시험 1건)가
+  포함되며, 이는 문헌 citation이 아니라 내부 시험 기록이다.
+- `postmortem_get_glossary(topic="list")`는 domain 9 + physics 7 = 16개
+  addressable topic index를 반환한다.
 - `postmortem_analyze_waveform(event_id)`는 `waveform.physics`에
   class, summary_ko, chain_ko, steps_ko, timeline, checks, citations, caveats를 넣는다.
 - `postmortem_analyze_quench(event_id)`도 `waveform.physics`를 포함한다.

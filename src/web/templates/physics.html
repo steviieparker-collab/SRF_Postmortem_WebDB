@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+
+{% block title %}Physics Background — SRF Postmortem Viewer{% endblock %}
+
+{% block extra_head %}
+<style>
+    .eq-expr {
+        font-family: 'SFMono-Regular', 'Fira Code', monospace;
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 4px;
+        padding: .35rem .55rem;
+        display: inline-block;
+        color: #79c0ff;
+        font-size: .85rem;
+    }
+    .topic-card .card-header { cursor: pointer; }
+    .cite-list li { margin-bottom: .35rem; }
+    .cite-meta { color: #8b949e; font-size: .78rem; }
+    .ref-table td, .ref-table th { font-size: .8rem; vertical-align: top; }
+    .topic-nav .btn { font-size: .75rem; }
+    .pls2-table td { font-size: .82rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if not available %}
+<div class="alert alert-danger">
+    <strong>Physics library unavailable.</strong> {{ error }}
+</div>
+{% else %}
+
+<div class="row mb-3">
+    <div class="col">
+        <h4 class="mb-1"><i class="bi bi-book me-2"></i>Physics Background</h4>
+        <div class="text-secondary small">
+            {{ glossary_title }} &middot; version {{ version }} &middot; updated {{ updated }}
+            &middot; MCP <code>postmortem_get_glossary</code>와 같은 JSON을 읽습니다.
+        </div>
+    </div>
+    <div class="col-auto">
+        <a href="/" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Back to Events
+        </a>
+    </div>
+</div>
+
+<div class="alert alert-secondary py-2 small mb-3">
+    <i class="bi bi-info-circle me-1"></i>
+    이 페이지는 <strong>배경지식</strong>입니다. 이벤트별 측정·해석 결과가 아니며,
+    수치는 문헌값 또는 PLS-II 공개 파라미터입니다. 이벤트별 해석은
+    <code>postmortem_analyze_waveform</code> 응답의 <code>physics</code> 블록에 있습니다.
+    {% if scope %}<br><span class="text-secondary">범위: {{ scope }}</span>{% endif %}
+</div>
+
+<div class="row g-2 mb-3">
+    <div class="col-auto"><span class="badge bg-primary">{{ topics | length }} physics topics</span></div>
+    <div class="col-auto"><span class="badge bg-secondary">{{ reference_count }} references</span></div>
+    <div class="col-auto"><span class="badge bg-secondary">{{ classes | length }} sequence classes</span></div>
+    <div class="col-auto"><span class="badge bg-dark border border-secondary">PLS-II 운전점</span></div>
+</div>
+
+<div class="topic-nav d-flex flex-wrap gap-1 mb-3">
+    {% for t in topics %}
+    <a class="btn btn-sm btn-outline-secondary" href="#topic-{{ t.key }}">{{ t.title }}</a>
+    {% endfor %}
+</div>
+
+<!-- PLS-II operating point -->
+<div class="card mb-4">
+    <div class="card-header py-1"><strong>PLS-II 운전 파라미터</strong></div>
+    <div class="card-body py-2">
+        <div class="table-responsive">
+            <table class="table table-sm table-dark table-borderless mb-0 pls2-table">
+                <tbody>
+                    <tr><td class="text-secondary" style="width:38%">Energy</td><td>{{ pls2.energy_gev }} GeV</td></tr>
+                    <tr><td class="text-secondary">Circumference</td><td>{{ pls2.circumference_m }} m</td></tr>
+                    <tr><td class="text-secondary">Revolution frequency</td><td>{{ pls2.f_rev_mhz }} MHz</td></tr>
+                    <tr><td class="text-secondary">RF frequency</td><td>{{ pls2.f_rf_mhz }} MHz (harmonic {{ pls2.harmonic }})</td></tr>
+                    <tr><td class="text-secondary">Energy loss per turn</td><td>{{ pls2.u0_mev_per_turn }} MeV</td></tr>
+                    <tr><td class="text-secondary">Total cavity voltage</td><td>{{ pls2.v_total_mv | join(' – ') }} MV ({{ pls2.cavities }} cavities)</td></tr>
+                    <tr><td class="text-secondary">Q0</td><td>{{ pls2.q0 | join(' – ') }}</td></tr>
+                    <tr><td class="text-secondary">Qext</td><td>{{ pls2.qext | join(' – ') }}</td></tr>
+                    <tr><td class="text-secondary">R/Q</td><td>{{ pls2.r_over_q_ohm }} Ω</td></tr>
+                    <tr><td class="text-secondary">Beam current</td><td>{{ pls2.beam_current_ma | join(' – ') }} mA</td></tr>
+                    <tr><td class="text-secondary">Momentum acceptance</td><td>{{ pls2.momentum_acceptance_percent }} % (PLS 2.5 GeV 기준)</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Internal test notes (measured data, not textbook citations) -->
+{% set test_note_labels = {
+    'r_over_q_ohm': 'R/Q [Ω]',
+    'epk_over_eacc': 'Epk/Eacc',
+    'epk_over_sqrt_u_mv_m_sqrt_j': 'Epk/√U [MV/m/√J]',
+    'length_m': 'L [m]',
+    'q0_low_field': 'Q0 low field',
+    'q0_at_6_67_mv_m': 'Q0 @ 6.67 MV/m',
+    'q0_at_9_33_mv_m': 'Q0 @ 9.33 MV/m',
+    'max_eacc_mv_m': 'max Eacc [MV/m]',
+    'q0_at_max_eacc': 'Q0 at max Eacc',
+    'max_xray_mr_hr': 'max X-ray [mR/hr]',
+    'tau_power_s': 'tau (power) [s]',
+    'temperature_k': 'T [K]',
+    'beta_low_field': 'beta (low field)',
+    'ql_low_field': 'QL (low field)'
+} %}
+{% if internal_test_notes %}
+<h5 class="mb-2"><i class="bi bi-clipboard-data me-1"></i>Internal test notes</h5>
+{% for n in internal_test_notes %}
+<div class="card mb-4 border-info">
+    <div class="card-header py-1 d-flex justify-content-between flex-wrap gap-2">
+        <strong>{{ n.title }}</strong>
+        <span class="text-secondary small">{{ n.date }} &middot; {{ n.source_file }}</span>
+    </div>
+    <div class="card-body py-2">
+        <div class="cite-meta mb-2">
+            Cavity: {{ n.cavity_type }} &middot; SN {{ n.serial_number }}
+        </div>
+        <div class="row g-3">
+            <div class="col-md-5">
+                <div class="text-secondary small mb-1"><strong>Parameters</strong></div>
+                <table class="table table-sm table-dark table-borderless mb-0 ref-table">
+                    <tbody>
+                    {% for k, v in n.parameters.items() %}
+                        <tr><td class="text-secondary" style="width:58%">{{ test_note_labels.get(k, k) }}</td><td>{{ v | numfmt }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="col-md-7">
+                <div class="text-secondary small mb-1"><strong>Results</strong></div>
+                <table class="table table-sm table-dark table-borderless mb-0 ref-table">
+                    <tbody>
+                    {% for k, v in n.results.items() %}
+                        <tr><td class="text-secondary" style="width:58%">{{ test_note_labels.get(k, k) }}</td><td>{{ v | numfmt }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="mt-2 small">
+            <span class="text-secondary">Acceptance:</span>
+            <ul class="mb-1">{% for a in n.acceptance %}<li>{{ a }}</li>{% endfor %}</ul>
+        </div>
+        <div class="alert alert-warning py-2 mb-0 small">
+            <strong>Caveats</strong>
+            <ul class="mb-0 mt-1">{% for c in n.caveats %}<li>{{ c }}</li>{% endfor %}</ul>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<!-- Physics topics -->
+<h5 class="mb-2"><i class="bi bi-lightning-charge me-1"></i>Physics topics</h5>
+<div class="accordion mb-4" id="physics-topics">
+    {% for t in topics %}
+    <div class="accordion-item bg-dark border-secondary topic-card" id="topic-{{ t.key }}">
+        <h2 class="accordion-header">
+            <button class="accordion-button collapsed bg-dark text-light" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#body-{{ t.key }}"
+                    aria-expanded="false" aria-controls="body-{{ t.key }}">
+                <span class="me-2 text-secondary small">{{ t.key }}</span>
+                <strong>{{ t.title }}</strong>
+            </button>
+        </h2>
+        <div id="body-{{ t.key }}" class="accordion-collapse collapse" data-bs-parent="#physics-topics">
+            <div class="accordion-body">
+                <p class="mb-3">{{ t.summary_ko }}</p>
+
+                {% if t.equations %}
+                <div class="mb-3">
+                    <div class="text-secondary small mb-1"><strong>Equations</strong></div>
+                    <table class="table table-sm table-dark table-borderless mb-0">
+                        <tbody>
+                        {% for eq in t.equations %}
+                            <tr>
+                                <td style="width:18%" class="text-secondary small">{{ eq.name }}</td>
+                                <td>
+                                    <span class="eq-expr">{{ eq.expr }}</span>
+                                    {% if eq.note %}<div class="cite-meta mt-1">{{ eq.note }}</div>{% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+
+                {% if t.citations %}
+                <div class="mb-3">
+                    <div class="text-secondary small mb-1"><strong>Citations ({{ t.citations | length }})</strong></div>
+                    <ul class="list-unstyled cite-list mb-0">
+                    {% for c in t.citations %}
+                        <li>
+                            {% if c.url %}<a href="{{ c.url }}" target="_blank" rel="noopener noreferrer">{{ c.title }}</a>
+                            {% elif c.doi %}<a href="https://doi.org/{{ c.doi }}" target="_blank" rel="noopener noreferrer">{{ c.title }}</a>
+                            {% else %}<span>{{ c.title }}</span>{% endif %}
+                            <span class="cite-meta">— {{ c.authors }}{% if c.year %}, {{ c.year }}{% endif %}{% if c.publisher %} ({{ c.publisher }}){% endif %}</span>
+                            <div class="cite-meta">
+                                <span class="text-info">{{ c.id }}</span>
+                                {% if c.locator %} &middot; {{ c.locator }}{% endif %}
+                                {% if c.supports %} &middot; {{ c.supports }}{% endif %}
+                                {% if c.doi %} &middot; DOI {{ c.doi }}{% endif %}
+                            </div>
+                        </li>
+                    {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                {% if t.caveats %}
+                <div class="alert alert-warning py-2 mb-0 small">
+                    <strong>Caveats</strong>
+                    <ul class="mb-0 mt-1">
+                    {% for c in t.caveats %}<li>{{ c }}</li>{% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Sequence classes -->
+<h5 class="mb-2"><i class="bi bi-diagram-3 me-1"></i>Sequence classes</h5>
+<div class="card mb-4">
+    <div class="card-body py-2">
+        <div class="table-responsive">
+            <table class="table table-sm table-dark table-borderless mb-0 ref-table">
+                <thead>
+                    <tr><th style="width:18%">class</th><th style="width:42%">의미</th><th>인용 topic</th></tr>
+                </thead>
+                <tbody>
+                {% for key, c in classes.items() %}
+                    <tr>
+                        <td><code>{{ key }}</code></td>
+                        <td><strong>{{ c.title_ko }}</strong><div class="cite-meta">{{ c.summary_ko }}</div></td>
+                        <td class="cite-meta">{{ c.citations | join(', ') }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Reference library -->
+<h5 class="mb-2"><i class="bi bi-journal-text me-1"></i>Reference library ({{ reference_count }})</h5>
+{% for cat, label, refs in reference_groups %}
+<div class="card mb-3">
+    <div class="card-header py-1 d-flex justify-content-between">
+        <strong>{{ label }}</strong>
+        <span class="text-secondary small">{{ refs | length }} references</span>
+    </div>
+    <div class="card-body py-2">
+        <div class="table-responsive">
+            <table class="table table-sm table-dark table-borderless mb-0 ref-table">
+                <thead>
+                    <tr><th style="width:14%">id</th><th style="width:30%">문헌</th><th style="width:20%">locator</th><th>비고</th></tr>
+                </thead>
+                <tbody>
+                {% for r in refs %}
+                    <tr>
+                        <td><code>{{ r.id }}</code></td>
+                        <td>
+                            {% if r.url %}<a href="{{ r.url }}" target="_blank" rel="noopener noreferrer">{{ r.title }}</a>
+                            {% elif r.doi %}<a href="https://doi.org/{{ r.doi }}" target="_blank" rel="noopener noreferrer">{{ r.title }}</a>
+                            {% else %}<span>{{ r.title }}</span>{% endif %}
+                            <div class="cite-meta">{{ r.authors }}, {{ r.year }}{% if r.edition %}, {{ r.edition }} ed.{% endif %}</div>
+                            <div class="cite-meta">{{ r.publisher }}{% if r.isbn %} &middot; ISBN {{ r.isbn }}{% endif %}{% if r.doi %} &middot; DOI {{ r.doi }}{% endif %}</div>
+                        </td>
+                        <td class="cite-meta">{{ r.locator }}</td>
+                        <td class="cite-meta">{{ r.note }}{% if r.topics %}<div>topics: {{ r.topics | join(', ') }}</div>{% endif %}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<!-- Standing caveats -->
+<div class="card mb-4 border-warning">
+    <div class="card-header py-1"><strong><i class="bi bi-exclamation-triangle me-1"></i>Standing caveats</strong></div>
+    <div class="card-body py-2">
+        <ul class="mb-0 small">
+        {% for c in caveats %}<li>{{ c }}</li>{% endfor %}
+        </ul>
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}

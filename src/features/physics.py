@@ -84,6 +84,7 @@ def reference_bundle(topic: Optional[str] = None) -> dict[str, Any]:
         "references": doc.get("references", []),
         "classes": doc.get("classes", {}),
         "pls2": doc.get("pls2", {}),
+        "internal_test_notes": doc.get("internal_test_notes", []),
         "caveats": doc.get("caveats", []),
     }
 
@@ -135,7 +136,7 @@ def _expected() -> dict[str, Any]:
     v_total = p.get("v_total_mv", [4.5, 4.95])
     current = p.get("beam_current_ma", [300, 400])
     u0 = float(p.get("u0_mev_per_turn", 1.242))
-    rq = float(p.get("r_over_q_ohm", 100))
+    rq = float(p.get("r_over_q_ohm", 89))
     n_cav = int(p.get("cavities", 3))
 
     v_c = 0.5 * (v_total[0] + v_total[1]) / n_cav * 1e6

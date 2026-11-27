@@ -233,19 +233,43 @@ TOOL_DESCRIPTIONS = {
         "assert, report titles. Use postmortem_analyze_quench for PV/temperature "
         "evidence; this table is fast and does not call the Archiver.",
     "postmortem_get_glossary":
-        "Return the SRF interlock and beam-dump physics background knowledge. "
-        "Domain topics: system overview, interlock hierarchy (external MIS/PSI vs "
-        "internal CM/KSU), the standard MIS beam-dump trip sequence, analog/digital "
-        "signal definitions with active_low/active_high polarity, actual channel "
-        "names, and data rules (MS exclusion, manual case priority, first-interlock "
-        "rule, relay delay). Physics topics: cavity_figures_of_merit, "
-        "cavity_decay_after_rf_off, beam_energy_loss_after_rf_trip, "
-        "machine_protection_timescales, transverse_instability, "
-        "beam_dump_sequence_classes, pls2_operating_point. Each physics topic "
-        "returns equations, caveats, and citations to the textbooks/lecture notes "
-        "in config/physics_references.json. Parameters: topic (optional). Omit "
-        "topic to get both documents; the physics library is under 'physics'. Use "
-        "this before interpreting waveform features or writing a causal explanation.",
+        "Return curated background knowledge for PLS-II SRF beam-dump postmortems. "
+        "This is a static, textbook-grounded reference library, not event data. "
+        "Call it before interpreting waveform features, writing a causal chain, or "
+        "answering any SRF/beam-physics question. "
+        "DOMAIN GLOSSARY (config/domain_glossary.json), 9 addressable topics: "
+        "system_overview (ring/RF layout and operating context), "
+        "interlock_hierarchy (external MIS/PSI vs internal CM/KSU trip chain), "
+        "trip_sequence (standard MIS beam-dump sequence, first-interlock rule), "
+        "signals (analog/digital definitions, active_low/active_high polarity), "
+        "naming (actual PV/channel names), "
+        "data_rules (MS exclusion, manual vs auto classification, relay delay), "
+        "answer_style (required caveats and quoting rules), "
+        "authority (document/data authority order), caveats (standing limitations). "
+        "PHYSICS LIBRARY (config/physics_references.json), 7 topics and 20 "
+        "references: "
+        "cavity_figures_of_merit (Q0, QL, R/Q, beta, U, Pc, Pbeam, beta_opt), "
+        "cavity_decay_after_rf_off (tau=2QL/omega; PLS-II 95-108 us natural, "
+        "24-39 us beam-loaded, midpoint 31 us), "
+        "beam_energy_loss_after_rf_trip (dE/dt=-U0/T_rev=1.32 GeV/ms; 1/5/10% loss "
+        "times; momentum acceptance), "
+        "machine_protection_timescales (BLM/MPS us-ms response; why 1 Hz Archiver "
+        "cannot order cause and effect), "
+        "transverse_instability (exponential growth, betatron tune, BPM limits), "
+        "beam_dump_sequence_classes (rf_trip, beam_first_rf_trip, beam_only, "
+        "single/dual cavity quench), "
+        "pls2_operating_point (3 GeV, 400 mA, 499.973 MHz, 3 cavities, Q0/Qext, "
+        "R/Q=89 ohm). "
+        "The full physics document also carries one internal test note "
+        "(2020-04-05 vertical test, 500 MHz CESR-B): it is measured test data, "
+        "not a textbook citation, and is under 'internal_test_notes'. "
+        "A physics topic returns title, summary_ko, equations[{name,expr,note}], "
+        "citations[{id,title,authors,year,doi,url,locator,supports}], and caveats. "
+        "A domain topic returns its JSON object or entry list. "
+        "Parameters: topic (optional). topic='list' returns the topic index only. "
+        "Omit topic to return both documents (physics under 'physics'). An unknown "
+        "topic returns the valid keys. Quote equations and parameter values from "
+        "the response; do not substitute values from memory.",
 }
 
 TOOL_META = {
@@ -400,6 +424,61 @@ def _domain_glossary() -> dict[str, Any]:
     return _GLOSSARY_CACHE["data"]
 
 
+def _glossary_index() -> dict[str, Any]:
+    """Return an addressable-topic index for both glossary documents."""
+    doc = _domain_glossary()
+    phys = physics_reference_bundle()
+    domain: dict[str, Any] = {}
+    for key, value in doc.items():
+        if key in ("version", "updated", "title", "scope"):
+            continue
+        if isinstance(value, dict):
+            domain[key] = {
+                "kind": "object",
+                "entries": len(value),
+                "entry_keys": list(value)[:12],
+            }
+        elif isinstance(value, list):
+            domain[key] = {"kind": "list", "entries": len(value)}
+        else:
+            domain[key] = {"kind": type(value).__name__}
+    topics = phys.get("topics") or {}
+    return {
+        "response_type": "glossary_index",
+        "usage": (
+            "Pass topic=<key> to postmortem_get_glossary for the full entry. "
+            "topic='list' returns only this index."
+        ),
+        "addressable_topic_count": len(domain) + len(topics),
+        "domain": {
+            "source": "config/domain_glossary.json",
+            "version": doc.get("version"),
+            "updated": doc.get("updated"),
+            "topic_count": len(domain),
+            "topics": domain,
+        },
+        "physics": {
+            "source": "config/physics_references.json",
+            "version": phys.get("version"),
+            "updated": phys.get("updated"),
+            "topic_count": len(topics),
+            "reference_count": len(phys.get("references") or []),
+            "internal_test_notes": [
+                {"id": n.get("id"), "title": n.get("title"), "date": n.get("date")}
+                for n in (phys.get("internal_test_notes") or [])
+            ],
+            "topics": {
+                key: {
+                    "title": value.get("title"),
+                    "summary_ko": value.get("summary_ko"),
+                    "citation_ids": [c.get("id") for c in value.get("citations", [])],
+                }
+                for key, value in topics.items()
+            },
+        },
+    }
+
+
 @server.tool(description=TOOL_DESCRIPTIONS["postmortem_get_capabilities"],
              meta=TOOL_META["postmortem_get_capabilities"])
 def postmortem_get_capabilities() -> dict[str, Any]:
@@ -508,6 +587,31 @@ def postmortem_get_capabilities() -> dict[str, Any]:
                 "authority",
                 "caveats",
             ],
+        },
+        "physics_glossary": {
+            "tool": "postmortem_get_glossary",
+            "source": "config/physics_references.json",
+            "version": physics_reference_bundle().get("version"),
+            "updated": physics_reference_bundle().get("updated"),
+            "topic_count": len(
+                physics_reference_bundle().get("topics") or {}
+            ),
+            "reference_count": len(
+                physics_reference_bundle().get("references") or []
+            ),
+            "internal_test_note_count": len(
+                physics_reference_bundle().get("internal_test_notes") or []
+            ),
+            "topics": {
+                key: value.get("title")
+                for key, value in (
+                    physics_reference_bundle().get("topics") or {}
+                ).items()
+            },
+            "usage": (
+                "Call postmortem_get_glossary(topic=<key>) for equations, "
+                "citations, and caveats. topic='list' returns the full index."
+            ),
         },
         "tools": [
             "postmortem_search_events",
@@ -1378,6 +1482,8 @@ def postmortem_get_glossary(topic: Optional[str] = None) -> dict[str, Any]:
     beam_dump_sequence_classes, pls2_operating_point. Omit to return both
     documents (the physics library is under ``physics``).
     """
+    if topic and topic.strip().lower() in {"list", "index", "topics", "__list__"}:
+        return _glossary_index()
     if topic:
         phys = physics_reference_bundle(topic.strip())
         if phys.get("available"):
@@ -1401,8 +1507,12 @@ def postmortem_get_glossary(topic: Optional[str] = None) -> dict[str, Any]:
             "topic": key,
             "available": False,
             "error": "unknown topic",
-            "topics": [k for k in doc if k not in ("version", "updated", "title")],
+            "topics": [
+                k for k in doc
+                if k not in ("version", "updated", "title", "scope")
+            ],
             "physics_topics": list((physics_reference_bundle().get("topics") or {})),
+            "hint": "Call with topic='list' for an index of both documents.",
         }
     result = {"response_type": "glossary", **doc}
     phys = physics_reference_bundle()

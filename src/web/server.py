@@ -451,6 +451,28 @@ def extract_case_id(fault_type: str) -> int:
 templates.env.filters["extract_case_id"] = extract_case_id
 
 
+def _numfmt(value: Any) -> str:
+    """Compact display for physics test-note numbers."""
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, (int, float)):
+        if value == 0:
+            return "0"
+        if abs(value) >= 1e5:
+            return f"{value:.2e}"
+        if abs(value) >= 1e3:
+            return f"{value:,.0f}"
+        if abs(value) < 1e-2:
+            return f"{value:.3g}"
+        return f"{value:g}"
+    if isinstance(value, (list, tuple)):
+        return " – ".join(_numfmt(v) for v in value)
+    return str(value)
+
+
+templates.env.filters["numfmt"] = _numfmt
+
+
 def static_version(rel_path: str) -> str:
     """Cache-busting token for a static asset, based on its mtime.
 
@@ -979,6 +1001,70 @@ async def stats_page(
             "years": years,
             "selected_year": selected_year,
             "hide_ms": hide_ms,
+        },
+    )
+
+
+# ── Physics Background Page ──────────────────────────────────
+
+_PHYSICS_CATEGORY_LABELS = {
+    "srf": "SRF cavity",
+    "beam_physics": "빔물리",
+    "machine_protection": "기계보호 / BLM",
+    "pls2": "PLS-II",
+}
+
+
+@app.get("/physics", response_class=HTMLResponse, include_in_schema=False)
+async def physics_page(request: Request):
+    """Human-readable view of the same physics library that MCP serves."""
+    from ..features.physics import reference_bundle
+
+    bundle = reference_bundle()
+    if not bundle.get("available", True):
+        return templates.TemplateResponse(
+            request,
+            "physics.html",
+            {"available": False, "error": bundle.get("error")},
+        )
+
+    topics = []
+    for key in (bundle.get("topics") or {}):
+        topic = reference_bundle(key)
+        if topic.get("available"):
+            topic["key"] = key
+            topics.append(topic)
+
+    grouped: dict[str, list] = {}
+    for ref in bundle.get("references") or []:
+        grouped.setdefault(ref.get("category") or "other", []).append(ref)
+    reference_groups = [
+        (cat, _PHYSICS_CATEGORY_LABELS.get(cat, cat), grouped[cat])
+        for cat in ("srf", "beam_physics", "machine_protection", "pls2")
+        if cat in grouped
+    ]
+    for cat, refs in grouped.items():
+        if cat not in _PHYSICS_CATEGORY_LABELS:
+            reference_groups.append(
+                (cat, _PHYSICS_CATEGORY_LABELS.get(cat, cat), refs)
+            )
+
+    return templates.TemplateResponse(
+        request,
+        "physics.html",
+        {
+            "available": True,
+            "version": bundle.get("version"),
+            "updated": bundle.get("updated"),
+            "glossary_title": bundle.get("title") or "빔덤프 물리 해석 참고문헌",
+            "scope": bundle.get("scope", ""),
+            "pls2": bundle.get("pls2") or {},
+            "topics": topics,
+            "classes": bundle.get("classes") or {},
+            "reference_groups": reference_groups,
+            "reference_count": len(bundle.get("references") or []),
+            "internal_test_notes": bundle.get("internal_test_notes") or [],
+            "caveats": bundle.get("caveats") or [],
         },
     )
 

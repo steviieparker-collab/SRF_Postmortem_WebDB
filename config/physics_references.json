@@ -22,7 +22,7 @@
       150000.0,
       170000.0
     ],
-    "r_over_q_ohm": 100,
+    "r_over_q_ohm": 89,
     "beam_current_ma": [
       300,
       400
@@ -30,6 +30,50 @@
     "momentum_acceptance_percent": 1.35,
     "cavities": 3
   },
+  "internal_test_notes": [
+    {
+      "id": "vt20200405",
+      "date": "2020-04-05",
+      "title": "500 MHz CESR-B cavity vertical test",
+      "source_file": "20261127-022809-2204-1-vertical test-20200405.xlsx",
+      "serial_number": "not recorded",
+      "cavity_type": "500 MHz CESR-B type",
+      "parameters": {
+        "r_over_q_ohm": 89,
+        "epk_over_eacc": 2.5,
+        "epk_over_sqrt_u_mv_m_sqrt_j": 4.42,
+        "length_m": 0.3
+      },
+      "results": {
+        "q0_low_field": 1845000000.0,
+        "q0_at_6_67_mv_m": 1300000000.0,
+        "q0_at_9_33_mv_m": 900000000.0,
+        "max_eacc_mv_m": 11.06,
+        "q0_at_max_eacc": 630000000.0,
+        "max_xray_mr_hr": 14800,
+        "tau_power_s": [
+          0.139,
+          0.216
+        ],
+        "temperature_k": [
+          4.246,
+          4.279
+        ],
+        "beta_low_field": 1.769,
+        "ql_low_field": 666000000.0
+      },
+      "acceptance": [
+        "Q0 >= 1e9 at Eacc <= 6.67 MV/m (2.0 MV)",
+        "Q0 >= 5e8 at Eacc <= 9.33 MV/m (2.8 MV)"
+      ],
+      "caveats": [
+        "수직시험은 빔이 없는 상태다. beta≈1.77, tau는 power decay 기준이며 PLS-II 운전 결합(beta≈5000)과 다르다.",
+        "SN과 Date 셀이 비어 있어 개별 캐비티를 식별할 수 없다.",
+        "상승/하강 스윕 Q0가 다르다(7.3 MV/m에서 9.3e8 vs 1.28e9).",
+        "내장 스크린샷의 일부 파워 값은 시트 Step3 셀과 일치하지 않는다. 계산은 시트 셀 기준이다."
+      ]
+    }
+  ],
   "references": [
     {
       "id": "padamsee2008",
@@ -326,11 +370,11 @@
       "publisher": "IPAC2013 WEPWO041",
       "locator": "Measured Q0 and Qext",
       "topics": [
-        "Q0 7.5e8–1.1e9",
+        "Q0 7.5e8–1.1e9 @ 2 MV",
         "Qext 1.5–1.7e5",
-        "Vacc 2.35–2.40 MV"
+        "Vacc 2.35–2.40 MV/cavity (2-cavity commissioning, 2013)"
       ],
-      "note": "Q0/Qext 측정값의 근거."
+      "note": "2013년 2대 운전 시 캐비티당 최대 전압. 3대 운전에서는 캐비티당 1.5–1.65 MV(총 4.5–4.95 MV)로 나눠 운전한다."
     },
     {
       "id": "pls2_llrf2019",
@@ -449,7 +493,7 @@
     },
     "cavity_decay_after_rf_off": {
       "title": "RF off 이후 Vgap 감쇠",
-      "summary_ko": "RF 전원이 꺼지면 캐비티 전압은 저장에너지가 벽 손실과 빔부하로 빠져나가며 감소한다. 전원이 없을 때의 자연 감쇠는 tau=2*QL/omega이고, 빔이 있으면 빔부하가 추가되어 초기 감쇠가 더 빨라진다. PLS-II는 Qext 1.5–1.7e5, Q0 7.5e8–1.1e9로 강결합되어 있어 자연 시정수는 약 95–108 us, 빔부하를 포함한 초기 시정수는 약 30–35 us가 된다.",
+      "summary_ko": "RF 전원이 꺼지면 캐비티 전압은 저장에너지가 벽 손실과 빔부하로 빠져나가며 감소한다. 전원이 없을 때의 자연 감쇠는 tau=2*QL/omega이고, 빔이 있으면 빔부하가 추가되어 초기 감쇠가 더 빨라진다. PLS-II는 Qext 1.5–1.7e5, Q0 7.5e8–1.1e9로 강결합되어 있어 자연 시정수는 약 95–108 us, 빔부하를 포함한 초기 시정수는 약 24–39 us(중심값 31 us)가 된다.",
       "equations": [
         {
           "name": "natural decay",
@@ -490,7 +534,7 @@
     },
     "beam_energy_loss_after_rf_trip": {
       "title": "RF trip 이후 빔 에너지 손실",
-      "summary_ko": "RF가 꺼지면 빔은 매 회전마다 동기복사 에너지 U0를 잃는다. PLS-II는 U0=1.242 MeV/turn, T_rev=0.940 us이므로 dE/dt≈1.32 GeV/ms다. 1% 에너지 손실은 약 23 us, 5%는 약 113 us, 10%는 약 227 us다. 빔은 momentum acceptance(수 %)를 넘는 순간 손실되기 시작하므로, 캐비티 붕괴 후 수십~수백 us 안에 빔전류가 떨어진다.",
+      "summary_ko": "RF가 꺼지면 빔은 매 회전마다 동기복사 에너지 U0를 잃는다. PLS-II는 U0=1.242 MeV/turn, T_rev=0.940 us이므로 dE/dt≈1.32 GeV/ms다. RF 감쇠를 무시한 상수 손실률 기준으로 1%는 약 23 us, 5%는 약 113 us, 10%는 약 227 us다. 실제로는 Vgap이 지수 감쇠하므로 손실률이 점점 커지고, 1.35% momentum acceptance까지는 cavity 90% 이후 약 75 us가 걸린다. 빔은 이 한계를 넘는 순간 손실되기 시작하므로, 캐비티 붕괴 후 수십~수백 us 안에 빔전류가 떨어진다.",
       "equations": [
         {
           "name": "energy loss rate",
@@ -637,7 +681,7 @@
     },
     "pls2_operating_point": {
       "title": "PLS-II 운전점",
-      "summary_ko": "PLS-II는 3 GeV, 400 mA, 499.973 MHz, 3개 SRF cavity, 총 4.5–4.95 MV로 운전된다. 회당 에너지 손실은 1.242 MeV, 회전주파수는 1.0638 MHz다. 300–400 mA에서 캐비티는 강하게 결합되어 Qext 1.5–1.7e5, Q0 7.5e8–1.1e9를 보인다.",
+      "summary_ko": "PLS-II는 3 GeV, 400 mA, 499.973 MHz, 3개 SRF cavity로 운전된다. 총 gap voltage는 공칭 4.5 MV이고, 400 mA top-up 운전에서는 여유를 두고 4.95 MV(캐비티당 1.65 MV)까지 올린다. 회당 에너지 손실은 1.242 MeV, 회전주파수는 1.0638 MHz다. 300–400 mA에서 캐비티는 강하게 결합되어 Qext 1.5–1.7e5, Q0 7.5e8–1.1e9, R/Q=89 Ω를 보인다.",
       "equations": [],
       "citations": [
         {
@@ -662,7 +706,8 @@
         }
       ],
       "caveats": [
-        "운전점은 시기별로 조금씩 다르다. 이벤트별 실제 값은 아카이브 PV를 봐야 한다."
+        "운전점은 시기별로 조금씩 다르다. 이벤트별 실제 값은 아카이브 PV를 봐야 한다.",
+        "R/Q=89 Ω은 fundamental mode 값이다. PLS-II 설계 문헌의 'R/Q 100 Ω'은 HOM R/Q를 낮춘 문맥이므로 혼동하지 않는다."
       ]
     }
   },
