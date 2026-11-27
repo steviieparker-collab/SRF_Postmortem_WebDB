@@ -139,6 +139,8 @@ MS 기간을 정말 볼 때만 `hide_ms=false`를 함께 넘긴다.
 `t0`, `signature.CM1`, `beam_fall`, `sequence`, `physics`, `digital` 포함.
 `physics.class`가 `rf_trip`/`single_cavity_quench` 등이고,
 `physics.citations`에 `padamsee2008`, `caspers2024` 같은 id가 있어야 한다.
+`physics.cause_candidates`와 `next_logs_ko`가 있어야 하며, 이는 root cause
+확정이 아니라 확인할 후보/로그다.
 
 ### T9. 보고서 검색
 `postmortem_search_reports("KLY Ion Pump 알람", top_k=5)` → `kinds`에 `image` 포함.
@@ -152,7 +154,7 @@ MS 기간을 정말 볼 때만 `hide_ms=false`를 함께 넘긴다.
 ### T11. 물리 glossary/citation
 `postmortem_get_glossary(topic="cavity_decay_after_rf_off")` →
 `summary_ko`, `equations`(3개), `citations`(padamsee2008, caspers2024, pls2_srf2013) 포함.
-`postmortem_get_glossary()` → `physics` 블록에 7개 topic, reference 27개,
+`postmortem_get_glossary()` → `physics` 블록에 7개 topic, reference 28개,
 `internal_test_notes` 1건(2020-04-05 수직시험) 포함.
 `postmortem_get_glossary(topic="list")` → `addressable_topic_count=16`
 (domain 9 + physics 7).

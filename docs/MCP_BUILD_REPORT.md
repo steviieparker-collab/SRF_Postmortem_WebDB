@@ -263,14 +263,15 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
    2개 캐비티 붕괴는 dual quench로 단정하지 않고 `mixed`로 둔다.
    상세 계산과 PLS-II cavity 시정수 검증은 `beamdump/docs/SEQUENCE_PHYSICS_ANALYSIS.md`.
 6. **`waveform.physics` + 교과서 인용** — `config/physics_references.json`에
-   SRF/빔물리/MIS·MPS·BLM/PLS-II 문헌 27개와 7개 physics topic을 정리했다.
+   SRF/빔물리/MIS·MPS·BLM/PLS-II 문헌 28개와 7개 physics topic을 정리했다.
    `postmortem_analyze_waveform`/`postmortem_analyze_quench`는 class별
    `summary_ko`, `chain_ko`, `steps_ko`, timeline, PLS-II 파라미터 check,
-   `citations`를 반환한다.
+   `citations`, `cause_candidates`, `next_logs_ko`를 반환한다.
+   측정 패턴(관측)과 원인 후보(경험적 배경지식)를 분리한 2층 구조다.
    `postmortem_get_glossary(topic=...)`로 topic별 equations/citations을
    조회할 수 있다. `topic='list'`는 16개 addressable topic index를 반환한다.
    PLS-II fundamental R/Q는 89 Ω, 운전점은 1.5 MV/cavity(총 4.5 MV),
-   RF acceptance는 2.8%다. MIS는 진공/온도/냉각/방사선 기반 빔 permit,
+   RF acceptance는 2.8%다. MIS는 진공/온도/LCW 기반 RF Ready, PSI는 방사선/출입,
    MPS는 마그넷 전원 보호, BLM은 모니터링으로 구분한다.
    2020-04-05 500 MHz CESR-B 수직시험은 문헌 인용과 분리해
    `internal_test_notes`에 1건 기록했다. per-event 저장본은
@@ -322,7 +323,7 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
 | `src/rag/index.py` | RAG 인덱스 |
 | `src/features/` | 파형 특징, 보고서, quench, 벡터 스토어 |
 | `config/domain_glossary.json` | 도메인 배경지식 정본 |
-| `config/physics_references.json` | 교과서/강의록/PLS-II 문헌 27개, physics topic 7개 |
+| `config/physics_references.json` | 교과서/강의록/PLS-II 문헌 28개, physics topic 7개 |
 | `src/features/physics.py` | 순차 class → 물리 해석·PLS-II check·citation |
 | `docs/PHYSICS_REFERENCES.md` | 교과서 내용 사람이 읽는 정리 |
 | `scripts/build_event_physics.py` | per-event physics JSONL 생성 |

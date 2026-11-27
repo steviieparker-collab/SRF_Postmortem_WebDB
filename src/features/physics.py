@@ -161,7 +161,7 @@ def _expected() -> dict[str, Any]:
     omega = 2.0 * math.pi * f_rf
     q0 = p.get("q0", [7.5e8, 1.1e9])
     qext = p.get("qext", [1.5e5, 1.7e5])
-    v_total = p.get("v_total_mv", [4.5, 4.95])
+    v_total = p.get("v_total_mv", [4.5, 4.5])
     current = p.get("beam_current_ma", [300, 400])
     u0 = float(p.get("u0_mev_per_turn", 1.242))
     rq = float(p.get("r_over_q_ohm", 89))
@@ -211,6 +211,27 @@ def interpret_sequence(
 
     cls = sequence["class"]
     class_info = (doc.get("classes") or {}).get(cls, {})
+    cause_map = {
+        c.get("key"): c
+        for c in (
+            (doc.get("topics") or {})
+            .get("beam_dump_causes", {})
+            .get("categories", [])
+        )
+    }
+    cause_candidates = []
+    for cand in class_info.get("cause_candidates", []):
+        cat = cause_map.get(cand.get("key"), {})
+        cause_candidates.append({
+            "key": cand.get("key"),
+            "title_ko": cat.get("title_ko", cand.get("key")),
+            "why_ko": cand.get("why_ko", ""),
+            "check_ko": cand.get("check_ko", ""),
+        })
+    next_logs = []
+    for cand in cause_candidates:
+        if cand["check_ko"] and cand["check_ko"] not in next_logs:
+            next_logs.append(cand["check_ko"])
     cavities = sequence.get("cavities") or {}
     collapsed = {
         unit: block for unit, block in cavities.items()
@@ -322,7 +343,9 @@ def interpret_sequence(
             f"{decay_txt} → 빔이 매 회전 U0=1.242 MeV(≈1.32 GeV/ms)를 "
             f"잃음 → RF acceptance({expected['rf_acceptance_percent']}%)를 넘어 "
             "빔 손실. 캐비티가 빔보다 "
-            f"{delay_txt} 먼저 움직였으므로 RF가 원인 쪽이다."
+            f"{delay_txt} 먼저 움직였으므로 직접 원인은 RF off다. RF off를 명령한 "
+            "것이 MIS/PSI/RF interlock/CG 중 무엇인지는 cause_candidates와 "
+            "로그로 확인한다."
         )
     elif cls == "beam_first_rf_trip":
         chain = (
@@ -334,7 +357,7 @@ def interpret_sequence(
     elif cls == "beam_only":
         chain = (
             "캐비티 전압이 20% 아래로 내려가지 않았다. RF는 원인이 아니며 "
-            "MIS(진공/온도/냉각/방사선), CONTROL/TFS/FOFB, beam line, kicker, "
+            "MIS(진공/온도/LCW), PSI(방사선/출입), CONTROL/TFS/FOFB, beam line, kicker, "
             "궤도/횡방향 손실을 봐야 한다."
         )
     elif cls == "single_cavity_quench":
@@ -382,6 +405,16 @@ def interpret_sequence(
         "title_ko": class_info.get("title_ko", cls),
         "summary_ko": summary,
         "chain_ko": chain,
+        "cause_candidates": cause_candidates,
+        "next_logs_ko": next_logs,
+        "interpretation_note_ko": (
+            "측정 패턴은 서술적 분류다. root cause는 확정되지 않았다. "
+            "가능 원인 후보와 확인할 로그를 함께 본다."
+            + (
+                " 후보: " + ", ".join(c["title_ko"] for c in cause_candidates) + "."
+                if cause_candidates else ""
+            )
+        ),
         "steps_ko": [text for _, text in steps],
         "class_rule": sequence.get("class_rule"),
         "timeline": {

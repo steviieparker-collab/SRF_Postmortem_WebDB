@@ -375,7 +375,7 @@
         "Qext 1.5–1.7e5",
         "Vacc 2.35–2.40 MV/cavity (2-cavity commissioning, 2013)"
       ],
-      "note": "2013년 2대 운전 시 캐비티당 최대 전압. 3대 운전에서는 캐비티당 1.5–1.65 MV(총 4.5–4.95 MV)로 나눠 운전한다."
+      "note": "2013년 2대 운전 시 캐비티당 최대 전압. 3대 운전에서는 캐비티당 1.5 MV(총 4.5 MV)로 운전한다."
     },
     {
       "id": "pls2_llrf2019",
@@ -390,10 +390,9 @@
         "LLRF",
         "forward power 140–190 kW",
         "reflected power 1–5 kW",
-        "1.5 MV/cavity operation (4.5 MV total)",
-        "1.65 MV/cavity in 400 mA top-up test"
+        "1.5 MV/cavity operation (4.5 MV total)"
       ],
-      "note": "운전점은 1.5 MV/cavity(4.5 MV). 1.65 MV/cavity(4.95 MV)는 400 mA top-up 시험 조건."
+      "note": "운전점은 1.5 MV/cavity(4.5 MV). 400 mA 운전도 4.5 MV에서 한다."
     },
     {
       "id": "pls2_srf2015",
@@ -546,6 +545,24 @@
         "4-bump injection"
       ],
       "note": "PLS-II kicker pulse power 구조."
+    },
+    {
+      "id": "pls2_control2014",
+      "category": "pls2",
+      "title": "PLS-II Control System",
+      "authors": "M.G. Kim",
+      "year": 2014,
+      "publisher": "WAO 2014, Mainz",
+      "url": "https://slideum.com/doc/24048/linac-control-and-monitoring",
+      "locator": "SR RF Control: RF Ready (MIS, PSI); MIS OPI; SR MPS panel; PSI radiation/access",
+      "topics": [
+        "MIS",
+        "PSI",
+        "MPS",
+        "RF Ready",
+        "stored beam scraper"
+      ],
+      "note": "슬라이드 전사본. MIS/PSI/MPS 분리와 RF Ready 근거."
     }
   ],
   "topics": {
@@ -657,30 +674,45 @@
       ]
     },
     "mis_machine_interlock": {
-      "title": "MIS(Machine Interlock System)와 빔덤프",
-      "summary_ko": "PLS-II의 기본 장치보호 시스템은 MIS(Machine Interlock System)다. MIS는 진공도, 빔튜브/빔라인 온도, 냉각수 유량·온도, 방사선량(BLM), 게이트밸브 상태 등을 감시하고, 임계값을 넘으면 빔 permit을 끊어 RF를 OFF시켜 빔을 덤프한다. 이때 MPS 전원을 끄지는 않는다. BLM은 빔손실을 모니터링하는 계측기이며, 방사선량이 한도를 넘으면 MIS 입력이 된다. MPS는 마그넷 전원장치 보호 시스템으로 MIS와 별개다. MPS 고장은 마그넷 전류를 끊어 빔 손실을 만들고, RF는 빔부하 감소로 뒤늦게 반응한다.",
+      "title": "MIS(Machine Interlock System) 구성과 RF 인터록",
+      "summary_ko": "PLS-II의 기계 인터록은 PLC 기반 MIS(Machine Interlock System)가 담당한다. 공개된 PLS-era MIS는 3계층(Device/Equipment -> Local -> Central) 구조로, 중앙 1대 + local 7대(제어실 1, 저장링 4, Linac 2)로 구성되고 PAUSE/SEARCH/INJECTION/STORAGE 4개 운전 모드별 interlock chain을 사용한다. PLS-II 제어계에서도 MIS는 PLC subsystem + OPI로 유지된다. MIS는 저장링 진공/온도, 게이트밸브 등 machine condition을 감시하고, MIS와 PSI가 healthy일 때만 'RF Ready'가 성립한다. MIS 또는 PSI trip -> RF Ready 상실 -> HPRF off -> 빔덤프다. MPS는 SR MPS/BTL MPS/Linac MPS로 별도이며, MPS 고장은 마그넷 전원을 끊어 빔 손실을 만들고 RF를 직접 끄지 않는다. 방사선 안전/출입은 PSI(Personal Safety Interlock)가 담당한다. BLM은 모니터링이며, BLM 방사선량이 MIS를 직접 트립한다는 PLS-II 공개 문서는 확인되지 않았다. Fast Interlock System(2020)과 fast orbit interlock(200->10 ms)은 MIS와 별도 빠른 보호 계층이다.",
       "equations": [
         {
-          "name": "MIS trip chain",
-          "expr": "sensor -> MIS PLC -> beam permit off -> RF off -> beam dump",
-          "note": "MIS는 보호/트리거"
+          "name": "MIS hierarchy",
+          "expr": "device/equipment -> local (7 PLCs) -> central (redundant PLC)",
+          "note": "EPAC2006 PLS-era MIS"
         },
         {
-          "name": "fast interlock",
-          "expr": "IVU foil protection: 200 ms -> 10 ms",
-          "note": "ARW2019"
+          "name": "RF Ready",
+          "expr": "RF Ready = MIS healthy AND PSI healthy",
+          "note": "WAO2014 SR RF Control"
+        },
+        {
+          "name": "MIS trip",
+          "expr": "MIS/PSI trip -> RF Ready off -> HPRF off -> beam dump",
+          "note": "MPS 전원은 유지"
+        },
+        {
+          "name": "MPS trip",
+          "expr": "MPS trip -> magnet PS off -> beam loss (RF not directly off)",
+          "note": "SR/BTL/Linac MPS"
         }
       ],
       "citations": [
         {
-          "id": "pls2_mis2020",
-          "locator": "Fast interlock design and beam shut-off time",
-          "supports": "PLS-II MIS/fast interlock"
+          "id": "pls2_mis_hmi2006",
+          "locator": "Three-layer MIS, 1 central + 7 local PLCs, 4 operation modes",
+          "supports": "MIS 구성/모드"
         },
         {
-          "id": "pls2_mis_hmi2006",
-          "locator": "MIS PLC architecture and interlock chain",
-          "supports": "MIS 3계층 구조"
+          "id": "pls2_control2014",
+          "locator": "RF Ready (MIS, PSI), MIS OPI, SR MPS panel, PSI panels",
+          "supports": "MIS/PSI/MPS 분리, RF Ready"
+        },
+        {
+          "id": "pls2_mis2020",
+          "locator": "Fast interlock design and beam shut-off time",
+          "supports": "별도 fast interlock 계층"
         },
         {
           "id": "pls2_vacuum2015",
@@ -689,8 +721,8 @@
         },
         {
           "id": "pls2_operation2019",
-          "locator": "Fault categories and fast interlock upgrade",
-          "supports": "운전 고장 통계, 200 ms -> 10 ms"
+          "locator": "Fault categories and fast orbit interlock 200 ms -> 10 ms",
+          "supports": "운전 고장 통계, 별도 orbit interlock"
         },
         {
           "id": "forck_juas",
@@ -700,25 +732,26 @@
         {
           "id": "zhukov2010",
           "locator": "BLM tutorial",
-          "supports": "BLM 종류와 신호"
+          "supports": "BLM 종류와 신호(일반)"
         },
         {
           "id": "holzer2016",
           "locator": "LHC BLM requirements",
-          "supports": "BLM 동적범위/시간응답"
+          "supports": "BLM 동적범위/시간응답(일반)"
         },
         {
           "id": "dehning2014",
           "locator": "Machine protection instrumentation",
-          "supports": "BLM 시스템"
+          "supports": "BLM 시스템(일반)"
         }
       ],
       "caveats": [
-        "MIS 트립은 RF를 OFF시키지만 MPS 전원을 끄지는 않는다. MPS는 별도 계통이다.",
-        "MIS는 원인 시스템이 아니라 보호/트리거인 경우가 많다. MIS 트립을 root cause로 기록하면 안 된다.",
-        "MPS와 MIS를 혼동하지 않는다. MPS는 마그넷 전원 보호, MIS는 진공/온도/냉각/방사선 기반 빔 permit이다.",
-        "BLM은 모니터링 계측기다. BLM 자체가 빔을 덤프하지 않고, 임계 초과 시 MIS가 동작한다.",
-        "PLS-II MIS의 실제 채널/임계값은 내부 문서가 필요하다."
+        "공개 자료의 MIS 세부(1 central + 7 local, 4 modes)는 PLS-era EPAC2006 기준이다. PLS-II의 정확한 local unit 수/PLC 세대는 내부 문서 확인이 필요하다.",
+        "MIS 입력에 LCW flow와 BLM/방사선량이 포함되는지는 공개 자료로 확정되지 않았다. MIS OPI/채널 리스트로 내부 확인이 필요하다.",
+        "방사선 안전/출입은 PSI가 담당한다. 방사선량 한도 초과가 MIS를 직접 트립한다는 공개 근거는 찾지 못했다. BLM->MIS 입력 여부는 내부 문서 확인이 필요하다.",
+        "MIS는 RF를 직접 끄는 장치가 아니라 RF Ready를 끊는 인터록이다. 실제 HPRF off는 RF interlock/LLRF를 통해 이루어진다.",
+        "MIS trip은 MPS 전원을 끄지 않는다. MPS는 SR/BTL/Linac MPS로 별도 계통이다.",
+        "Fast Interlock System(2020)과 fast orbit interlock(200->10 ms)은 MIS와 별도 빠른 보호 계층이다."
       ]
     },
     "beam_energy_loss_after_rf_trip": {
@@ -847,28 +880,28 @@
         {
           "key": "mps",
           "title_ko": "MPS(대용량 마그넷 전원) 고장",
-          "summary_ko": "Bending magnet 등 대용량 MPS 고장 시 빔덤프. 소용량 MPS보다 영향이 크다. 빔이 즉시 죽기보다 수백 ms 동안 서서히 흩어지며 beam current가 RF보다 먼저 감소하는 형태.",
+          "summary_ko": "SR MPS/BTL MPS/Linac MPS 등 대용량 마그넷 전원 고장 시 빔덤프. 소용량 MPS보다 영향이 크다. 빔이 즉시 죽기보다 수백 ms 동안 서서히 흩어지며 beam current가 RF보다 먼저 감소하는 형태. MPS는 RF를 직접 끄지 않는다.",
           "signature_ko": "beam current가 RF/cavity보다 먼저 감소; 수백 ms 스케일; cavity는 beam loading 감소로 부분 sag",
           "causes_ko": "대용량 magnet power supply"
         },
         {
           "key": "mis",
-          "title_ko": "MIS 트립 (진공/온도/냉각/방사선)",
-          "summary_ko": "빔튜브 내부 온도, 냉각수 flow, 진공도, 빔라인 온도/진공/flow, 방사선량 등이 임계 초과 -> MIS가 beam permit을 끊고 RF off(MPS 전원은 유지). Beamline과 MechVac의 상당수가 여기에 포함. MIS는 root cause가 아니라 보호 트리거일 수 있다.",
-          "signature_ko": "RF off 전에 진공/온도/방사선/flow 신호 상승; beam loss가 먼저일 수도 있음",
-          "causes_ko": "vacuum, temperature, LCW, radiation"
+          "title_ko": "MIS 트립 (진공/온도/LCW/gate valve)",
+          "summary_ko": "빔튜브/빔라인 온도, 진공도, 게이트밸브 등이 임계 초과 -> MIS가 RF Ready를 끊고 RF off(MPS 전원은 유지). Beamline과 MechVac의 상당수가 여기에 포함. MIS는 root cause가 아니라 보호 트리거일 수 있다. 방사선 안전/출입은 PSI로 구분하며, LCW 입력 여부는 내부 문서 확인이 필요하다.",
+          "signature_ko": "RF off 전에 진공/온도/LCW 신호 상승; beam loss가 먼저일 수도 있음",
+          "causes_ko": "vacuum, temperature, gate valve (LCW는 확인 필요)"
         },
         {
           "key": "control",
           "title_ko": "CONTROL/TFS/FOFB/feedback",
-          "summary_ko": "TFS 또는 feedback system에 의한 빔 불안정성 증가 -> 빔이 흩어짐 -> MIS 또는 beam loss. 빨리 흩어져 진공/온도/방사선이 빨리 오르면 MIS, 서서히 흩어지면 beam loss.",
+          "summary_ko": "TFS 또는 feedback system에 의한 빔 불안정성 증가 -> 빔이 흩어짐 -> MIS 또는 beam loss. 빨리 흩어져 진공/온도/LCW가 빨리 오르면 MIS, 서서히 흩어지면 beam loss. 방사선/출입은 PSI로 구분한다.",
           "signature_ko": "beam current 감소가 먼저, RF는 유지되거나 부분 sag; BPM/TFS/FOFB 로그 확인 필요",
           "causes_ko": "TFS, FOFB, feedback"
         },
         {
           "key": "beamline",
-          "title_ko": "BEAMLINE",
-          "summary_ko": "빔라인 온도/진공/냉각수/방사선에 의한 MIS가 대부분. Photon beam에 의한 온도/진공 상승 포함.",
+          "title_ko": "BEAMLINE (온도/진공/냉각)",
+          "summary_ko": "빔라인 온도/진공/냉각수에 의한 MIS가 대부분. Photon beam에 의한 온도/진공 상승 포함. 방사선 안전/출입은 PSI로 구분한다.",
           "signature_ko": "MIS 트립; RF 자체는 정상",
           "causes_ko": "beamline vacuum/temperature/LCW"
         },
@@ -896,7 +929,7 @@
         {
           "key": "psi",
           "title_ko": "PSI (Personnel Safety Interlock)",
-          "summary_ko": "방사선 안전/출입 통제용 PSI가 동작하면 빔을 덤프한다. 장치 고장이 아니라 인명 보호 인터록이므로 MIS/MPS와 구분한다.",
+          "summary_ko": "방사선 안전/출입 통제용 PSI(Personal Safety Interlock)가 동작하면 RF Ready가 끊겨 빔을 덤프한다. 장치 고장이 아니라 인명 보호 인터록이며 MIS/MPS와 구분한다.",
           "signature_ko": "PSI/출입/방사선 안전 로그; RF/MPS 자체는 정상",
           "causes_ko": "access, radiation safety"
         },
@@ -971,7 +1004,7 @@
     },
     "pls2_operating_point": {
       "title": "PLS-II 운전점",
-      "summary_ko": "PLS-II는 3 GeV, 400 mA, 499.973 MHz, 3개 SRF cavity로 운전된다. 현재 각 cavity는 1.5 MV로 운전하며 총 4.5 MV다. 400 mA top-up 시험에서는 여유를 두고 4.95 MV(1.65 MV/cavity)까지 올린 적이 있으나 운전점은 아니다. 회당 에너지 손실은 1.242 MeV, 회전주파수는 1.0638 MHz, RF acceptance는 2.8%다. 300–400 mA에서 Qext 1.5–1.7e5, Q0 7.5e8–1.1e9, R/Q=89 Ω를 보인다.",
+      "summary_ko": "PLS-II는 3 GeV, 400 mA, 499.973 MHz, 3개 SRF cavity로 운전된다. 각 cavity는 1.5 MV로 운전하며 총 4.5 MV다. 400 mA 운전도 4.5 MV에서 한다. 회당 에너지 손실은 1.242 MeV, 회전주파수는 1.0638 MHz, RF acceptance는 2.8%다. 300–400 mA에서 Qext 1.5–1.7e5, Q0 7.5e8–1.1e9, R/Q=89 Ω를 보인다.",
       "equations": [],
       "citations": [
         {
@@ -1002,7 +1035,7 @@
       ],
       "caveats": [
         "운전점은 시기별로 조금씩 다르다. 이벤트별 실제 값은 아카이브 PV를 봐야 한다.",
-        "1.5 MV/cavity가 현재 운전점이고, 1.65 MV/cavity(4.95 MV)는 400 mA top-up 시험 조건이다."
+        "각 cavity 1.5 MV(총 4.5 MV)가 실제 운전값이다."
       ]
     }
   },
@@ -1015,6 +1048,28 @@
         "beam_energy_loss_after_rf_trip",
         "mis_machine_interlock",
         "pls2_operating_point"
+      ],
+      "cause_candidates": [
+        {
+          "key": "rf_common",
+          "why_ko": "3개 캐비티 동시 off는 RF 공통점/interlock controller/CG를 먼저 의심",
+          "check_ko": "RF interlock controller, LLRF, CG/BPR01"
+        },
+        {
+          "key": "mis",
+          "why_ko": "MIS가 RF Ready를 끊으면 3개 캐비티가 동시에 off",
+          "check_ko": "MIS OPI/trip log, vacuum/temperature"
+        },
+        {
+          "key": "psi",
+          "why_ko": "PSI trip도 RF Ready를 끊음",
+          "check_ko": "PSI status/access/radiation log"
+        },
+        {
+          "key": "rf_single_station",
+          "why_ko": "한 station trip 후 나머지가 power limit으로 따라 붕괴",
+          "check_ko": "LLRF/HPRF station log"
+        }
       ]
     },
     "beam_first_rf_trip": {
@@ -1024,6 +1079,33 @@
         "cavity_figures_of_merit",
         "transverse_instability",
         "beam_dump_causes"
+      ],
+      "cause_candidates": [
+        {
+          "key": "mps",
+          "why_ko": "beam current가 RF보다 먼저 감소하는 대표 패턴",
+          "check_ko": "SR/BTL/Linac MPS log"
+        },
+        {
+          "key": "magnet",
+          "why_ko": "마그넷 temp/water flow -> MPS 전원 차단",
+          "check_ko": "magnet LCW/temp log"
+        },
+        {
+          "key": "control",
+          "why_ko": "TFS/FOFB/feedback 불안정으로 빔이 흩어짐",
+          "check_ko": "TFS/FOFB/BPM log"
+        },
+        {
+          "key": "mis",
+          "why_ko": "진공/온도/LCW 상승이 beam loss 뒤에 발생",
+          "check_ko": "MIS OPI/trip log"
+        },
+        {
+          "key": "beamline",
+          "why_ko": "빔라인 photon/진공/온도 이상",
+          "check_ko": "beamline vacuum/temperature log"
+        }
       ]
     },
     "beam_only": {
@@ -1033,6 +1115,33 @@
         "transverse_instability",
         "mis_machine_interlock",
         "beam_dump_causes"
+      ],
+      "cause_candidates": [
+        {
+          "key": "mis",
+          "why_ko": "RF는 정상인데 진공/온도/LCW/게이트밸브가 빔을 덤프",
+          "check_ko": "MIS OPI/trip log"
+        },
+        {
+          "key": "control",
+          "why_ko": "TFS/FOFB/feedback 불안정으로 빔만 손실",
+          "check_ko": "TFS/FOFB/BPM log"
+        },
+        {
+          "key": "beamline",
+          "why_ko": "빔라인 photon/진공/온도 이상",
+          "check_ko": "beamline vacuum/temperature log"
+        },
+        {
+          "key": "kicker",
+          "why_ko": "kicker pulse power 고장은 빔 전체를 덤프",
+          "check_ko": "kicker/thyratron log"
+        },
+        {
+          "key": "psi",
+          "why_ko": "PSI trip은 RF Ready를 끊지만 cavity 신호 변화가 작을 수 있음",
+          "check_ko": "PSI status/access log"
+        }
       ]
     },
     "single_cavity_quench": {
@@ -1042,6 +1151,23 @@
         "cavity_decay_after_rf_off",
         "padamsee2008",
         "mis_machine_interlock"
+      ],
+      "cause_candidates": [
+        {
+          "key": "rf_single_station",
+          "why_ko": "한 station의 LLRF/HPRF/CM 고장 또는 quench",
+          "check_ko": "LLRF/HPRF/QUEN log"
+        },
+        {
+          "key": "mechvac",
+          "why_ko": "CM 진공/He 압력 이상이 quench와 동반",
+          "check_ko": "CM vacuum/BPR01 log"
+        },
+        {
+          "key": "mis",
+          "why_ko": "CM 진공/온도 인터록이 RF Ready를 끊을 수 있음",
+          "check_ko": "MIS OPI/trip log"
+        }
       ]
     },
     "mixed": {
@@ -1050,6 +1176,28 @@
       "citations": [
         "beam_dump_causes",
         "mis_machine_interlock"
+      ],
+      "cause_candidates": [
+        {
+          "key": "rf_single_station",
+          "why_ko": "2개 캐비티 붕괴는 dual quench가 아니라 station/common-point 이상일 수 있음",
+          "check_ko": "LLRF/HPRF station log"
+        },
+        {
+          "key": "rf_common",
+          "why_ko": "공통 RF/CG/interlock 계통 이상",
+          "check_ko": "RF interlock controller, CG/BPR01"
+        },
+        {
+          "key": "mis",
+          "why_ko": "MIS/PSI가 RF Ready를 끊었을 수 있음",
+          "check_ko": "MIS/PSI trip log"
+        },
+        {
+          "key": "mps",
+          "why_ko": "beam first 흔적이 있으면 MPS/magnet 확인",
+          "check_ko": "MPS log"
+        }
       ]
     }
   },

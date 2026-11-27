@@ -85,28 +85,45 @@ PLS(2.5 GeV)의 1.35% 값은 PLS-II와 다른 머신이므로 사용하지 않�
 
 ---
 
-## 3. MIS / MPS / BLM
+## 3. MIS / PSI / MPS / BLM
 
-PLS-II의 기본 장치보호 시스템은 **MIS(Machine Interlock System)**다. MIS는
-진공도, 빔튜브/빔라인 온도, 냉각수 유량·온도, 방사선량(BLM), 게이트밸브 상태
-등을 감시하고, 임계값을 넘으면 빔 permit을 끊어 RF를 OFF시켜 빔을 덤프한다.
-이때 MPS 전원을 끄지는 않는다. **BLM은 모니터링 계측기**이며, 방사선량이
-한도를 넘으면 MIS 입력이 된다.
-**MPS는 마그넷 전원장치 보호 시스템**으로 MIS와 별개다. MPS 고장은 마그넷
-전류를 끊어 빔 손실을 만들고, RF는 빔부하 감소로 뒤늦게 반응한다.
+PLS-II의 기계 인터록은 **MIS(Machine Interlock System)**가 담당한다. 공개된
+PLS-era MIS는 **3계층(Device/Equipment → Local → Central)** 구조로, 중앙 1대 +
+local 7대(제어실 1, 저장링 4, Linac 2)로 구성되고 **PAUSE / SEARCH / INJECTION /
+STORAGE** 4개 운전 모드별 interlock chain을 사용한다. PLS-II 제어계에서도 MIS는
+PLC subsystem + OPI로 유지된다.
+
+핵심은 **RF Ready = MIS healthy AND PSI healthy**다. MIS 또는 PSI가 trip하면
+RF Ready가 끊기고 HPRF가 off되어 빔이 덤프된다. MIS가 RF를 직접 끄는 것이
+아니라 RF permit을 끊는 구조다.
+
+- **MIS**: 저장링 진공/온도, 게이트밸브 등 machine condition. 진공/온도 MIS
+  트립 사례는 PLS-II vacuum 자료에 있다.
+- **PSI(Personal Safety Interlock)**: 방사선 안전/출입 통제. 방사선 모니터링과
+  접근 모드(No Access / Controlled / Restricted / Free)를 담당한다. **방사선량
+  한도 초과가 MIS를 직접 트립한다는 공개 근거는 찾지 못했다.** 이 부분은
+  내부 문서 확인이 필요하다.
+- **MPS**: SR MPS / BTL MPS / Linac MPS로 MIS와 별개. MPS 고장은 마그넷 전원을
+  끊어 빔 손실을 만들고, RF를 직접 끄지 않는다.
+- **BLM**: 빔손실 모니터링 계측기. BLM 자체가 빔을 덤프하지 않는다. BLM→MIS
+  입력 여부는 공개 자료로 확인되지 않았다.
+- **Fast Interlock System(2020)**, **fast orbit interlock(200→10 ms)**은 MIS와
+  별도 빠른 보호 계층이다. **Stored beam scraper/quick beam dump**도 RF cavity
+  shock을 줄이기 위한 별도 actuator로 본다.
 
 | id | 문헌 | 이 분석에서 쓰는 부분 |
 |---|---|---|
-| `pls2_mis2020` | Lee et al., "Fast Interlock System for Machine Protection in PLS-II", JKPS 76, 301 (2020), DOI 10.3938/jkps.76.301 | PLS-II fast interlock, beam shut-off time |
-| `pls2_mis_hmi2006` | Park et al., "Development of Machine Interlock System HMI for PLS", EPAC2006 THPCH121 | MIS PLC 3계층 구조, local/central unit |
+| `pls2_mis_hmi2006` | Park et al., "Development of Machine Interlock System HMI for PLS", EPAC2006 THPCH121 | MIS 3계층, 1 central + 7 local PLC, 4 operation modes |
+| `pls2_control2014` | Kim, "PLS-II Control System", WAO 2014 | RF Ready (MIS, PSI), MIS OPI, SR MPS panel, PSI radiation/access |
+| `pls2_mis2020` | Lee et al., "Fast Interlock System for Machine Protection in PLS-II", JKPS 76, 301 (2020), DOI 10.3938/jkps.76.301 | 별도 fast interlock 계층 |
 | `pls2_vacuum2015` | Ha & Park, "Design and Operation Experience of PLS-II Vacuum System", KEK seminar 2015 | thermocouple/gauge controller MIS 트립 사례 |
 | `pls2_operation2019` | Kim, "Several Significant Fault Recoveries and the Operation Status of the PLS-II", ARW2019 | 고장 통계, fast orbit interlock 200 ms -> 10 ms |
-| `forck_juas` | Forck, *Beam Instrumentation and Diagnostics*, GSI/JUAS | §8.3 BLM 기반 모니터링 |
-| `zhukov2010` | Zhukov, "Beam Loss Monitors", BIW2010 THTNB01 | BLM 종류와 신호 |
-| `holzer2016` | Holzer, "Beam Loss Measurement for Protection and Diagnostics", CAS 2016 | BLM 동적범위/시간응답 |
-| `dehning2014` | Dehning, "Beam Instrumentation used for Machine Protection", JAS14 | BLM 시스템 |
+| `forck_juas` | Forck, *Beam Instrumentation and Diagnostics*, GSI/JUAS | §8.3 BLM 모니터링 |
+| `zhukov2010` | Zhukov, "Beam Loss Monitors", BIW2010 THTNB01 | BLM 종류와 신호(일반) |
+| `holzer2016` | Holzer, "Beam Loss Measurement for Protection and Diagnostics", CAS 2016 | BLM 동적범위/시간응답(일반) |
+| `dehning2014` | Dehning, "Beam Instrumentation used for Machine Protection", JAS14 | BLM 시스템(일반) |
 
-MIS 트립을 곧 root cause로 기록하면 안 된다. MIS는 보호/트리거이고, 원인은
+MIS 트립을 곧 root cause로 기록하면 안 된다. MIS/PSI는 보호/트리거이고, 원인은
 RF station, MPS, CONTROL, 빔라인, 진공 등에 따로 있을 수 있다.
 
 ---
@@ -118,7 +135,7 @@ RF station, MPS, CONTROL, 빔라인, 진공 등에 따로 있을 수 있다.
 | `pls2_status2016` | NAPAC2016 THPOA60, Status of PLS-II Operation | 3 GeV, 400 mA, 499.973 MHz, 3 SRF cavities, gap voltage 4.5 MV |
 | `pls2_srf2012` | IPAC2012 WEPPC024, Preliminary Test of SRF Cavities for PLS-II | 4.5 MV, RF acceptance 2.8%, U0 1242 keV/turn |
 | `pls2_srf2013` | IPAC2013 WEPWO041 | Q0 7.5e8–1.1e9 @ 2 MV, Qext 1.5–1.7e5, Vacc 2.35–2.40 MV/cavity (2013년 2대 운전) |
-| `pls2_llrf2019` | arXiv:1910.01861 | 1.5 MV/cavity 운전(4.5 MV), 1.65 MV/cavity는 top-up 시험, forward 140–190 kW |
+| `pls2_llrf2019` | arXiv:1910.01861 | 1.5 MV/cavity 운전(4.5 MV), forward 140–190 kW |
 | `pls2_srf2015` | IPAC2015 WEPMN042 | 400 mA, optimal coupling, reflected power |
 | `pls2_tfs2021` | Lee et al., J. Synchrotron Rad. 28, 1417 (2021), DOI 10.1107/S1600577521005889 | PLS-II TFS, bunch-by-bunch transverse feedback |
 | `pls2_fofb2016` | Kim et al., IPAC2016 WEPOR004, DOI 10.18429/JACoW-IPAC2016-WEPOR004 | FOFB 96 BPM, 48 corrector/plane, 813 Hz |
@@ -149,13 +166,13 @@ RF station, MPS, CONTROL, 빔라인, 진공 등에 따로 있을 수 있다.
 
 ### 5.1 Fast-scope 측정 패턴
 
-| class | 의미 | 인용 topic |
-|---|---|---|
-| `rf_trip` | 3개 캐비티 동시 붕괴, cavity가 beam보다 ~300 µs 먼저 | `cavity_decay_after_rf_off`, `beam_energy_loss_after_rf_trip`, `mis_machine_interlock` |
-| `beam_first_rf_trip` | beam이 먼저, cavity는 뒤에 붕괴. forward 유지 | `cavity_figures_of_merit`, `transverse_instability`, `beam_dump_causes` |
-| `beam_only` | cavity 무변화. RF 무관 | `transverse_instability`, `mis_machine_interlock`, `beam_dump_causes` |
-| `single_cavity_quench` | 1개 캐비티만 붕괴, cavity가 먼저 | `cavity_decay_after_rf_off`, `padamsee2008`, `mis_machine_interlock` |
-| `mixed` | 순서 불명확 또는 2개 캐비티 붕괴(dual quench로 단정하지 않음) | `beam_dump_causes`, `mis_machine_interlock` |
+| class | 의미 | 가능 원인 후보 (확정 아님) | 인용 topic |
+|---|---|---|---|
+| `rf_trip` | 3개 캐비티 동시 붕괴, cavity가 beam보다 ~300 µs 먼저 | `rf_common`, `mis`, `psi`, `rf_single_station` | `cavity_decay_after_rf_off`, `beam_energy_loss_after_rf_trip`, `mis_machine_interlock` |
+| `beam_first_rf_trip` | beam이 먼저, cavity는 뒤에 붕괴. forward 유지 | `mps`, `magnet`, `control`, `mis`, `beamline` | `cavity_figures_of_merit`, `transverse_instability`, `beam_dump_causes` |
+| `beam_only` | cavity 무변화. RF 무관 | `mis`, `control`, `beamline`, `kicker`, `psi` | `transverse_instability`, `mis_machine_interlock`, `beam_dump_causes` |
+| `single_cavity_quench` | 1개 캐비티만 붕괴, cavity가 먼저 | `rf_single_station`, `mechvac`, `mis` | `cavity_decay_after_rf_off`, `padamsee2008`, `mis_machine_interlock` |
+| `mixed` | 순서 불명확 또는 2개 캐비티 붕괴(dual quench로 단정하지 않음) | `rf_single_station`, `rf_common`, `mis`, `mps` | `beam_dump_causes`, `mis_machine_interlock` |
 
 `dual_cavity_quench`는 PLS-II에서 관측된 적이 없어 제거했다. 2개 캐비티만
 붕괴한 12건은 `mixed`로 두고 RF station/common point 로그를 확인하도록 한다.
@@ -166,10 +183,10 @@ RF station, MPS, CONTROL, 빔라인, 진공 등에 따로 있을 수 있다.
 |---|---|---|
 | `rf_single_station` | RF station(LLRF-HPRF-CM) 1개 고장 | 한 station만 급격 붕괴, 나머지 sag, 이후 MIS/진공/He 압력 |
 | `rf_common` | RF 공통점 고장(전 station 동시 off) | 3개 cavity 동시 붕괴, BPR01/CM 인터록 가능 |
-| `mps` | 대용량 마그넷 전원(MPS) 고장 | beam current가 RF보다 먼저, 수백 ms |
-| `mis` | MIS 트립(진공/온도/냉각/방사선) | RF off 전 진공/온도/방사선/flow 상승 |
+| `mps` | 대용량 마그넷 전원(MPS) 고장. RF를 직접 끄지 않음 | beam current가 RF보다 먼저, 수백 ms |
+| `mis` | MIS 트립(진공/온도/LCW/gate valve) | RF off 전 진공/온도/LCW 상승 |
 | `control` | TFS/FOFB/feedback 불안정 | beam current 먼저, RF 유지/부분 sag |
-| `beamline` | 빔라인 온도/진공/냉각/방사선 | MIS 트립, RF 정상 |
+| `beamline` | 빔라인 온도/진공/냉각. 방사선 안전은 PSI | MIS 트립, RF 정상 |
 | `mechvac` | CM 진공/He 압력/냉각 | CM 인터록 + beam loss 동시 가능 |
 | `kicker` | Kicker 펄스전원(thyratron) 고장 | 전체 빔 급격 손실, RF 정상 |
 | `magnet` | 마그넷 temp/water flow | MPS와 같은 패턴 |
@@ -179,6 +196,20 @@ RF station, MPS, CONTROL, 빔라인, 진공 등에 따로 있을 수 있다.
 
 측정 class와 원인은 1:1이 아니다. fast scope만으로 root cause를 확정하지 말고
 MIS/MPS/LLRF/CG 로그를 함께 본다.
+
+### 5.3 두 층의 통합 방식
+
+- **관측층**: fast scope 313건의 `class`(rf_trip, beam_first_rf_trip, beam_only,
+  single_cavity_quench, mixed). 코드가 계산하는 서술적 패턴이다.
+- **해석층**: `beam_dump_causes`의 12개 경험적 원인 범주. 교과서가 아니라
+  PLS-II 운전 경험/고장 통계다.
+- 두 층은 1:1로 대응하지 않는다. 각 class에 `cause_candidates`를 붙여
+  "이 패턴이면 어떤 원인을 먼저 확인해야 하는가"를 제공한다.
+- per-event `physics`에는 `cause_candidates`(key, title, why, check)와
+  `next_logs_ko`가 포함된다. `class`는 관측, `cause_candidates`는 배경지식이며
+  root cause 확정이 아니다.
+- 따라서 fast scope만으로 설명되지 않는 이벤트는 `class` + `cause_candidates`
+  + MIS/MPS/LLRF/CG 로그를 함께 읽는다.
 
 ---
 
@@ -193,7 +224,9 @@ MIS/MPS/LLRF/CG 로그를 함께 본다.
 - `postmortem_get_glossary(topic="list")`는 domain 9 + physics 7 = 16개
   addressable topic index를 반환한다.
 - `postmortem_analyze_waveform(event_id)`는 `waveform.physics`에
-  class, summary_ko, chain_ko, steps_ko, timeline, checks, citations, caveats를 넣는다.
+  class, summary_ko, chain_ko, steps_ko, timeline, checks, citations, caveats,
+  `cause_candidates`, `next_logs_ko`, `interpretation_note_ko`를 넣는다.
+  `cause_candidates`는 root cause 확정이 아니라 확인할 후보/로그다.
 - `postmortem_analyze_quench(event_id)`도 `waveform.physics`를 포함한다.
 
 Per-event 저장본:
