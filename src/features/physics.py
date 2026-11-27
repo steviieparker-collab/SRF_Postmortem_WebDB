@@ -119,6 +119,32 @@ def _resolve_citations(
     return out
 
 
+_LEGACY_SEQUENCE_CLASSES = {
+    # Removed: PLS-II has not observed a dual-cavity quench.  Two-cavity
+    # collapse is not enough evidence, so keep it as mixed.
+    "dual_cavity_quench": "mixed",
+}
+
+
+def normalize_sequence(
+    sequence: Optional[dict[str, Any]],
+) -> Optional[dict[str, Any]]:
+    """Map removed/legacy sequence classes to the current taxonomy."""
+    if not sequence:
+        return sequence
+    mapped = _LEGACY_SEQUENCE_CLASSES.get(sequence.get("class"))
+    if not mapped:
+        return sequence
+    out = dict(sequence)
+    out["class_original"] = sequence.get("class")
+    out["class"] = mapped
+    out["class_rule"] = (
+        "2-cavity collapse is not a dual quench; "
+        "check RF station/common-point and LLRF/HPRF logs"
+    )
+    return out
+
+
 def _median(values: list[float]) -> Optional[float]:
     vals = [v for v in values if v is not None]
     if not vals:
@@ -172,6 +198,7 @@ def interpret_sequence(
     doc = load()
     if not doc.get("available", True):
         return {"available": False, "error": doc.get("error")}
+    sequence = normalize_sequence(sequence)
     if not sequence or not sequence.get("class"):
         return {
             "available": False,
@@ -351,6 +378,7 @@ def interpret_sequence(
     return {
         "available": True,
         "class": cls,
+        "class_original": sequence.get("class_original"),
         "title_ko": class_info.get("title_ko", cls),
         "summary_ko": summary,
         "chain_ko": chain,

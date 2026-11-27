@@ -20,7 +20,11 @@ from typing import Any, Optional
 from mcp.server.mcpserver import MCPServer
 
 from ..alarm.event_link import fetch_pv_range, resolve_t0
-from ..features.physics import interpret_sequence, reference_bundle as physics_reference_bundle
+from ..features.physics import (
+    interpret_sequence,
+    normalize_sequence,
+    reference_bundle as physics_reference_bundle,
+)
 from ..features.store import (
     feature_store_stats,
     find_similar_waveforms,
@@ -1300,6 +1304,7 @@ def postmortem_analyze_waveform(event_id: str) -> dict[str, Any]:
             "physics": interpret_sequence(None),
         }
     features = record.get("features") or {}
+    sequence = normalize_sequence(features.get("sequence"))
     t0 = features.get("t0") or {}
     dt = features.get("dt_s")
     missing = features.get("missing_channels") or []
@@ -1371,9 +1376,9 @@ def postmortem_analyze_waveform(event_id: str) -> dict[str, Any]:
             ),
             "missing_channels": missing,
             "beam_fall": features.get("beam_fall"),
-            "sequence": features.get("sequence"),
+            "sequence": sequence,
             "physics": interpret_sequence(
-                features.get("sequence"), features.get("beam_fall")
+                sequence, features.get("beam_fall")
             ),
             "signature": features.get("signature"),
             "analog": features.get("analog"),

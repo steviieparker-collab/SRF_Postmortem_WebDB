@@ -21,7 +21,7 @@ from typing import Any, Optional
 
 from ..alarm.event_link import KST, fetch_pv_range, resolve_t0
 from ..rag.db import connect_events
-from .physics import interpret_sequence
+from .physics import interpret_sequence, normalize_sequence
 from .reports import search_reports
 from .store import connect_feature_store, get_waveform_features
 
@@ -122,9 +122,10 @@ def _waveform_summary(record: Optional[dict[str, Any]]) -> Optional[dict[str, An
         "quench_unit_source": features.get("quench_unit_source"),
         "signature": features.get("signature") or {},
         "beam_fall": features.get("beam_fall") or {},
-        "sequence": features.get("sequence") or {},
+        "sequence": normalize_sequence(features.get("sequence")) or {},
         "physics": interpret_sequence(
-            features.get("sequence"), features.get("beam_fall")
+            normalize_sequence(features.get("sequence")),
+            features.get("beam_fall"),
         ),
         "quen": quen,
         "missing_channels": features.get("missing_channels") or [],
