@@ -6,7 +6,8 @@
 
 관련 문서:
 - `docs/MCP_SERVER_PLAN.md` — 설계와 도구 정의 (25 KB)
-- `docs/MCP_HANDOFF_TEST.md` — 다른 에이전트용 검증 시나리오 T1~T10
+- `docs/MCP_HANDOFF_TEST.md` — 다른 에이전트용 검증 시나리오 T1~T12
+- `docs/MCP_CLIENT_USAGE.md` — 클라이언트 호출/이미지 반환/파라미터 규칙
 - `docs/SECURITY_ACCESS_PLAN.md` — 접근/방화벽 설계
 - `docs/MCP_WAVEFORM_TOOLS.md`, `docs/MCP_FEATURE_VECTOR_PLAN.md` — 파형/벡터 도구
 - `config/domain_glossary.json` — 도메인 배경지식 정본
@@ -271,7 +272,7 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
    `postmortem_get_glossary(topic=...)`로 topic별 equations/citations을
    조회할 수 있다. `topic='list'`는 16개 addressable topic index를 반환한다.
    PLS-II fundamental R/Q는 89 Ω, 운전점은 1.5 MV/cavity(총 4.5 MV),
-   RF acceptance는 2.8%다. MIS는 진공/온도/LCW 기반 RF Ready, PSI는 방사선/출입,
+   RF acceptance는 2.8%다. MIS는 진공/온도/방사선량 기반 RF Ready, PSI는 출입/인명,
    MPS는 마그넷 전원 보호, BLM은 모니터링으로 구분한다.
    2020-04-05 500 MHz CESR-B 수직시험은 문헌 인용과 분리해
    `internal_test_notes`에 1건 기록했다. per-event 저장본은
@@ -332,6 +333,7 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
 | `scripts/mcp_smoke.py`, `scripts/mcp_http_smoke.py` | 스모크 테스트 |
 | `docs/MCP_SERVER_PLAN.md` | 설계/도구 정의 |
 | `docs/MCP_HANDOFF_TEST.md` | 검증 시나리오 |
+| `docs/MCP_CLIENT_USAGE.md` | 클라이언트 호출, 이미지 반환, 파라미터/오류 안내 |
 | `docs/SECURITY_ACCESS_PLAN.md` | 접근/방화벽 |
 | `db/feature_store.sql` | feature store 스키마 |
 | `db/migrations/*.sql` | 케이스 분류 마이그레이션 |

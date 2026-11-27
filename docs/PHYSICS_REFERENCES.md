@@ -87,33 +87,29 @@ PLS(2.5 GeV)의 1.35% 값은 PLS-II와 다른 머신이므로 사용하지 않�
 
 ## 3. MIS / PSI / MPS / BLM
 
-PLS-II의 기계 인터록은 **MIS(Machine Interlock System)**가 담당한다. 공개된
-PLS-era MIS는 **3계층(Device/Equipment → Local → Central)** 구조로, 중앙 1대 +
-local 7대(제어실 1, 저장링 4, Linac 2)로 구성되고 **PAUSE / SEARCH / INJECTION /
-STORAGE** 4개 운전 모드별 interlock chain을 사용한다. PLS-II 제어계에서도 MIS는
-PLC subsystem + OPI로 유지된다.
+PLS-II의 기계 보호 인터록은 **MIS(Machine Interlock System)**가 담당한다.
+MIS는 진공도, 빔튜브/빔라인 온도, **방사선량**, 게이트밸브 상태를 감시하고,
+임계값을 넘으면 **RF Ready를 끊어 RF를 OFF**시켜 빔을 덤프한다. MIS가 RF를
+직접 스위칭하는 것이 아니라 RF permit을 끊는 구조다.
 
 핵심은 **RF Ready = MIS healthy AND PSI healthy**다. MIS 또는 PSI가 trip하면
-RF Ready가 끊기고 HPRF가 off되어 빔이 덤프된다. MIS가 RF를 직접 끄는 것이
-아니라 RF permit을 끊는 구조다.
+RF Ready가 끊기고 HPRF가 off되어 빔이 덤프된다.
 
-- **MIS**: 저장링 진공/온도, 게이트밸브 등 machine condition. 진공/온도 MIS
-  트립 사례는 PLS-II vacuum 자료에 있다.
-- **PSI(Personal Safety Interlock)**: 방사선 안전/출입 통제. 방사선 모니터링과
-  접근 모드(No Access / Controlled / Restricted / Free)를 담당한다. **방사선량
-  한도 초과가 MIS를 직접 트립한다는 공개 근거는 찾지 못했다.** 이 부분은
-  내부 문서 확인이 필요하다.
+- **MIS**: 진공/온도/방사선량/게이트밸브. 방사선량 한도 초과는 MIS 트립
+  입력이다(운영 확인).
+- **PSI(Personal Safety Interlock)**: 출입/인명 안전. 방사선 안전 모니터링과
+  접근 모드(No Access / Controlled / Restricted / Free)를 담당한다. MIS와
+  별개이며, PSI trip도 RF Ready를 끊을 수 있다.
 - **MPS**: SR MPS / BTL MPS / Linac MPS로 MIS와 별개. MPS 고장은 마그넷 전원을
   끊어 빔 손실을 만들고, RF를 직접 끄지 않는다.
-- **BLM**: 빔손실 모니터링 계측기. BLM 자체가 빔을 덤프하지 않는다. BLM→MIS
-  입력 여부는 공개 자료로 확인되지 않았다.
+- **BLM**: 빔손실 모니터링 계측기. BLM 자체가 빔을 덤프하지 않는다.
 - **Fast Interlock System(2020)**, **fast orbit interlock(200→10 ms)**은 MIS와
   별도 빠른 보호 계층이다. **Stored beam scraper/quick beam dump**도 RF cavity
   shock을 줄이기 위한 별도 actuator로 본다.
 
 | id | 문헌 | 이 분석에서 쓰는 부분 |
 |---|---|---|
-| `pls2_mis_hmi2006` | Park et al., "Development of Machine Interlock System HMI for PLS", EPAC2006 THPCH121 | MIS 3계층, 1 central + 7 local PLC, 4 operation modes |
+| `pls2_mis_hmi2006` | Park et al., "Development of Machine Interlock System HMI for PLS", EPAC2006 THPCH121 | MIS 기능과 interlock chain |
 | `pls2_control2014` | Kim, "PLS-II Control System", WAO 2014 | RF Ready (MIS, PSI), MIS OPI, SR MPS panel, PSI radiation/access |
 | `pls2_mis2020` | Lee et al., "Fast Interlock System for Machine Protection in PLS-II", JKPS 76, 301 (2020), DOI 10.3938/jkps.76.301 | 별도 fast interlock 계층 |
 | `pls2_vacuum2015` | Ha & Park, "Design and Operation Experience of PLS-II Vacuum System", KEK seminar 2015 | thermocouple/gauge controller MIS 트립 사례 |
@@ -184,7 +180,7 @@ RF station, MPS, CONTROL, 빔라인, 진공 등에 따로 있을 수 있다.
 | `rf_single_station` | RF station(LLRF-HPRF-CM) 1개 고장 | 한 station만 급격 붕괴, 나머지 sag, 이후 MIS/진공/He 압력 |
 | `rf_common` | RF 공통점 고장(전 station 동시 off) | 3개 cavity 동시 붕괴, BPR01/CM 인터록 가능 |
 | `mps` | 대용량 마그넷 전원(MPS) 고장. RF를 직접 끄지 않음 | beam current가 RF보다 먼저, 수백 ms |
-| `mis` | MIS 트립(진공/온도/LCW/gate valve) | RF off 전 진공/온도/LCW 상승 |
+| `mis` | MIS 트립(진공/온도/방사선/gate valve) | RF off 전 진공/온도/방사선 상승 |
 | `control` | TFS/FOFB/feedback 불안정 | beam current 먼저, RF 유지/부분 sag |
 | `beamline` | 빔라인 온도/진공/냉각. 방사선 안전은 PSI | MIS 트립, RF 정상 |
 | `mechvac` | CM 진공/He 압력/냉각 | CM 인터록 + beam loss 동시 가능 |

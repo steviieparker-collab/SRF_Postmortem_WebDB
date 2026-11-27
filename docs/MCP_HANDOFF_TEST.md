@@ -162,6 +162,14 @@ MS 기간을 정말 볼 때만 `hide_ms=false`를 함께 넘긴다.
 (RF single/common, MPS, MIS, CONTROL, BEAMLINE, MECHVAC, KICKER, MAGNET,
 PSI, LINAC, external)와 `mapping_ko` 포함.
 
+### T12. 이미지/파라미터 유연성
+`postmortem_get_event("20260921_162300", include_images=true,
+image_scope="cavity")` → `content[0].text` JSON에 `image_available=true`,
+`images[0].scope="cavity"`, 그리고 뒤따르는 `image/jpeg` content block.
+`postmortem_analyze_waveform("20240907_025313", generate_plot=true)`도 동일.
+`postmortem_search_events(fault_type=["Case 3: RF_Interlock",
+"Case 9: Cavity_quench"])` → validation error 없이 `fault_types`로 정규화.
+
 ## 4. 해석 규칙 — 틀리면 답이 틀어진다
 
 | 규칙 | 내용 |

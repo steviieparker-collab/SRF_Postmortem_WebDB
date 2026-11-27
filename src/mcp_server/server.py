@@ -15,9 +15,10 @@ import json
 import statistics
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import MCPServer, Image
+from mcp.types import TextContent
 
 from ..alarm.event_link import fetch_pv_range, resolve_t0
 from ..features.physics import (
@@ -45,6 +46,79 @@ from ..rag.tools import (
 )
 
 KST = timezone(timedelta(hours=9))
+
+_ROOT = Path(__file__).resolve().parent.parent.parent
+_WF_SCOPES = ("forward", "cavity", "reflect")
+
+
+def _waveform_image_paths(event_id: str) -> dict[str, Path]:
+    """Pre-rendered narrow-scope JPEGs produced by the web pipeline."""
+    base = _ROOT / "data" / "waveforms" / event_id
+    out: dict[str, Path] = {}
+    for scope in _WF_SCOPES:
+        path = base / f"{scope}_narrow.jpg"
+        try:
+            if path.is_file() and path.stat().st_size > 0:
+                out[scope] = path
+        except OSError:
+            continue
+    return out
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() not in {"", "false", "0", "no", "none", "off"}
+    return bool(value)
+
+
+def _parse_image_scopes(scope: Optional[str]) -> Optional[list[str]]:
+    if not scope or scope.strip().lower() in {"all", "*"}:
+        return None
+    wanted = [s.strip().lower() for s in scope.split(",") if s.strip()]
+    selected = [s for s in wanted if s in _WF_SCOPES]
+    return selected or None
+
+
+def _with_images(
+    payload: dict[str, Any],
+    event_id: str,
+    scope: Optional[str] = None,
+) -> Any:
+    """Attach image metadata and MCP Image blocks to a tool result.
+
+    The first content block stays JSON text so existing clients keep parsing
+    ``content[0].text``; image blocks follow for clients that support MCP images.
+    """
+    images = _waveform_image_paths(event_id)
+    selected = _parse_image_scopes(scope)
+    if selected is not None:
+        images = {k: v for k, v in images.items() if k in selected}
+    payload["images"] = [
+        {
+            "scope": key,
+            "mime_type": "image/jpeg",
+            "source": str(path.relative_to(_ROOT)),
+            "url": f"/api/waveforms/{event_id}/{key}_narrow.jpg",
+        }
+        for key, path in images.items()
+    ]
+    payload["image_available"] = bool(images)
+    if not images:
+        payload["image_hint"] = (
+            "No pre-rendered narrow-scope JPEG for this event. "
+            "Use the event URL or regenerate waveform images in the web pipeline."
+        )
+        return payload
+    blocks: list[Any] = [
+        TextContent(
+            type="text",
+            text=json.dumps(payload, ensure_ascii=False, default=str),
+        )
+    ]
+    blocks.extend(Image(path=path) for path in images.values())
+    return blocks
 
 server = MCPServer(
     "srf-postmortem",
@@ -79,6 +153,9 @@ server = MCPServer(
         "Before interpreting waveform features or writing a causal explanation, "
         "call postmortem_get_glossary (or read postmortem://domain-guide) for the "
         "SRF interlock hierarchy, signal definitions, and the first-interlock rule. "
+        "For waveform pictures, set include_images=true or generate_plot=true: "
+        "content[0].text stays JSON and following content blocks are image/png|jpeg. "
+        "fault_type accepts a string or a list of strings. "
         "When reporting counts or percentages, copy the key and count values from "
         "the tool response verbatim. Never estimate, merge, or recompute them; "
         "sum_of_counts must equal total. Quote the data_as_of date when stating a "
@@ -118,7 +195,8 @@ TOOL_DESCRIPTIONS = {
     "postmortem_search_events":
         "Search beam-dump events by natural-language query and/or structured filters. "
         "Filters: year, year_from/year_to, year_min/year_max, date (YYYY-MM-DD), "
-        "subsystem (KSU1-3/CM1-3/CRG/MPS...), fault_type, fault_types (list), event_id, "
+        "subsystem (KSU1-3/CM1-3/CRG/MPS...), fault_type (string or list), "
+        "fault_types (list), event_id, "
         "pv (matches event_alarms/event_pv_selection PV names), beam_time (partial "
         "beam-time label such as '2026-11차'), has_waveform (bool), hide_ms (default "
         "true; excludes Machine Study beam times such as 2026-01MS), sort "
@@ -139,7 +217,10 @@ TOOL_DESCRIPTIONS = {
         "manual PV selections, catalog mappings, attachments, similar events, waveform "
         "availability. Returns response_type='event_detail' with event, alarms[], "
         "pv_selection[], catalog[], attachments[], similar[], waveform, caveats. "
-        "An empty similar[] means the DB has no event_links for this event, not an API error.",
+        "An empty similar[] means the DB has no event_links for this event, not an API error. "
+        "Set include_images=true (or waveform_image=true) to append MCP Image blocks "
+        "for the pre-rendered forward/cavity/reflect JPEGs; image_scope=all|forward|"
+        "cavity|reflect or a comma list. JSON stays in content[0].text.",
     "postmortem_aggregate_events":
         "Count events grouped by one or more fields. group_by accepts year, month "
         "(YYYY-MM), fault_type, case_id, auto_case_id, auto_fault_type, "
@@ -147,7 +228,8 @@ TOOL_DESCRIPTIONS = {
         "'year,beam_time'. case_id follows the manual classification first; "
         "auto_case_id is the automatic reference. fault_type grouping uses the "
         "manual user_fault_type first, then the automatic fault_type. Filters: "
-        "year, year_from, year_to, subsystem, fault_type, fault_types (list), "
+        "year, year_from, year_to, subsystem, fault_type (string or list), "
+        "fault_types (list), "
         "text, pv, beam_time. hide_ms (default true) excludes Machine Study "
         "periods. include_percent defaults to true. "
         "Rows carry key, count, percent; copy them verbatim and never estimate or "
@@ -202,7 +284,10 @@ TOOL_DESCRIPTIONS = {
         "with PLS-II parameter checks, citations, cause_candidates (possible "
         "causes, not a root-cause assignment), and next_logs_ko. Covers 313/866 "
         "events (2023+, parquet only). Values are computed by code, not an LLM. Returns "
-        "response_type='waveform_analysis'. Use postmortem_find_similar_waveforms to "
+        "response_type='waveform_analysis'. Set generate_plot=true (or "
+        "include_images=true) to append MCP Image blocks for the pre-rendered "
+        "narrow-scope JPEGs; image_scope=all|forward|cavity|reflect. JSON stays in "
+        "content[0].text. Use postmortem_find_similar_waveforms to "
         "compare waveforms; use postmortem_get_event for notes/alarms.",
     "postmortem_find_similar_waveforms":
         "Return the top_k events whose waveform feature vector is closest (cosine) to "
@@ -227,7 +312,8 @@ TOOL_DESCRIPTIONS = {
         "(cavity sag, reflect rise, forward trip, beam fall, QUEN asserts), "
         "Archiver BCL01/BCL03 cavity temperatures and beam current around the "
         "Archiver t0, and report text/image-caption evidence. Parameters: "
-        "event_id, include_pv=true, include_reports=true, pre=60, post=120. "
+        "event_id, include_pv=true, include_reports=true, include_images=false, "
+        "image_scope=all|forward|cavity|reflect, pre=60, post=120. "
         "Returns response_type='quench_analysis' with event, waveform, pv.series, "
         "reports.items, highlights, caveats. PVs are ~1 Hz; waveform t0 and "
         "Archiver t0 are different clocks.",
@@ -295,11 +381,17 @@ TOOL_META = {
              "has_waveform": True, "limit": 10},
             {"beam_time": "2026-11차"},
             {"pv": "SR:RF:CRM1:BCL03"},
+            {"fault_type": ["Case 3: RF_Interlock", "Case 9: Cavity_quench"],
+             "limit": 10},
         ],
     },
     "postmortem_get_event": {
         "response_shape": "event_detail",
-        "examples": [{"event_id": "20251103_115812"}],
+        "examples": [
+            {"event_id": "20251103_115812"},
+            {"event_id": "20260921_162300", "include_images": True,
+             "image_scope": "cavity"},
+        ],
     },
     "postmortem_aggregate_events": {
         "response_shape": "aggregate",
@@ -346,6 +438,7 @@ TOOL_META = {
         "examples": [
             {"event_id": "20240907_025313"},
             {"event_id": "20251205_014253"},
+            {"event_id": "20240907_025313", "generate_plot": True},
         ],
     },
     "postmortem_find_similar_waveforms": {
@@ -368,6 +461,7 @@ TOOL_META = {
         "examples": [
             {"event_id": "20240907_025313"},
             {"event_id": "20251205_014253", "include_pv": True},
+            {"event_id": "20240907_025313", "include_images": True},
         ],
     },
     "postmortem_compare_quench_events": {
@@ -776,7 +870,7 @@ def postmortem_search_events(
     year_max: Optional[int] = None,
     date: Optional[str] = None,
     subsystem: Optional[str] = None,
-    fault_type: Optional[str] = None,
+    fault_type: Optional[Union[str, list[str]]] = None,
     fault_types: Optional[list[str]] = None,
     event_id: Optional[str] = None,
     pv: Optional[str] = None,
@@ -794,6 +888,12 @@ def postmortem_search_events(
     """
     limit = max(1, min(int(limit or 20), 100))
     offset = max(0, int(offset or 0))
+    if isinstance(fault_type, (list, tuple)):
+        if not fault_types:
+            fault_types = [str(x).strip() for x in fault_type if str(x).strip()]
+        fault_type = None
+    if isinstance(fault_types, str):
+        fault_types = [fault_types]
     if year_min is not None and year_from is None:
         year_from = year_min
     if year_max is not None and year_to is None:
@@ -906,10 +1006,19 @@ def postmortem_search_events(
 
 @server.tool(description=TOOL_DESCRIPTIONS["postmortem_get_event"],
              meta=TOOL_META["postmortem_get_event"])
-def postmortem_get_event(event_id: str) -> dict[str, Any]:
+def postmortem_get_event(
+    event_id: str,
+    include_images: bool = False,
+    waveform_image: Union[bool, str] = False,
+    image_scope: Optional[str] = None,
+) -> Any:
     """Return one event with notes, fault classification, recorded alarms,
     manually selected PVs, catalog mappings, attachments, similar events, and
     waveform availability. Use this before explaining a specific event.
+
+    Set include_images=true (or waveform_image=true) to append MCP Image
+    content blocks for the pre-rendered forward/cavity/reflect JPEGs.
+    image_scope accepts all, forward, cavity, reflect, or a comma list.
     """
     ctx = _get_event_context(str(event_id))
     if "error" in ctx:
@@ -962,7 +1071,7 @@ def postmortem_get_event(event_id: str) -> dict[str, Any]:
             "error": f"physics interpretation unavailable: {type(exc).__name__}: {exc}",
             "caveats": ["Use postmortem_get_glossary for the physics background."],
         }
-    return {
+    result = {
         "response_type": "event_detail",
         "event": ev,
         "classification": ctx.get("classification") or {},
@@ -981,6 +1090,9 @@ def postmortem_get_event(event_id: str) -> dict[str, Any]:
         "catalog": catalog,
         "caveats": caveats,
     }
+    if _truthy(include_images) or _truthy(waveform_image):
+        return _with_images(result, str(event_id), image_scope)
+    return result
 
 
 @server.tool(description=TOOL_DESCRIPTIONS["postmortem_aggregate_events"],
@@ -991,7 +1103,7 @@ def postmortem_aggregate_events(
     year_from: Optional[int] = None,
     year_to: Optional[int] = None,
     subsystem: Optional[str] = None,
-    fault_type: Optional[str] = None,
+    fault_type: Optional[Union[str, list[str]]] = None,
     fault_types: Optional[list[str]] = None,
     text: Optional[str] = None,
     pv: Optional[str] = None,
@@ -1008,6 +1120,12 @@ def postmortem_aggregate_events(
     manual user_fault_type first (override), then the automatic classification.
     ``hide_ms`` (default true) excludes Machine Study beam times.
     """
+    if isinstance(fault_type, (list, tuple)):
+        if not fault_types:
+            fault_types = [str(x).strip() for x in fault_type if str(x).strip()]
+        fault_type = None
+    if isinstance(fault_types, str):
+        fault_types = [fault_types]
     filters: dict[str, Any] = {}
     for key, value in {
         "year": year, "year_from": year_from, "year_to": year_to,
@@ -1280,8 +1398,18 @@ def postmortem_get_pv_series(
 
 @server.tool(description=TOOL_DESCRIPTIONS["postmortem_analyze_waveform"],
              meta=TOOL_META["postmortem_analyze_waveform"])
-def postmortem_analyze_waveform(event_id: str) -> dict[str, Any]:
-    """Return numeric waveform features for one event from the feature store."""
+def postmortem_analyze_waveform(
+    event_id: str,
+    generate_plot: Union[bool, str] = False,
+    include_images: bool = False,
+    image_scope: Optional[str] = None,
+) -> Any:
+    """Return numeric waveform features for one event from the feature store.
+
+    generate_plot=true (or include_images=true) appends MCP Image content
+    blocks for the pre-rendered forward/cavity/reflect narrow-scope JPEGs.
+    The JSON payload is still content[0].text.
+    """
     try:
         record = get_waveform_features(str(event_id))
     except Exception as exc:  # noqa: BLE001 - report store problems as data
@@ -1354,7 +1482,7 @@ def postmortem_analyze_waveform(event_id: str) -> dict[str, Any]:
             "resolution is coarser than the 2 µs traces."
         )
 
-    return {
+    result = {
         "response_type": "waveform_analysis",
         "available": True,
         "event_id": record["event_id"],
@@ -1390,6 +1518,10 @@ def postmortem_analyze_waveform(event_id: str) -> dict[str, Any]:
         "url": f"/events/{record['event_id']}",
         "caveats": caveats,
     }
+    if _truthy(generate_plot) or _truthy(include_images):
+        result["plot_source"] = "pre_rendered_narrow_jpg"
+        return _with_images(result, str(event_id), image_scope)
+    return result
 
 
 @server.tool(description=TOOL_DESCRIPTIONS["postmortem_find_similar_waveforms"],
@@ -1440,19 +1572,24 @@ def postmortem_analyze_quench(
     event_id: str,
     include_pv: bool = True,
     include_reports: bool = True,
+    include_images: Union[bool, str] = False,
+    image_scope: Optional[str] = None,
     pre: float = 60,
     post: float = 120,
-) -> dict[str, Any]:
+) -> Any:
     """Integrate waveform, Archiver PVs, and report evidence for one quench."""
     try:
         from ..features.quench import analyze_quench
-        return analyze_quench(
+        result = analyze_quench(
             event_id,
             include_pv=bool(include_pv),
             include_reports=bool(include_reports),
             pre=max(0.0, min(float(pre or 60), 600.0)),
             post=max(0.0, min(float(post or 120), 600.0)),
         )
+        if _truthy(include_images):
+            return _with_images(result, str(event_id), image_scope)
+        return result
     except Exception as exc:  # noqa: BLE001
         return {
             "response_type": "quench_analysis",

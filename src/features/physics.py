@@ -356,7 +356,7 @@ def interpret_sequence(
     elif cls == "beam_only":
         chain = (
             "캐비티 전압이 20% 아래로 내려가지 않았다. RF는 원인이 아니며 "
-            "MIS(진공/온도/LCW), PSI(방사선/출입), CONTROL/TFS/FOFB, beam line, kicker, "
+            "MIS(진공/온도/방사선량), PSI(출입/인명), CONTROL/TFS/FOFB, beam line, kicker, "
             "궤도/횡방향 손실을 봐야 한다."
         )
     elif cls == "single_cavity_quench":

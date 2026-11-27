@@ -451,13 +451,13 @@
       "year": 2006,
       "publisher": "EPAC2006 THPCH121",
       "url": "https://proceedings.jacow.org/e06/PAPERS/THPCH121.pdf",
-      "locator": "MIS PLC architecture, local/central units, operation modes",
+      "locator": "MIS function and interlock chain",
       "topics": [
         "MIS",
         "PLC",
         "interlock chain"
       ],
-      "note": "PLS/PLS-II MIS의 PLC 3계층 구조."
+      "note": "PLS/PLS-II MIS의 기본 기능과 interlock chain."
     },
     {
       "id": "pls2_vacuum2015",
@@ -674,18 +674,18 @@
       ]
     },
     "mis_machine_interlock": {
-      "title": "MIS(Machine Interlock System) 구성과 RF 인터록",
-      "summary_ko": "PLS-II의 기계 인터록은 PLC 기반 MIS(Machine Interlock System)가 담당한다. 공개된 PLS-era MIS는 3계층(Device/Equipment -> Local -> Central) 구조로, 중앙 1대 + local 7대(제어실 1, 저장링 4, Linac 2)로 구성되고 PAUSE/SEARCH/INJECTION/STORAGE 4개 운전 모드별 interlock chain을 사용한다. PLS-II 제어계에서도 MIS는 PLC subsystem + OPI로 유지된다. MIS는 저장링 진공/온도, 게이트밸브 등 machine condition을 감시하고, MIS와 PSI가 healthy일 때만 'RF Ready'가 성립한다. MIS 또는 PSI trip -> RF Ready 상실 -> HPRF off -> 빔덤프다. MPS는 SR MPS/BTL MPS/Linac MPS로 별도이며, MPS 고장은 마그넷 전원을 끊어 빔 손실을 만들고 RF를 직접 끄지 않는다. 방사선 안전/출입은 PSI(Personal Safety Interlock)가 담당한다. BLM은 모니터링이며, BLM 방사선량이 MIS를 직접 트립한다는 PLS-II 공개 문서는 확인되지 않았다. Fast Interlock System(2020)과 fast orbit interlock(200->10 ms)은 MIS와 별도 빠른 보호 계층이다.",
+      "title": "MIS(Machine Interlock System)와 RF 인터록",
+      "summary_ko": "PLS-II의 기계 보호 인터록은 MIS(Machine Interlock System)가 담당한다. MIS는 진공도, 빔튜브/빔라인 온도, 방사선량, 게이트밸브 상태를 감시하고, 임계값을 넘으면 RF Ready를 끊어 RF를 OFF시켜 빔을 덤프한다. MIS와 PSI가 healthy일 때만 'RF Ready'가 성립하므로, MIS 또는 PSI trip 모두 RF off로 이어진다. MPS는 SR MPS/BTL MPS/Linac MPS로 별도이며, MPS 고장은 마그넷 전원을 끊어 빔 손실을 만들고 RF를 직접 끄지 않는다. BLM은 빔손실 모니터링 계측기이고, 방사선량 한도 초과는 MIS 트립 입력이다. PSI는 출입/인명 안전을 담당하며 MIS와 구분한다. Fast Interlock System과 fast orbit interlock은 MIS와 별도 빠른 보호 계층이다.",
       "equations": [
         {
-          "name": "MIS hierarchy",
-          "expr": "device/equipment -> local (7 PLCs) -> central (redundant PLC)",
-          "note": "EPAC2006 PLS-era MIS"
+          "name": "MIS inputs",
+          "expr": "vacuum, temperature, radiation dose, gate valve",
+          "note": "임계 초과 시 RF Ready 차단"
         },
         {
           "name": "RF Ready",
           "expr": "MIS healthy AND PSI healthy",
-          "note": "WAO2014 SR RF Control"
+          "note": "MIS/PSI trip -> RF off"
         },
         {
           "name": "MIS trip",
@@ -701,8 +701,8 @@
       "citations": [
         {
           "id": "pls2_mis_hmi2006",
-          "locator": "Three-layer MIS, 1 central + 7 local PLCs, 4 operation modes",
-          "supports": "MIS 구성/모드"
+          "locator": "MIS function and interlock chain",
+          "supports": "MIS 기본 기능"
         },
         {
           "id": "pls2_control2014",
@@ -746,12 +746,10 @@
         }
       ],
       "caveats": [
-        "공개 자료의 MIS 세부(1 central + 7 local, 4 modes)는 PLS-era EPAC2006 기준이다. PLS-II의 정확한 local unit 수/PLC 세대는 내부 문서 확인이 필요하다.",
-        "MIS 입력에 LCW flow와 BLM/방사선량이 포함되는지는 공개 자료로 확정되지 않았다. MIS OPI/채널 리스트로 내부 확인이 필요하다.",
-        "방사선 안전/출입은 PSI가 담당한다. 방사선량 한도 초과가 MIS를 직접 트립한다는 공개 근거는 찾지 못했다. BLM->MIS 입력 여부는 내부 문서 확인이 필요하다.",
+        "방사선 안전/출입(PSI)과 기계 보호용 방사선량(MIS)을 구분한다.",
         "MIS는 RF를 직접 끄는 장치가 아니라 RF Ready를 끊는 인터록이다. 실제 HPRF off는 RF interlock/LLRF를 통해 이루어진다.",
         "MIS trip은 MPS 전원을 끄지 않는다. MPS는 SR/BTL/Linac MPS로 별도 계통이다.",
-        "Fast Interlock System(2020)과 fast orbit interlock(200->10 ms)은 MIS와 별도 빠른 보호 계층이다."
+        "Fast Interlock System과 fast orbit interlock(200->10 ms)은 MIS와 별도 빠른 보호 계층이다."
       ]
     },
     "beam_energy_loss_after_rf_trip": {
@@ -886,24 +884,24 @@
         },
         {
           "key": "mis",
-          "title_ko": "MIS 트립 (진공/온도/LCW/gate valve)",
-          "summary_ko": "빔튜브/빔라인 온도, 진공도, 게이트밸브 등이 임계 초과 -> MIS가 RF Ready를 끊고 RF off(MPS 전원은 유지). Beamline과 MechVac의 상당수가 여기에 포함. MIS는 root cause가 아니라 보호 트리거일 수 있다. 방사선 안전/출입은 PSI로 구분하며, LCW 입력 여부는 내부 문서 확인이 필요하다.",
-          "signature_ko": "RF off 전에 진공/온도/LCW 신호 상승; beam loss가 먼저일 수도 있음",
-          "causes_ko": "vacuum, temperature, gate valve (LCW는 확인 필요)"
+          "title_ko": "MIS 트립 (진공/온도/방사선/gate valve)",
+          "summary_ko": "빔튜브/빔라인 온도, 진공도, 방사선량, 게이트밸브 등이 임계 초과 -> MIS가 RF Ready를 끊고 RF off(MPS 전원은 유지). Beamline과 MechVac의 상당수가 여기에 포함. MIS는 root cause가 아니라 보호 트리거일 수 있다.",
+          "signature_ko": "RF off 전에 진공/온도/방사선 신호 상승; beam loss가 먼저일 수도 있음",
+          "causes_ko": "vacuum, temperature, radiation dose, gate valve"
         },
         {
           "key": "control",
           "title_ko": "CONTROL/TFS/FOFB/feedback",
-          "summary_ko": "TFS 또는 feedback system에 의한 빔 불안정성 증가 -> 빔이 흩어짐 -> MIS 또는 beam loss. 빨리 흩어져 진공/온도/LCW가 빨리 오르면 MIS, 서서히 흩어지면 beam loss. 방사선/출입은 PSI로 구분한다.",
+          "summary_ko": "TFS 또는 feedback system에 의한 빔 불안정성 증가 -> 빔이 흩어짐 -> MIS 또는 beam loss. 빨리 흩어져 진공/온도/방사선량이 빨리 오르면 MIS, 서서히 흩어지면 beam loss.",
           "signature_ko": "beam current 감소가 먼저, RF는 유지되거나 부분 sag; BPM/TFS/FOFB 로그 확인 필요",
           "causes_ko": "TFS, FOFB, feedback"
         },
         {
           "key": "beamline",
           "title_ko": "BEAMLINE (온도/진공/냉각)",
-          "summary_ko": "빔라인 온도/진공/냉각수에 의한 MIS가 대부분. Photon beam에 의한 온도/진공 상승 포함. 방사선 안전/출입은 PSI로 구분한다.",
+          "summary_ko": "빔라인 온도/진공/냉각수/방사선량에 의한 MIS가 대부분. Photon beam에 의한 온도/진공 상승 포함.",
           "signature_ko": "MIS 트립; RF 자체는 정상",
-          "causes_ko": "beamline vacuum/temperature/LCW"
+          "causes_ko": "beamline vacuum/temperature"
         },
         {
           "key": "mechvac",
@@ -929,7 +927,7 @@
         {
           "key": "psi",
           "title_ko": "PSI (Personnel Safety Interlock)",
-          "summary_ko": "방사선 안전/출입 통제용 PSI(Personal Safety Interlock)가 동작하면 RF Ready가 끊겨 빔을 덤프한다. 장치 고장이 아니라 인명 보호 인터록이며 MIS/MPS와 구분한다.",
+          "summary_ko": "PSI(Personal Safety Interlock)는 출입/인명 안전을 담당한다. MIS와 별개이며, PSI trip도 RF Ready를 끊어 빔을 덤프할 수 있다. 기계 보호용 방사선량 임계는 MIS가 담당한다.",
           "signature_ko": "PSI/출입/방사선 안전 로그; RF/MPS 자체는 정상",
           "causes_ko": "access, radiation safety"
         },
@@ -1098,7 +1096,7 @@
         },
         {
           "key": "mis",
-          "why_ko": "진공/온도/LCW 상승이 beam loss 뒤에 발생",
+          "why_ko": "진공/온도/방사선량 상승이 beam loss 뒤에 발생",
           "check_ko": "MIS OPI/trip log"
         },
         {
@@ -1119,7 +1117,7 @@
       "cause_candidates": [
         {
           "key": "mis",
-          "why_ko": "RF는 정상인데 진공/온도/LCW/게이트밸브가 빔을 덤프",
+          "why_ko": "RF는 정상인데 진공/온도/방사선량/게이트밸브가 빔을 덤프",
           "check_ko": "MIS OPI/trip log"
         },
         {
