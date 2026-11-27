@@ -136,7 +136,6 @@ def normalize_sequence(
     if not mapped:
         return sequence
     out = dict(sequence)
-    out["class_original"] = sequence.get("class")
     out["class"] = mapped
     out["class_rule"] = (
         "2-cavity collapse is not a dual quench; "
@@ -401,7 +400,6 @@ def interpret_sequence(
     return {
         "available": True,
         "class": cls,
-        "class_original": sequence.get("class_original"),
         "title_ko": class_info.get("title_ko", cls),
         "summary_ko": summary,
         "chain_ko": chain,

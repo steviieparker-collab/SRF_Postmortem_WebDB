@@ -684,7 +684,7 @@
         },
         {
           "name": "RF Ready",
-          "expr": "RF Ready = MIS healthy AND PSI healthy",
+          "expr": "MIS healthy AND PSI healthy",
           "note": "WAO2014 SR RF Control"
         },
         {
@@ -694,7 +694,7 @@
         },
         {
           "name": "MPS trip",
-          "expr": "MPS trip -> magnet PS off -> beam loss (RF not directly off)",
+          "expr": "magnet PS off -> beam loss (RF not directly off)",
           "note": "SR/BTL/Linac MPS"
         }
       ],
