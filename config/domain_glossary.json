@@ -1,8 +1,8 @@
 {
-  "version": "1.0",
-  "updated": "2026-11-24",
+  "version": "1.1",
+  "updated": "2026-11-27",
   "title": "SRF 인터록 시스템 배경지식",
-  "scope": "PLS-II SRF(초전도 고주파) 시스템의 인터록 계층, 빔덤프 신호, 채널 명명, 데이터 해석 규칙",
+  "scope": "PLS-II SRF(초전도 고주파) 시스템의 장치 약어, 인터록 계층, 빔덤프 신호, 채널 명명, 데이터 해석 규칙",
   "authority": {
     "channel_names": "postmortem DB/parquet의 실제 채널명을 정본으로 사용한다. 수작업 문서는 오타가 있을 수 있다.",
     "case_classification": "현재 postmortem DB의 fault_types/Case 분류를 정본으로 사용한다. 수작업 설명문서는 수개월 전 기준이라 다를 수 있다.",
@@ -16,6 +16,70 @@
     "hprf": "LLRF의 소신호를 증폭하는 장치. 500 MHz, KSU(Klystron Supply Unit)와 KLY로 구성된다.",
     "ic": "Interlock Controller. 외부 인터록(MIS/PSI)을 각 LLRF와 KSU로 분배하는 장치.",
     "llrf_generates_interlock": false
+  },
+
+  "abbreviations": {
+    "note": "처음 연결한 에이전트가 장치명/PV를 추측하지 않도록 정리한 약어표다. 표에 없는 약어는 DB의 description, alarm catalog, notes를 확인하고 추측하지 않는다.",
+    "facility": {
+      "PLS-II": {"expansion": "Pohang Light Source II", "meaning_ko": "3 GeV 저장링 방사광 가속기. 이 데이터의 머신."},
+      "PLS": {"expansion": "Pohang Light Source", "meaning_ko": "2.5 GeV 전신기. PLS-II와 다른 머신이므로 수치를 혼용하지 않는다."},
+      "SR": {"expansion": "Storage Ring", "meaning_ko": "저장링."},
+      "BTL": {"expansion": "Beam Transport Line", "meaning_ko": "Linac에서 저장링으로 빔을 수송하는 빔라인."},
+      "Linac": {"expansion": "Linear Accelerator", "meaning_ko": "입사기 선형가속기."}
+    },
+    "srf": {
+      "SRF": {"expansion": "Superconducting Radio Frequency", "meaning_ko": "초전도 고주파 시스템. CM 3기와 LLRF/HPRF로 구성."},
+      "CM": {"expansion": "Cryomodule", "meaning_ko": "초전도 캐비티가 들어 있는 냉동모듈. CM1~CM3."},
+      "LLRF": {"expansion": "Low-Level RF", "meaning_ko": "캐비티 gap voltage와 위상을 제어하는 저전력 RF 계통."},
+      "HPRF": {"expansion": "High-Power RF", "meaning_ko": "LLRF 신호를 500 MHz 고출력으로 증폭하는 계통. KSU/KLY 포함."},
+      "KSU": {"expansion": "Klystron Supply Unit", "meaning_ko": "HPRF의 klystron 전원/보호 유닛. KSU1~KSU3."},
+      "KLY": {"expansion": "Klystron", "meaning_ko": "500 MHz 고출력 RF를 만드는 진공관 증폭기."},
+      "IC": {"expansion": "Interlock Controller", "meaning_ko": "MIS/PSI 외부 인터록을 각 LLRF와 KSU로 분배하는 장치."},
+      "FC": {"expansion": "Field Controller", "meaning_ko": "LLRF의 field 제어 채널. 채널명의 FC#는 LLRF 채널 번호."},
+      "RF station": {"expansion": "LLRF + HPRF(KSU)", "meaning_ko": "CM 1기당 한 쌍으로 구성되는 독립 RF 계통."},
+      "CG": {"expansion": "Cryogenic system", "meaning_ko": "액체헬륨/밸브박스 냉동 계통. CG fault는 BPR01 압력 인터록으로 이어질 수 있다."}
+    },
+    "protection": {
+      "MIS": {"expansion": "Machine Interlock System", "meaning_ko": "진공/빔튜브·빔라인 온도/방사선량/게이트밸브를 감시. 트립 시 RF Ready를 끊어 RF를 OFF."},
+      "PSI": {"expansion": "Personal Safety Interlock", "meaning_ko": "출입/인명/방사선 안전 인터록. MIS와 별개이며 PSI trip도 RF Ready를 끊을 수 있다."},
+      "MPS": {"expansion": "magnet power-supply protection (SR/BTL/Linac)", "meaning_ko": "대용량 마그넷 전원 보호 계통. 마그넷 전원을 끊어 빔 손실을 만들며 RF를 직접 끄지 않는다."},
+      "BLM": {"expansion": "Beam Loss Monitor", "meaning_ko": "빔손실 모니터링 계측기. 그 자체가 빔을 덤프하지 않는다."},
+      "TFS": {"expansion": "Transverse Feedback System", "meaning_ko": "횡방향 bunch-by-bunch 피드백."},
+      "FOFB": {"expansion": "Fast Orbit Feedback", "meaning_ko": "빠른 궤도 피드백."},
+      "BPM": {"expansion": "Beam Position Monitor", "meaning_ko": "빔 위치 측정기."},
+      "DCCT": {"expansion": "DC Current Transformer", "meaning_ko": "빔전류 측정기."},
+      "OPI": {"expansion": "Operator Interface", "meaning_ko": "EPICS 운전 화면. 'MIS OPI'는 MIS 운전 화면/로그."},
+      "PV": {"expansion": "Process Variable", "meaning_ko": "EPICS 제어 변수 이름."}
+    },
+    "channel_prefix": {
+      "VAC": "CM 진공 인터록",
+      "QUEN": "CM quench 인터록",
+      "ARC": "RF 도파관 arc 인터록",
+      "HE-PR": "액체헬륨 압력 인터록",
+      "RDY": "인터록 묶음/준비 상태",
+      "INT": "인터록 신호",
+      "MIS1/MIS2": "MIS 이중화 신호",
+      "PSI1/PSI2": "PSI 이중화 신호",
+      "KSU#": "KSU 번호"
+    },
+    "instrument_tags": {
+      "BCL01/BCL03": "CM 캐비티 bottom/top equator 온도 센서(CLTS-2B). BCL03은 quench-unit 온도로도 인용.",
+      "BPR01": "CM helium vessel 압력 트랜스듀서.",
+      "BPR05": "밸브박스 cold gas return 압력 트랜스듀서.",
+      "BPS01": "CM helium vessel 압력 스위치(dry contact).",
+      "BPS02": "He warm return 압력 스위치(dry contact)."
+    },
+    "suffix": {
+      "_v": "정규화된 아날로그 채널. 정상 1.0, 물리 단위 아님.",
+      "_d": "디지털 인터록 채널. 극성은 채널별 active_low/active_high.",
+      "SR:RF:CRM#": "저장링 RF cryomodule #의 PV prefix.",
+      "CM#/SRF#": "CM 번호 / SRF 채널 번호."
+    },
+    "examples": [
+      "VAC_CM1_FC1_d = CM1 진공 인터록, FC1(LLRF) 채널, digital.",
+      "INT_MIS1_IC_d = MIS 이중화 1, Interlock Controller digital.",
+      "SR:RF:CRM1:BCL03 = 저장링 RF CM1의 cavity top equator 온도 센서."
+    ]
   },
 
   "interlock_hierarchy": {

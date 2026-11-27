@@ -28,6 +28,25 @@ curl -s -X POST http://141.223.105.232:8766/mcp \
 
 ---
 
+## 1.1 처음 연결할 때 장치 약어표
+
+`postmortem_get_capabilities`를 호출하면 `abbreviations` 블록이 함께 온다.
+여기에는 `CM`, `LLRF`, `HPRF`, `KSU`, `IC`, `MIS`, `PSI`, `MPS`, `BLM`,
+`BPM`, `DCCT`, `TFS`, `FOFB`, `BCL01/BCL03`, `BPR01`, `BPS01` 같은 장치명과
+`VAC/QUEN/ARC/HE-PR/RDY/INT` 채널 접두어, `_v`/`_d` 접미어 설명이 들어 있다.
+
+같은 내용을 topic으로 직접 받을 수도 있다.
+
+```json
+{"name":"postmortem_get_glossary",
+ "arguments":{"topic":"abbreviations"}}
+```
+
+MCP resource `postmortem://abbreviations`도 같은 표를 반환한다. 에이전트는
+장치명을 추측하지 말고 이 표를 먼저 읽어야 한다.
+
+---
+
 ## 2. 도구 호출과 응답 파싱
 
 ```bash

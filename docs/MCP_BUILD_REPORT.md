@@ -270,7 +270,12 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
    `citations`, `cause_candidates`, `next_logs_ko`를 반환한다.
    측정 패턴(관측)과 원인 후보(경험적 배경지식)를 분리한 2층 구조다.
    `postmortem_get_glossary(topic=...)`로 topic별 equations/citations을
-   조회할 수 있다. `topic='list'`는 16개 addressable topic index를 반환한다.
+   조회할 수 있다. `topic='list'`는 17개 addressable topic index를 반환한다
+   (domain 10 + physics 7). `topic='abbreviations'`는 CM/LLRF/HPRF/KSU/IC,
+   MIS/PSI/MPS/BLM/BPM/DCCT/TFS/FOFB, BCL01/BPR01/BPS01, 채널 접두어
+   (VAC/QUEN/ARC/HE-PR/RDY/INT)를 설명하는 장치 약어표다. 처음 연결한
+   에이전트는 `postmortem_get_capabilities.abbreviations`에서 같은 표를
+   바로 받는다.
    PLS-II fundamental R/Q는 89 Ω, 운전점은 1.5 MV/cavity(총 4.5 MV),
    RF acceptance는 2.8%다. MIS는 진공/온도/방사선량 기반 RF Ready, PSI는 출입/인명,
    MPS는 마그넷 전원 보호, BLM은 모니터링으로 구분한다.
@@ -287,7 +292,7 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
 | ID | 호출 | 기대값 |
 |---|---|---|
 | T1 | capabilities | 도구 17, `data_as_of` 존재, `as of 2026-11-24, total 868 (675 non-MS)` |
-| T2 | glossary | 섹션 10개, `trip_sequence.mis_beam_dump` |
+| T2 | glossary | 섹션 11개, `abbreviations` 장치 약어표, `trip_sequence.mis_beam_dump` |
 | T3 | aggregate fault_type, 2026 | total 38, RF_Interlock 11 (28.95%) |
 | T3-b | hide_ms=false | total 123, MIS 52 (42.28%) |
 | T4 | case_id / auto_case_id | case_id 1위 3(11건), auto 1위 4(12건) |

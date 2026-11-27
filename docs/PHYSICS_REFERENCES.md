@@ -217,8 +217,10 @@ MIS/MPS/LLRF/CG 로그를 함께 본다.
 - `postmortem_get_glossary()`는 도메인 glossary와 함께 `physics` 라이브러리를
   반환한다. `physics`에는 `internal_test_notes`(2020-04-05 수직시험 1건)가
   포함되며, 이는 문헌 citation이 아니라 내부 시험 기록이다.
-- `postmortem_get_glossary(topic="list")`는 domain 9 + physics 7 = 16개
-  addressable topic index를 반환한다.
+- `postmortem_get_glossary(topic="list")`는 domain 10 + physics 7 = 17개
+  addressable topic index를 반환한다. domain의 `abbreviations`는
+  CM/LLRF/HPRF/KSU/IC, MIS/PSI/MPS/BLM/BPM/DCCT/TFS/FOFB, BCL01/BPR01/BPS01,
+  VAC/QUEN/ARC/HE-PR/RDY/INT 채널 접두어를 설명한다.
 - `postmortem_analyze_waveform(event_id)`는 `waveform.physics`에
   class, summary_ko, chain_ko, steps_ko, timeline, checks, citations, caveats,
   `cause_candidates`, `next_logs_ko`, `interpretation_note_ko`를 넣는다.

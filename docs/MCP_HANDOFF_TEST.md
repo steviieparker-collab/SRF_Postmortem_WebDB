@@ -45,14 +45,17 @@ Claude Desktop은 `mcp-remote` 브리지 사용:
 수치는 전부 코드가 계산한다. LLM이 만들어낸 숫자는 실패로 처리할 것.
 
 ### T1. capabilities
-`postmortem_get_capabilities` → 도구 **17개**, `domain_glossary` 블록, `query_defaults.hide_ms=true`.
+`postmortem_get_capabilities` → 도구 **17개**, `domain_glossary` 블록,
+`abbreviations` 블록(장치 약어표, `count`와 `entries`), `query_defaults.hide_ms=true`.
 `data_as_of`에 `latest_event_timestamp`, `total_events`, `total_events_non_ms`, `statement`가 있어야 한다.
 현재 값: `as of 2026-11-24, total 868 events in DB (675 non-MS)`.
 
 ### T2. 배경지식
-`postmortem_get_glossary` (topic 없이) → `response_type="glossary"`, 섹션 10개
-(`scope, authority, system_overview, interlock_hierarchy, trip_sequence, signals, naming, data_rules, answer_style, caveats`).
+`postmortem_get_glossary` (topic 없이) → `response_type="glossary"`, 섹션 11개
+(`scope, authority, abbreviations, system_overview, interlock_hierarchy, trip_sequence, signals, naming, data_rules, answer_style, caveats`).
 
+`postmortem_get_glossary(topic="abbreviations")` → `content.facility`, `content.srf`,
+`content.protection`, `content.channel_prefix`, `content.instrument_tags`, `content.suffix` 존재.
 `postmortem_get_glossary(topic="trip_sequence")` → `content.mis_beam_dump` 존재.
 
 ### T3. MS 제외 기본값 (fault_type)
@@ -156,8 +159,8 @@ MS 기간을 정말 볼 때만 `hide_ms=false`를 함께 넘긴다.
 `summary_ko`, `equations`(3개), `citations`(padamsee2008, caspers2024, pls2_srf2013) 포함.
 `postmortem_get_glossary()` → `physics` 블록에 7개 topic, reference 28개,
 `internal_test_notes` 1건(2020-04-05 수직시험) 포함.
-`postmortem_get_glossary(topic="list")` → `addressable_topic_count=16`
-(domain 9 + physics 7).
+`postmortem_get_glossary(topic="list")` → `addressable_topic_count=17`
+(domain 10 + physics 7).
 `postmortem_get_glossary(topic="beam_dump_causes")` → `categories` 12개
 (RF single/common, MPS, MIS, CONTROL, BEAMLINE, MECHVAC, KICKER, MAGNET,
 PSI, LINAC, external)와 `mapping_ko` 포함.

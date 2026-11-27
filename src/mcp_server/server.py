@@ -153,6 +153,11 @@ server = MCPServer(
         "Before interpreting waveform features or writing a causal explanation, "
         "call postmortem_get_glossary (or read postmortem://domain-guide) for the "
         "SRF interlock hierarchy, signal definitions, and the first-interlock rule. "
+        "Device-name abbreviations are in postmortem_get_capabilities.abbreviations "
+        "and postmortem_get_glossary(topic='abbreviations'): CM, LLRF, HPRF, KSU, "
+        "IC, MIS, PSI, MPS, BLM, TFS, FOFB, BCL01/BCL03, BPR01, BPS01, and the "
+        "channel prefixes VAC/QUEN/ARC/HE-PR/RDY/INT. Read that table before "
+        "expanding a device tag; do not guess an abbreviation. "
         "For waveform pictures, set include_images=true or generate_plot=true: "
         "content[0].text stays JSON and following content blocks are image/png|jpeg. "
         "fault_type accepts a string or a list of strings. "
@@ -190,8 +195,11 @@ TOOL_DESCRIPTIONS = {
         "Return live data coverage counts (events, notes, attachments, alarms, "
         "PV selections, PV catalog), the data_as_of snapshot date and total, "
         "index freshness, available tools, examples, and known limitations. "
-        "Call this first. The DB is refreshed every few months, so quote the "
-        "data_as_of date whenever you report totals.",
+        "Call this first. It also returns abbreviations: the device-name table "
+        "for CM, LLRF, HPRF, KSU, IC, MIS, PSI, MPS, BLM, BPM, DCCT, TFS, FOFB, "
+        "BCL01/BCL03, BPR01, BPS01, and channel prefixes. Read it before "
+        "interpreting device tags. The DB is refreshed every few months, so quote "
+        "the data_as_of date whenever you report totals.",
     "postmortem_search_events":
         "Search beam-dump events by natural-language query and/or structured filters. "
         "Filters: year, year_from/year_to, year_min/year_max, date (YYYY-MM-DD), "
@@ -329,7 +337,10 @@ TOOL_DESCRIPTIONS = {
         "This is a static, textbook-grounded reference library, not event data. "
         "Call it before interpreting waveform features, writing a causal chain, or "
         "answering any SRF/beam-physics question. "
-        "DOMAIN GLOSSARY (config/domain_glossary.json), 9 addressable topics: "
+        "DOMAIN GLOSSARY (config/domain_glossary.json), 10 addressable topics: "
+        "abbreviations (device names and channel prefixes: CM, LLRF, HPRF, KSU, "
+        "IC, MIS, PSI, MPS, BLM, BPM, DCCT, TFS, FOFB, BCL01/BCL03, BPR01, BPS01; "
+        "read this before expanding a device tag), "
         "system_overview (ring/RF layout and operating context), "
         "interlock_hierarchy (external MIS/PSI vs internal CM/KSU trip chain), "
         "trip_sequence (standard MIS beam-dump sequence, first-interlock rule), "
@@ -475,6 +486,7 @@ TOOL_META = {
         "response_shape": "glossary",
         "examples": [
             {},
+            {"topic": "abbreviations"},
             {"topic": "trip_sequence"},
             {"topic": "signals"},
         ],
@@ -683,6 +695,7 @@ def postmortem_get_capabilities() -> dict[str, Any]:
             "version": _domain_glossary().get("version"),
             "updated": _domain_glossary().get("updated"),
             "topics": [
+                "abbreviations",
                 "system_overview",
                 "interlock_hierarchy",
                 "trip_sequence",
@@ -693,6 +706,24 @@ def postmortem_get_capabilities() -> dict[str, Any]:
                 "authority",
                 "caveats",
             ],
+        },
+        "abbreviations": {
+            "topic": "abbreviations",
+            "tool": "postmortem_get_glossary",
+            "resource": "postmortem://abbreviations",
+            "note": (
+                "Read this before interpreting device names. It defines the "
+                "facility/SRF/protection terms, channel prefixes, instrument "
+                "tags, and numeric suffixes used in events, alarms, and notes."
+            ),
+            "count": sum(
+                len(value)
+                for value in (
+                    _domain_glossary().get("abbreviations") or {}
+                ).values()
+                if isinstance(value, dict)
+            ),
+            "entries": _domain_glossary().get("abbreviations", {}),
         },
         "physics_glossary": {
             "tool": "postmortem_get_glossary",
@@ -1624,9 +1655,9 @@ def postmortem_compare_quench_events(
 def postmortem_get_glossary(topic: Optional[str] = None) -> dict[str, Any]:
     """Return SRF interlock and beam-dump physics background knowledge.
 
-    topic: optional key. Domain keys: system_overview, interlock_hierarchy,
-    trip_sequence, signals, naming, data_rules, answer_style, authority,
-    caveats. Physics keys: cavity_figures_of_merit,
+    topic: optional key. Domain keys: abbreviations, system_overview,
+    interlock_hierarchy, trip_sequence, signals, naming, data_rules,
+    answer_style, authority, caveats. Physics keys: cavity_figures_of_merit,
     cavity_decay_after_rf_off, mis_machine_interlock,
     beam_energy_loss_after_rf_trip, transverse_instability,
     beam_dump_causes, pls2_operating_point. Omit to return both
@@ -1721,6 +1752,15 @@ def resource_fault_types() -> str:
     return json.dumps(postmortem_list_fault_types(), ensure_ascii=False)
 
 
+@server.resource("postmortem://abbreviations", mime_type="application/json",
+                 description="Device-name abbreviations and channel prefixes")
+def resource_abbreviations() -> str:
+    return json.dumps(
+        _domain_glossary().get("abbreviations", {}),
+        ensure_ascii=False,
+    )
+
+
 @server.resource("postmortem://domain-guide", mime_type="application/json",
                  description="SRF interlock background knowledge (config/domain_glossary.json)")
 def resource_domain_guide() -> str:
@@ -1734,6 +1774,8 @@ def resource_glossary() -> str:
         {
             "domain_guide": "postmortem://domain-guide",
             "domain_guide_tool": "postmortem_get_glossary",
+            "abbreviations": "postmortem://abbreviations",
+            "abbreviations_tool": "postmortem_get_glossary(topic='abbreviations')",
             "aliases": {
                 "쿼치": "quench",
                 "퀜치": "quench",
