@@ -184,6 +184,8 @@ def _expected() -> dict[str, Any]:
         "tau_natural_us": [round(x * 1e6, 1) for x in tau_nat],
         "tau_beam_us": round(tau_beam * 1e6, 1) if tau_beam else None,
         "beta": [round(x, 0) for x in beta],
+        "over_input_forward_ratio": p.get("over_input_forward_ratio", 1.2),
+        "over_input_note": p.get("over_input_note"),
         "rf_acceptance_percent": p.get("rf_acceptance_percent"),
         "acceptance_note": p.get("acceptance_note"),
     }
@@ -396,6 +398,10 @@ def interpret_sequence(
             "캐비티 전압의 부분 하강은 빔부하 변화로 설명된다. Forward가 유지되면 "
             "RF 계통은 정상이다."
         )
+    caveats.append(
+        "Cavity probe voltage가 dip 후 다시 올라가는 것은 '회복'이 아니라 "
+        "빔-위상 slip/beam loading에 따른 진동일 수 있다."
+    )
 
     return {
         "available": True,

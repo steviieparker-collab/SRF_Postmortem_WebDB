@@ -1,5 +1,5 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "updated": "2026-11-27",
   "title": "SRF 인터록 시스템 배경지식",
   "scope": "PLS-II SRF(초전도 고주파) 시스템의 장치 약어, 인터록 계층, 빔덤프 신호, 채널 명명, 데이터 해석 규칙",
@@ -12,9 +12,15 @@
   "system_overview": {
     "srf": "초전도 가속공동 시스템. 초전도 CM(Cryomodule) 3기를 운영하기 위한 3기의 LLRF와 HPRF로 구성된다.",
     "stations": "CM1/CM2/CM3 각각에 LLRF와 HPRF(KSU)가 대응되어 RF station 3기가 독립적으로 동작한다.",
-    "llrf": "SRF의 sub시스템. CM gap voltage를 제어하고 RF amplitude/phase를 조정한다.",
+    "llrf": "SRF의 sub시스템. Field Controller(LLRF)는 CM gap voltage의 amplitude와 phase를 closed loop로 제어한다. 빔부하/위상 변화가 생기면 gap voltage를 유지하기 위해 진폭을 조정한다.",
     "hprf": "LLRF의 소신호를 증폭하는 장치. 500 MHz, KSU(Klystron Supply Unit)와 KLY로 구성된다.",
     "ic": "Interlock Controller. 외부 인터록(MIS/PSI)을 각 LLRF와 KSU로 분배하는 장치.",
+    "over_input_protection": {
+      "description": "LLRF가 gap voltage를 유지하려고 forward power를 올릴 때, CM 손상(He vessel overpressure, rupture disk 파손 등)을 막기 위해 출력을 제한하는 보호 기능.",
+      "forward_limit_ratio": 1.2,
+      "behavior_ko": "LLRF demand는 1.2배보다 클 수 있지만, 보호기가 정상 대비 약 1.2배를 넘지 않도록 제한한다. 파형에서 보이는 1.1~1.2는 제한 후 값이다. 따라서 '나머지 station이 보상한다'는 표현은 이 한계 내의 보상으로 써야 한다.",
+      "scope": "LLRF/HPRF forward power"
+    },
     "llrf_generates_interlock": false
   },
 
@@ -30,10 +36,12 @@
     "srf": {
       "SRF": {"expansion": "Superconducting Radio Frequency", "meaning_ko": "초전도 고주파 시스템. CM 3기와 LLRF/HPRF로 구성."},
       "CM": {"expansion": "Cryomodule", "meaning_ko": "초전도 캐비티가 들어 있는 냉동모듈. CM1~CM3."},
-      "LLRF": {"expansion": "Low-Level RF", "meaning_ko": "캐비티 gap voltage와 위상을 제어하는 저전력 RF 계통."},
+      "LLRF": {"expansion": "Low-Level RF (Field Controller)", "meaning_ko": "캐비티 gap voltage의 amplitude와 phase를 closed loop로 제어하는 저전력 RF 계통."},
       "HPRF": {"expansion": "High-Power RF", "meaning_ko": "LLRF 신호를 500 MHz 고출력으로 증폭하는 계통. KSU/KLY 포함."},
-      "KSU": {"expansion": "Klystron Supply Unit", "meaning_ko": "HPRF의 klystron 전원/보호 유닛. KSU1~KSU3."},
+      "KSU": {"expansion": "Klystron Supply Unit", "meaning_ko": "HPRF의 klystron 전원/보호 유닛. KSU1~KSU3. DC24V SMPS, HVPS, ion pump, cooling, focus 등을 포함한다."},
       "KLY": {"expansion": "Klystron", "meaning_ko": "500 MHz 고출력 RF를 만드는 진공관 증폭기."},
+      "SMPS": {"expansion": "Switch-Mode Power Supply", "meaning_ko": "KSU 제어용 DC24V 전원 장치."},
+      "HVPS": {"expansion": "High-Voltage Power Supply", "meaning_ko": "KSU/klystron 고전압 전원 장치."},
       "IC": {"expansion": "Interlock Controller", "meaning_ko": "MIS/PSI 외부 인터록을 각 LLRF와 KSU로 분배하는 장치."},
       "FC": {"expansion": "Field Controller", "meaning_ko": "LLRF의 field 제어 채널. 채널명의 FC#는 LLRF 채널 번호."},
       "RF station": {"expansion": "LLRF + HPRF(KSU)", "meaning_ko": "CM 1기당 한 쌍으로 구성되는 독립 RF 계통."},
@@ -138,7 +146,7 @@
         "BeamCurrent": "빔전류. 정상 1.0. 0으로 떨어지면 빔덤프.",
         "Forward_SRF#": "Cavity로 전달되는 RF Power. coupler에서 읽은 amplitude.",
         "Reflect_SRF#": "Cavity에서 반사되는 RF Power. 빔과 RF 위상이 틀어지면 급증한다. In-phase에서 반사가 최소.",
-        "Cavity_SRF#": "Cavity gap voltage. RF pickup으로 측정한 cavity field 세기."
+        "Cavity_SRF#": "Cavity gap voltage. RF pickup으로 측정한 cavity field 세기. 빔과 RF 위상이 연속적으로 slip하면 빔이 받아가는 에너지가 변해 probe 전압이 진동할 수 있다. dip 후 다시 올라가는 것을 '회복'으로 단정하지 않는다."
       }
     },
     "digital": {
@@ -228,6 +236,8 @@
     "아날로그 값은 정규화 값이므로 물리 단위로 해석하지 않는다.",
     "MS 기간 이벤트는 기본적으로 제외된다. 포함 여부를 답변에 명시한다.",
     "수작업 문서의 채널명/지연시간 표기는 오타나 구버전일 수 있다. 실제 DB와 분류기 값을 우선한다.",
-    "VLM 캡션/OCR의 수치는 원본 이미지로 확인해야 한다."
+    "VLM 캡션/OCR의 수치는 원본 이미지로 확인해야 한다.",
+    "Cavity probe voltage가 dip 후 다시 올라가는 것을 '회복'으로 단정하지 않는다. 빔-위상 slip/beam loading에 따른 진동일 수 있다.",
+    "LLRF가 gap voltage를 유지하려 해도 과입력 방지기 때문에 forward power는 정상 대비 약 1.2배로 제한된다. 이 한계는 CM He vessel overpressure/rupture disk 파손을 막기 위한 것이다."
   ]
 }

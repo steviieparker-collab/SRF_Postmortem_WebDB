@@ -158,6 +158,8 @@ server = MCPServer(
         "IC, MIS, PSI, MPS, BLM, TFS, FOFB, BCL01/BCL03, BPR01, BPS01, and the "
         "channel prefixes VAC/QUEN/ARC/HE-PR/RDY/INT. Read that table before "
         "expanding a device tag; do not guess an abbreviation. "
+        "Do not call a cavity probe dip-and-rise 'recovery'; it can be a "
+        "beam-loading/phase-slip oscillation. "
         "For waveform pictures, set include_images=true or generate_plot=true: "
         "content[0].text stays JSON and following content blocks are image/png|jpeg. "
         "fault_type accepts a string or a list of strings. "
@@ -188,6 +190,9 @@ _CAVEATS = [
     "The RF interlock fault is the first digital interlock in the trip chain "
     "(time_groups FIRST), not the most frequent channel. MIS is dual-redundant "
     "(INT_MIS1_IC / INT_MIS2_IC).",
+    "A cavity probe voltage that dips and then rises is not necessarily "
+    "'recovering'; it can oscillate because of beam phase slip and beam loading. "
+    "PLS-II over-input protection limits forward power to about 1.2x nominal.",
 ]
 
 TOOL_DESCRIPTIONS = {
@@ -290,7 +295,8 @@ TOOL_DESCRIPTIONS = {
         "is descriptive; root cause is not assigned. The "
         "'physics' block adds a deterministic textbook-grounded interpretation "
         "with PLS-II parameter checks, citations, cause_candidates (possible "
-        "causes, not a root-cause assignment), and next_logs_ko. Covers 313/866 "
+        "causes, not a root-cause assignment), and next_logs_ko. A cavity probe "
+        "dip-and-rise is an oscillation, not necessarily 'recovery'. Covers 313/866 "
         "events (2023+, parquet only). Values are computed by code, not an LLM. Returns "
         "response_type='waveform_analysis'. Set generate_plot=true (or "
         "include_images=true) to append MCP Image blocks for the pre-rendered "
@@ -349,11 +355,14 @@ TOOL_DESCRIPTIONS = {
         "data_rules (MS exclusion, manual vs auto classification, relay delay), "
         "answer_style (required caveats and quoting rules), "
         "authority (document/data authority order), caveats (standing limitations). "
-        "PHYSICS LIBRARY (config/physics_references.json), 7 topics and 28 "
+        "PHYSICS LIBRARY (config/physics_references.json), 8 topics and 31 "
         "references: "
         "cavity_figures_of_merit (Q0, QL, R/Q, beta, U, Pc, Pbeam, beta_opt), "
         "cavity_decay_after_rf_off (tau=2QL/omega; PLS-II 95-108 us natural, "
         "24-32 us beam-loaded, midpoint 28 us), "
+        "beam_loading_llrf (V_c=V_g+V_b; beam phase slip/beam loading can make "
+        "the probe voltage oscillate; over-input protection limits forward to "
+        "about 1.2x nominal; He vessel/rupture disk protection), "
         "mis_machine_interlock (PLC 3-layer MIS; RF Ready = MIS healthy AND PSI "
         "healthy; PSI handles radiation/access; MPS is separate; BLM is monitoring), "
         "beam_energy_loss_after_rf_trip (dE/dt=-U0/T_rev=1.32 GeV/ms; PLS-II RF "
@@ -1658,7 +1667,7 @@ def postmortem_get_glossary(topic: Optional[str] = None) -> dict[str, Any]:
     topic: optional key. Domain keys: abbreviations, system_overview,
     interlock_hierarchy, trip_sequence, signals, naming, data_rules,
     answer_style, authority, caveats. Physics keys: cavity_figures_of_merit,
-    cavity_decay_after_rf_off, mis_machine_interlock,
+    cavity_decay_after_rf_off, beam_loading_llrf, mis_machine_interlock,
     beam_energy_loss_after_rf_trip, transverse_instability,
     beam_dump_causes, pls2_operating_point. Omit to return both
     documents (the physics library is under ``physics``).

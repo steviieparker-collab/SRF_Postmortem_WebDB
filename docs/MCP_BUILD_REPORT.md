@@ -264,14 +264,16 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
    2개 캐비티 붕괴는 dual quench로 단정하지 않고 `mixed`로 둔다.
    상세 계산과 PLS-II cavity 시정수 검증은 `beamdump/docs/SEQUENCE_PHYSICS_ANALYSIS.md`.
 6. **`waveform.physics` + 교과서 인용** — `config/physics_references.json`에
-   SRF/빔물리/MIS·MPS·BLM/PLS-II 문헌 28개와 7개 physics topic을 정리했다.
+   SRF/빔물리/MIS·MPS·BLM/PLS-II 문헌 31개와 8개 physics topic을 정리했다.
    `postmortem_analyze_waveform`/`postmortem_analyze_quench`는 class별
    `summary_ko`, `chain_ko`, `steps_ko`, timeline, PLS-II 파라미터 check,
    `citations`, `cause_candidates`, `next_logs_ko`를 반환한다.
    측정 패턴(관측)과 원인 후보(경험적 배경지식)를 분리한 2층 구조다.
    `postmortem_get_glossary(topic=...)`로 topic별 equations/citations을
-   조회할 수 있다. `topic='list'`는 17개 addressable topic index를 반환한다
-   (domain 10 + physics 7). `topic='abbreviations'`는 CM/LLRF/HPRF/KSU/IC,
+   조회할 수 있다. `topic='list'`는 18개 addressable topic index를 반환한다
+   (domain 10 + physics 8). `topic='beam_loading_llrf'`는 beam loading, LLRF
+   closed-loop, cavity probe 진동, 과입력 방지(약 1.2배)를 설명한다.
+   `topic='abbreviations'`는 CM/LLRF/HPRF/KSU/IC,
    MIS/PSI/MPS/BLM/BPM/DCCT/TFS/FOFB, BCL01/BPR01/BPS01, 채널 접두어
    (VAC/QUEN/ARC/HE-PR/RDY/INT)를 설명하는 장치 약어표다. 처음 연결한
    에이전트는 `postmortem_get_capabilities.abbreviations`에서 같은 표를
@@ -329,7 +331,7 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
 | `src/rag/index.py` | RAG 인덱스 |
 | `src/features/` | 파형 특징, 보고서, quench, 벡터 스토어 |
 | `config/domain_glossary.json` | 도메인 배경지식 정본 |
-| `config/physics_references.json` | 교과서/강의록/PLS-II 문헌 28개, physics topic 7개 |
+| `config/physics_references.json` | 교과서/강의록/PLS-II 문헌 31개, physics topic 8개 |
 | `src/features/physics.py` | 순차 class → 물리 해석·PLS-II check·citation |
 | `docs/PHYSICS_REFERENCES.md` | 교과서 내용 사람이 읽는 정리 |
 | `scripts/build_event_physics.py` | per-event physics JSONL 생성 |

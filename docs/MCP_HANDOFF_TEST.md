@@ -157,10 +157,13 @@ MS 기간을 정말 볼 때만 `hide_ms=false`를 함께 넘긴다.
 ### T11. 물리 glossary/citation
 `postmortem_get_glossary(topic="cavity_decay_after_rf_off")` →
 `summary_ko`, `equations`(3개), `citations`(padamsee2008, caspers2024, pls2_srf2013) 포함.
-`postmortem_get_glossary()` → `physics` 블록에 7개 topic, reference 28개,
+`postmortem_get_glossary()` → `physics` 블록에 8개 topic, reference 31개,
 `internal_test_notes` 1건(2020-04-05 수직시험) 포함.
-`postmortem_get_glossary(topic="list")` → `addressable_topic_count=17`
-(domain 10 + physics 7).
+`postmortem_get_glossary(topic="list")` → `addressable_topic_count=18`
+(domain 10 + physics 8).
+`postmortem_get_glossary(topic="beam_loading_llrf")` → `summary_ko`,
+`equations`(cavity voltage/beam power/forward limit), `citations`
+(padamsee2008, wangler2008, belomestnykh2013, liu2018) 포함.
 `postmortem_get_glossary(topic="beam_dump_causes")` → `categories` 12개
 (RF single/common, MPS, MIS, CONTROL, BEAMLINE, MECHVAC, KICKER, MAGNET,
 PSI, LINAC, external)와 `mapping_ko` 포함.

@@ -1,6 +1,6 @@
 {
-  "version": "1.0",
-  "updated": "2026-11-25",
+  "version": "1.1",
+  "updated": "2026-11-27",
   "title": "빔덤프 물리 해석 참고문헌",
   "scope": "PLS-II SRF cavity와 저장링 빔물리, 기계보호(BLM/MPS), 빔덤프 순차 해석에 인용할 교과서/강의록/논문",
   "pls2": {
@@ -28,6 +28,8 @@
       400
     ],
     "cavities": 3,
+    "over_input_forward_ratio": 1.2,
+    "over_input_note": "LLRF가 gap voltage를 유지하려 해도 과입력 방지기가 forward power를 정상 대비 약 1.2배로 제한한다. CM He vessel overpressure/rupture disk 파손을 막기 위한 운전 설정이다.",
     "rf_acceptance_percent": 2.8,
     "acceptance_note": "PLS-II RF acceptance 2.8% at 3 GeV, 4.5 MV. Design requires dE/E > 2.7% for injection/lifetime; lattice momentum acceptance is not published as a single value."
   },
@@ -85,7 +87,7 @@
       "edition": "2nd",
       "publisher": "Wiley-VCH",
       "isbn": "978-3-527-40842-9",
-      "locator": "Part I Cavity Fundamentals; Part II Performance; Part III Couplers and Tuners",
+      "locator": "Part I Cavity Fundamentals; Part III Couplers and Tuners, Ch. 17 Coupling Power to the Beam",
       "topics": [
         "cavity figures of merit",
         "surface resistance",
@@ -93,9 +95,62 @@
         "thermal breakdown",
         "field emission",
         "HOM couplers",
-        "tuners"
+        "tuners",
+        "beam loading"
       ],
-      "note": "SRF cavity의 표준 교과서. 4부 구성, 각 부 끝에 연습문제."
+      "note": "SRF cavity의 표준 교과서. 4부 구성, 각 부 끝에 연습문제. Ch. 17에 beam loading/phase stability."
+    },
+    {
+      "id": "wangler2008",
+      "category": "srf",
+      "title": "RF Linear Accelerators",
+      "authors": "T. P. Wangler",
+      "year": 2008,
+      "edition": "2nd",
+      "publisher": "Wiley-VCH",
+      "doi": "10.1002/9783527623426",
+      "url": "https://onlinelibrary.wiley.com/doi/book/10.1002/9783527623426",
+      "locator": "Ch. 10 Beam Loading; §10.7 Transient Turn-On of a Beam-Loaded Cavity",
+      "topics": [
+        "beam loading",
+        "transient beam loading",
+        "beam-loaded cavity"
+      ],
+      "note": "Transient beam loading의 표준 교과서 장."
+    },
+    {
+      "id": "belomestnykh2013",
+      "category": "srf",
+      "title": "Tutorial on Superconducting RF cavities operation with beam",
+      "authors": "S. Belomestnykh",
+      "year": 2013,
+      "publisher": "CERN/IN2P3 tutorial",
+      "url": "https://indico.in2p3.fr/event/9782/contributions/50513/attachments/40909/50686/03_-_SC_RF_Cavities_operation_with_Beam_icld_LLRF_-_Belomestnykh.pdf",
+      "locator": "Beam loading, phasor diagrams, LLRF/interlocks",
+      "topics": [
+        "beam loading",
+        "phasor",
+        "LLRF",
+        "interlocks"
+      ],
+      "note": "SC cavity를 빔과 함께 운전할 때의 beam loading/LLRF tutorial."
+    },
+    {
+      "id": "liu2018",
+      "category": "srf",
+      "title": "Modeling the interaction of a heavily beam loaded SRF cavity with its low-level RF feedback loops",
+      "authors": "Z.-K. Liu et al.",
+      "year": 2018,
+      "publisher": "NIM-A 894, 57-71",
+      "doi": "10.1016/j.nima.2018.03.046",
+      "url": "https://doi.org/10.1016/j.nima.2018.03.046",
+      "locator": "Cavity voltage oscillation under heavy beam loading",
+      "topics": [
+        "beam loading",
+        "cavity voltage oscillation",
+        "LLRF feedback"
+      ],
+      "note": "Heavy beam loading 시 cavity probe voltage가 400–700 Hz로 진동하고 LLRF가 overwhelmed되는 사례."
     },
     {
       "id": "padamsee2009",
@@ -568,7 +623,7 @@
   "topics": {
     "cavity_figures_of_merit": {
       "title": "Cavity figures of merit",
-      "summary_ko": "SRF cavity의 상태는 Q0, QL, R/Q, shunt impedance, coupling beta로 요약된다. Q0는 벽 손실 대비 저장에너지, QL은 외부 결합을 포함한 부하 Q, beta는 외부 결합 세기다. 빔이 있으면 빔부하가 추가되어 QL과 유효 감쇠가 달라진다.",
+      "summary_ko": "SRF cavity의 상태는 Q0, QL, R/Q, shunt impedance, coupling beta로 요약된다. Q0는 벽 손실 대비 저장에너지, QL은 외부 결합을 포함한 부하 Q, beta는 외부 결합 세기다. 빔이 있으면 빔부하가 추가되어 QL과 유효 감쇠가 달라진다. LLRF는 gap voltage의 amplitude/phase를 closed loop로 제어하고, PLS-II는 CM 보호를 위해 과입력 방지기로 forward power를 정상 대비 약 1.2배로 제한한다.",
       "equations": [
         {
           "name": "loaded Q",
@@ -599,8 +654,18 @@
       "citations": [
         {
           "id": "padamsee2008",
-          "locator": "Part I Cavity Fundamentals",
-          "supports": "Q0, R/Q, geometry factor, shunt impedance의 정의"
+          "locator": "Part I Cavity Fundamentals; Ch. 17 Coupling Power to the Beam",
+          "supports": "Q0, R/Q, geometry factor, shunt impedance의 정의와 beam loading"
+        },
+        {
+          "id": "wangler2008",
+          "locator": "Ch. 10 Beam Loading",
+          "supports": "beam-loaded cavity와 transient beam loading"
+        },
+        {
+          "id": "belomestnykh2013",
+          "locator": "Beam loading, phasor diagrams, LLRF",
+          "supports": "SC cavity를 빔과 함께 운전할 때의 LLRF 제어"
         },
         {
           "id": "caspers2024",
@@ -629,7 +694,8 @@
         }
       ],
       "caveats": [
-        "Q0와 R/Q는 문헌/측정값이며 이벤트별 실측값이 아니다."
+        "Q0와 R/Q는 문헌/측정값이며 이벤트별 실측값이 아니다.",
+        "Cavity probe 전압의 dip 후 상승은 '회복'이 아니라 beam loading/phase slip에 따른 진동일 수 있다."
       ]
     },
     "cavity_decay_after_rf_off": {
@@ -670,7 +736,55 @@
         }
       ],
       "caveats": [
-        "실제 감쇠는 빔전류가 줄면서 빔부하가 사라지는 과도과정이라 단일 지수함수가 아니다."
+        "실제 감쇠는 빔전류가 줄면서 빔부하가 사라지는 과도과정이라 단일 지수함수가 아니다.",
+        "감쇠 중에도 빔-위상 slip과 LLRF 작동으로 cavity probe 전압이 비단조적으로 진동할 수 있다. dip 후 상승을 '회복'으로 부르지 않는다."
+      ]
+    },
+    "beam_loading_llrf": {
+      "title": "Beam loading, LLRF, 과입력 방지",
+      "summary_ko": "Cavity gap voltage는 generator 전압과 beam-induced 전압의 phasor 합이다. Field Controller(LLRF)는 gap voltage의 amplitude와 phase를 closed loop로 제어한다. 빔전류/위상이 변하면 빔이 받아가는 에너지가 달라져 cavity probe 전압이 진동할 수 있다. 따라서 dip 후 값이 다시 올라가는 것을 '회복'으로 단정하지 말고 beam loading/phase slip에 의한 진동으로 본다. PLS-II는 CM 보호를 위해 과입력 방지기(over-input protection)를 두어 LLRF가 요구해도 forward power를 정상 대비 약 1.2배로 제한한다. 이 한계는 He vessel overpressure/rupture disk 파손을 막기 위한 것이다.",
+      "equations": [
+        {
+          "name": "cavity voltage",
+          "expr": "V_c = V_g + V_b (phasor)",
+          "note": "generator + beam-induced voltage"
+        },
+        {
+          "name": "beam power",
+          "expr": "P_beam = V_c*I_b*cos(phi_b)",
+          "note": "빔이 받아가는 power"
+        },
+        {
+          "name": "forward limit",
+          "expr": "P_forward <= ~1.2 * P_nominal",
+          "note": "PLS-II over-input protection"
+        }
+      ],
+      "citations": [
+        {
+          "id": "padamsee2008",
+          "locator": "Ch. 17 Coupling Power to the Beam, §17.3 Beam Loading, §17.5 Phase Stability",
+          "supports": "beam loading과 phase stability"
+        },
+        {
+          "id": "wangler2008",
+          "locator": "Ch. 10 Beam Loading; §10.7 Transient Turn-On of a Beam-Loaded Cavity",
+          "supports": "transient beam loading"
+        },
+        {
+          "id": "belomestnykh2013",
+          "locator": "Beam loading, phasor diagrams, LLRF/interlocks",
+          "supports": "SC cavity operation with beam"
+        },
+        {
+          "id": "liu2018",
+          "locator": "Cavity voltage oscillation under heavy beam loading",
+          "supports": "probe voltage oscillation, not simple recovery"
+        }
+      ],
+      "caveats": [
+        "Cavity probe voltage가 dip 후 다시 올라가는 것은 '회복'이 아니라 beam phase slip/beam loading에 따른 진동일 수 있다.",
+        "과입력 방지기 1.2배는 PLS-II 운전 설정이다. 파형의 1.1~1.2는 제한 후 값이며 LLRF demand는 더 클 수 있다. 이벤트별 실제 forward power는 파형/아카이브로 확인한다."
       ]
     },
     "mis_machine_interlock": {
@@ -864,8 +978,8 @@
         {
           "key": "rf_single_station",
           "title_ko": "RF 단일 station 고장",
-          "summary_ko": "하나의 RF station(LLRF-HPRF-Cavity=CM)에서 fault. 해당 station RF off, 나머지 2개 cavity가 beam loading을 감당하려다 power limit에 걸려 Vgap 하강/phase 이탈 -> 빔 에너지 손실 -> 궤도 축소 -> 덤프. 흩어진 빔이 진공/온도 상승을 만들어 MIS를 추가로 트립할 수 있다. Beam loading 없는 CM에 고전력이 인가되면 BCC01_Pump out box(ceramic window) 진공과 BPR01 He 용기 압력이 상승해 인터록이 발생할 수 있다.",
-          "signature_ko": "한 station만 급격히 붕괴, 나머지는 부분 sag; cavity가 beam보다 먼저; 이후 MIS/진공/He 압력 트립 가능",
+          "summary_ko": "하나의 RF station(LLRF-HPRF-Cavity=CM)에서 fault. 해당 station RF off. 나머지 2개 station의 LLRF가 gap voltage를 유지하려 forward를 올리지만, 과입력 방지기(over-input protection) 때문에 정상 대비 약 1.2배로 제한된다. 그 결과 Vgap 하강/phase 이탈 -> 빔 에너지 손실 -> 궤도 축소 -> 덤프. 흩어진 빔이 진공/온도 상승을 만들어 MIS를 추가로 트립할 수 있다. Beam loading 없는 CM에 고전력이 인가되면 BCC01_Pump out box(ceramic window) 진공과 BPR01 He 용기 압력이 상승해 인터록이 발생할 수 있다.",
+          "signature_ko": "한 station만 급격히 붕괴, 나머지는 LLRF 보상(약 1.2배 한계)으로 부분 sag; cavity가 beam보다 먼저; 이후 MIS/진공/He 압력 트립 가능",
           "causes_ko": "LLRF, HPRF, CM 각각"
         },
         {
@@ -1002,8 +1116,14 @@
     },
     "pls2_operating_point": {
       "title": "PLS-II 운전점",
-      "summary_ko": "PLS-II는 3 GeV, 400 mA, 499.973 MHz, 3개 SRF cavity로 운전된다. 각 cavity는 1.5 MV로 운전하며 총 4.5 MV다. 400 mA 운전도 4.5 MV에서 한다. 회당 에너지 손실은 1.242 MeV, 회전주파수는 1.0638 MHz, RF acceptance는 2.8%다. 300–400 mA에서 Qext 1.5–1.7e5, Q0 7.5e8–1.1e9, R/Q=89 Ω를 보인다.",
-      "equations": [],
+      "summary_ko": "PLS-II는 3 GeV, 400 mA, 499.973 MHz, 3개 SRF cavity로 운전된다. 각 cavity는 1.5 MV로 운전하며 총 4.5 MV다. 400 mA 운전도 4.5 MV에서 한다. 회당 에너지 손실은 1.242 MeV, 회전주파수는 1.0638 MHz, RF acceptance는 2.8%다. 300–400 mA에서 Qext 1.5–1.7e5, Q0 7.5e8–1.1e9, R/Q=89 Ω를 보인다. LLRF가 gap voltage를 유지하려 해도 과입력 방지기가 forward power를 정상 대비 약 1.2배로 제한한다.",
+      "equations": [
+        {
+          "name": "over-input protection",
+          "expr": "P_forward <= ~1.2 * P_nominal",
+          "note": "LLRF/HPRF forward limit; CM He vessel/rupture disk 보호"
+        }
+      ],
       "citations": [
         {
           "id": "pls2_status2016",
@@ -1033,7 +1153,8 @@
       ],
       "caveats": [
         "운전점은 시기별로 조금씩 다르다. 이벤트별 실제 값은 아카이브 PV를 봐야 한다.",
-        "각 cavity 1.5 MV(총 4.5 MV)가 실제 운전값이다."
+        "각 cavity 1.5 MV(총 4.5 MV)가 실제 운전값이다.",
+        "과입력 방지 1.2배는 운전 설정값이다. 이벤트별 실제 forward power는 파형/아카이브로 확인한다."
       ]
     }
   },
@@ -1043,6 +1164,7 @@
       "summary_ko": "3개 캐비티가 붕괴하고, 캐비티 50%가 빔 50%보다 수백 us 앞선다. 인터록이 RF를 끄고, Vgap이 수십~수백 us 규모로 감쇠하며, 빔이 에너지를 잃고 dump된다.",
       "citations": [
         "cavity_decay_after_rf_off",
+        "beam_loading_llrf",
         "beam_energy_loss_after_rf_trip",
         "mis_machine_interlock",
         "pls2_operating_point"
@@ -1065,7 +1187,7 @@
         },
         {
           "key": "rf_single_station",
-          "why_ko": "한 station trip 후 나머지가 power limit으로 따라 붕괴",
+          "why_ko": "한 station trip 후 나머지 LLRF가 보상하지만 과입력 방지기 약 1.2배 한계로 따라 붕괴",
           "check_ko": "LLRF/HPRF station log"
         }
       ]
@@ -1147,7 +1269,7 @@
       "summary_ko": "1개 캐비티만 0으로 붕괴하고 캐비티가 빔보다 먼저 움직인다. 해당 CM의 quench 또는 RF station fault를 의심하고 QUEN 채널과 그 캐비티의 forward/reflect를 확인한다.",
       "citations": [
         "cavity_decay_after_rf_off",
-        "padamsee2008",
+        "beam_loading_llrf",
         "mis_machine_interlock"
       ],
       "cause_candidates": [

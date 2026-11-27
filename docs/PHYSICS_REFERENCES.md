@@ -11,7 +11,10 @@
 
 | id | 문헌 | 이 분석에서 쓰는 부분 |
 |---|---|---|
-| `padamsee2008` | Padamsee, Knobloch, Hays, *RF Superconductivity for Accelerators*, 2nd ed., Wiley-VCH 2008, ISBN 978-3-527-40842-9 | 표준 교과서. Part I cavity fundamentals(Q0, R/Q, geometry factor, surface resistance), Part II quench/thermal breakdown/field emission, Part III couplers/tuners |
+| `padamsee2008` | Padamsee, Knobloch, Hays, *RF Superconductivity for Accelerators*, 2nd ed., Wiley-VCH 2008, ISBN 978-3-527-40842-9 | 표준 교과서. Part I cavity fundamentals(Q0, R/Q, geometry factor, surface resistance), Part II quench/thermal breakdown/field emission, Part III couplers/tuners. Ch. 17 Coupling Power to the Beam에 beam loading/phase stability |
+| `wangler2008` | Wangler, *RF Linear Accelerators*, 2nd ed., Wiley-VCH 2008, DOI 10.1002/9783527623426 | Ch. 10 Beam Loading, §10.7 Transient Turn-On of a Beam-Loaded Cavity. transient beam loading의 표준 교과서 |
+| `belomestnykh2013` | Belomestnykh, "Tutorial on Superconducting RF cavities operation with beam", CERN/IN2P3 2013 | beam-loaded cavity의 phasor, beam loading, LLRF/interlock |
+| `liu2018` | Liu et al., "Modeling the interaction of a heavily beam loaded SRF cavity with its low-level RF feedback loops", NIM-A 894, 57 (2018), DOI 10.1016/j.nima.2018.03.046 | heavy beam loading 시 cavity probe voltage가 400–700 Hz로 진동하고 LLRF가 overwhelmed되는 사례 |
 | `padamsee2009` | Padamsee, *RF Superconductivity: Science, Technology and Applications*, Wiley-VCH 2009, ISBN 978-3-527-40572-5 | cavity geometry, critical field, fabrication의 보조 교재 |
 | `padamsee2023` | Padamsee, *Superconducting Radiofrequency Technology for Accelerators*, Wiley-VCH 2023, ISBN 978-3-527-41409-3 | N-doping, flux expulsion, high-field Q-slope, Nb3Sn. 최신 동향 |
 | `caspers2024` | Caspers & Calatroni, "II.5 — Superconducting RF cavities", CERN Yellow Reports 2024, DOI 10.23730/CYRSP-2024-003.1085 | CC-BY 오픈액세스. surface impedance, R/Q, geometry factor, 측정법 |
@@ -45,6 +48,28 @@ I 300–400 mA)을 넣으면:
 
 관측값은 자연 감쇠와 빔부하 감쇠 사이에 있고, 빔전류가 줄면서 빔부하가
 사라지는 과도과정과 일치한다.
+
+### Beam loading, LLRF, 과입력 방지
+
+```
+V_c = V_g + V_b          (phasor)
+P_beam = V_c * I_b * cos(phi_b)
+P_forward <= ~1.2 * P_nominal   (PLS-II over-input protection)
+```
+
+- Field Controller(LLRF)는 cavity gap voltage의 **amplitude와 phase를 closed
+  loop로 제어**한다. 빔전류/위상이 변하면 빔이 받아가는 에너지가 달라지고,
+  cavity probe 전압이 진동할 수 있다.
+- 따라서 **dip 후 값이 다시 올라가는 것을 "회복"이라고 부르지 않는다.**
+  빔과 RF의 phase가 연속적으로 slip하면서 에너지 교환이 커졌다 작아졌다를
+  반복하는 **진동**으로 본다.
+- PLS-II는 CM 손상(He vessel overpressure, rupture disk 파손 등)을 막기 위해
+  **과입력 방지기**를 두고, LLRF가 요구해도 forward power를 정상 대비 약
+  **1.2배**로 제한한다. 파형에서 보이는 1.1–1.2는 제한 후 값이며, LLRF demand는
+  더 클 수 있다. 따라서 "나머지 station이 보상한다"는 표현은 이 한계 내의
+  보상으로 써야 한다.
+- 관련 문헌: Padamsee Ch. 17, Wangler §10.7, Belomestnykh tutorial,
+  Liu et al. NIM-A 894 (2018).
 
 ---
 
@@ -167,7 +192,7 @@ RF station, MPS, CONTROL, 빔라인, 진공 등에 따로 있을 수 있다.
 | `rf_trip` | 3개 캐비티 동시 붕괴, cavity가 beam보다 ~300 µs 먼저 | `rf_common`, `mis`, `psi`, `rf_single_station` | `cavity_decay_after_rf_off`, `beam_energy_loss_after_rf_trip`, `mis_machine_interlock` |
 | `beam_first_rf_trip` | beam이 먼저, cavity는 뒤에 붕괴. forward 유지 | `mps`, `magnet`, `control`, `mis`, `beamline` | `cavity_figures_of_merit`, `transverse_instability`, `beam_dump_causes` |
 | `beam_only` | cavity 무변화. RF 무관 | `mis`, `control`, `beamline`, `kicker`, `psi` | `transverse_instability`, `mis_machine_interlock`, `beam_dump_causes` |
-| `single_cavity_quench` | 1개 캐비티만 붕괴, cavity가 먼저 | `rf_single_station`, `mechvac`, `mis` | `cavity_decay_after_rf_off`, `padamsee2008`, `mis_machine_interlock` |
+| `single_cavity_quench` | 1개 캐비티만 붕괴, cavity가 먼저 | `rf_single_station`, `mechvac`, `mis` | `cavity_decay_after_rf_off`, `beam_loading_llrf`, `mis_machine_interlock` |
 | `mixed` | 순서 불명확 또는 2개 캐비티 붕괴(dual quench로 단정하지 않음) | `rf_single_station`, `rf_common`, `mis`, `mps` | `beam_dump_causes`, `mis_machine_interlock` |
 
 `dual_cavity_quench`는 PLS-II에서 관측된 적이 없어 제거했다. 2개 캐비티만
@@ -177,7 +202,7 @@ RF station, MPS, CONTROL, 빔라인, 진공 등에 따로 있을 수 있다.
 
 | key | 의미 | 관측 단서 |
 |---|---|---|
-| `rf_single_station` | RF station(LLRF-HPRF-CM) 1개 고장 | 한 station만 급격 붕괴, 나머지 sag, 이후 MIS/진공/He 압력 |
+| `rf_single_station` | RF station(LLRF-HPRF-CM) 1개 고장 | 한 station만 급격 붕괴, 나머지는 LLRF 보상(약 1.2배 한계)으로 부분 sag, 이후 MIS/진공/He 압력 |
 | `rf_common` | RF 공통점 고장(전 station 동시 off) | 3개 cavity 동시 붕괴, BPR01/CM 인터록 가능 |
 | `mps` | 대용량 마그넷 전원(MPS) 고장. RF를 직접 끄지 않음 | beam current가 RF보다 먼저, 수백 ms |
 | `mis` | MIS 트립(진공/온도/방사선/gate valve) | RF off 전 진공/온도/방사선 상승 |
@@ -212,12 +237,13 @@ MIS/MPS/LLRF/CG 로그를 함께 본다.
 ## 6. MCP에서의 위치
 
 - `postmortem_get_glossary(topic="cavity_decay_after_rf_off")` 등
-  7개 physics topic이 equations/citations/caveats를 반환한다.
+  8개 physics topic이 equations/citations/caveats를 반환한다.
   `beam_dump_causes`는 `categories[]`와 `mapping_ko`를 함께 반환한다.
+  `beam_loading_llrf`는 beam loading/LLRF/과입력 방지(약 1.2배)를 설명한다.
 - `postmortem_get_glossary()`는 도메인 glossary와 함께 `physics` 라이브러리를
   반환한다. `physics`에는 `internal_test_notes`(2020-04-05 수직시험 1건)가
   포함되며, 이는 문헌 citation이 아니라 내부 시험 기록이다.
-- `postmortem_get_glossary(topic="list")`는 domain 10 + physics 7 = 17개
+- `postmortem_get_glossary(topic="list")`는 domain 10 + physics 8 = 18개
   addressable topic index를 반환한다. domain의 `abbreviations`는
   CM/LLRF/HPRF/KSU/IC, MIS/PSI/MPS/BLM/BPM/DCCT/TFS/FOFB, BCL01/BPR01/BPS01,
   VAC/QUEN/ARC/HE-PR/RDY/INT 채널 접두어를 설명한다.
@@ -254,5 +280,9 @@ venv/bin/python scripts/build_event_physics.py \
   인과 순서를 줄 수 없다. 313건 중 116/118 검증 이벤트가 same-sample이었다.
 - Class는 측정 패턴이며 root cause 라벨과 1:1 대응하지 않는다.
 - MIS는 보호/트리거이고, MPS와 혼동하지 않는다. BLM은 모니터링이다.
+- Cavity probe가 dip 후 다시 올라가는 것은 "회복"이 아니라 beam loading/phase
+  slip에 따른 진동일 수 있다.
+- LLRF가 gap voltage를 유지하려 해도 과입력 방지기 때문에 forward power는
+  정상 대비 약 1.2배로 제한된다. 이 한계는 CM He vessel/rupture disk 보호용이다.
 - turn-by-turn BPM이 없으므로 ms급 횡방향 불안정 성장은 확정할 수 없다.
 - PLS(2.5 GeV)와 PLS-II(3 GeV)는 다른 머신이다. PLS 수치를 PLS-II에 쓰지 않는다.
