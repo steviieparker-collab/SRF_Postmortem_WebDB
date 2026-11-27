@@ -1759,6 +1759,7 @@ def postmortem_analyze_waveform(
         "root_cause": analysis.get("root_cause"),
         "claim_checks": analysis.get("claim_checks") or [],
         "required_disclosures": analysis.get("required_disclosures") or [],
+        "warnings": warnings,
         "waveform": {
             "n_samples": features.get("n_samples"),
             "dt_s": dt,

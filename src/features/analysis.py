@@ -626,6 +626,7 @@ def build_event_analysis(event_id: str) -> dict[str, Any]:
     quench_source = features.get("quench_unit_source")
     if not quench_units and quench_source == "default_cm1":
         quench_unit = None
+        quench_source = "none"
     family = _fault_family(event.get("notes") or "", first, quench_units)
     root = _root_cause(event, family)
     seq = _sequence_payload(sequence, physics, features)
@@ -752,6 +753,11 @@ def analyze_cohort(
             note, first, features.get("quench_units_with_quen_assert") or []
         )
         seq_payload = _sequence_payload(seq, physics, features)
+        q_units = features.get("quench_units_with_quen_assert") or []
+        q_unit = row["quench_unit"] or features.get("quench_unit")
+        q_source = features.get("quench_unit_source")
+        if not q_units and q_source == "default_cm1":
+            q_unit = None
         item = {
             "event_id": row["event_id"],
             "timestamp": meta.get("timestamp") or row["timestamp"],
@@ -760,7 +766,7 @@ def analyze_cohort(
             "class": seq_payload.get("class"),
             "first_interlock": (first or {}).get("channel"),
             "first_interlock_us": (first or {}).get("t_us"),
-            "quench_unit": row["quench_unit"] or features.get("quench_unit"),
+            "quench_unit": q_unit,
             "fault_family": family,
             "tau_reliable": seq_payload.get("tau_reliable"),
             "n_cavities_collapsed": seq_payload.get("n_cavities_collapsed"),
