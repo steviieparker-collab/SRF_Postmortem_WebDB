@@ -64,6 +64,8 @@ def reference_bundle(topic: Optional[str] = None) -> dict[str, Any]:
             "title": block.get("title"),
             "summary_ko": block.get("summary_ko"),
             "equations": block.get("equations", []),
+            "categories": block.get("categories", []),
+            "mapping_ko": block.get("mapping_ko"),
             "citations": _resolve_citations(block.get("citations", []), refs),
             "caveats": block.get("caveats", []),
             "version": doc.get("version"),
@@ -157,7 +159,8 @@ def _expected() -> dict[str, Any]:
         "tau_natural_us": [round(x * 1e6, 1) for x in tau_nat],
         "tau_beam_us": round(tau_beam * 1e6, 1) if tau_beam else None,
         "beta": [round(x, 0) for x in beta],
-        "momentum_acceptance_percent": p.get("momentum_acceptance_percent"),
+        "rf_acceptance_percent": p.get("rf_acceptance_percent"),
+        "acceptance_note": p.get("acceptance_note"),
     }
 
 
@@ -290,30 +293,34 @@ def interpret_sequence(
         chain = (
             "인터록/RF off → 3개 캐비티 "
             f"{decay_txt} → 빔이 매 회전 U0=1.242 MeV(≈1.32 GeV/ms)를 "
-            "잃음 → momentum acceptance를 넘어 빔 손실. 캐비티가 빔보다 "
+            f"잃음 → RF acceptance({expected['rf_acceptance_percent']}%)를 넘어 "
+            "빔 손실. 캐비티가 빔보다 "
             f"{delay_txt} 먼저 움직였으므로 RF가 원인 쪽이다."
         )
     elif cls == "beam_first_rf_trip":
         chain = (
             "빔전류가 먼저 감소 → 빔부하가 줄어 캐비티 전압이 부분적으로 "
             "하강 → 뒤늦게 RF trip. Forward가 유지되면 RF 계통은 원인이 아니다. "
+            "MPS, magnet, CONTROL/TFS/FOFB, MIS 로그를 함께 본다. "
             f"캐비티 50%가 빔 50%보다 {abs(delay50 or 0):.0f} us 늦다."
         )
     elif cls == "beam_only":
         chain = (
             "캐비티 전압이 20% 아래로 내려가지 않았다. RF는 원인이 아니며 "
-            "beam line, kicker, 궤도, 횡방향 손실을 봐야 한다."
+            "MIS(진공/온도/냉각/방사선), CONTROL/TFS/FOFB, beam line, kicker, "
+            "궤도/횡방향 손실을 봐야 한다."
         )
-    elif cls in ("single_cavity_quench", "dual_cavity_quench"):
+    elif cls == "single_cavity_quench":
         chain = (
-            f"{len(collapsed)}개 캐비티만 0으로 붕괴했고 캐비티가 빔보다 "
-            f"{delay_txt} 먼저 움직였다. 해당 CM의 quench와 QUEN/forward/reflect를 "
-            "확인한다."
+            "1개 캐비티만 0으로 붕괴했고 캐비티가 빔보다 "
+            f"{delay_txt} 먼저 움직였다. 해당 CM의 quench 또는 RF station fault를 "
+            "의심하고 QUEN/forward/reflect와 LLRF/HPRF 로그를 확인한다."
         )
     else:
         chain = (
-            "캐비티 변화는 있으나 순서가 명확하지 않다. cavity/forward/reflect와 "
-            "digital 전이를 함께 봐야 한다."
+            "캐비티 변화는 있으나 순서가 명확하지 않다. 2개 캐비티만 붕괴한 경우 "
+            "dual quench로 단정하지 말고 RF station/common point, LLRF/HPRF 로그와 "
+            "cavity/forward/reflect, digital 전이를 함께 봐야 한다."
         )
 
     caveats = list(doc.get("caveats", []))

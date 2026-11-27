@@ -258,17 +258,20 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
    기준일, 총계/비MS 총계, 문구를 포함. 하드코딩 제거.
 5. **`waveform.sequence`** — `postmortem_analyze_waveform` 응답에 캐비티
    90/50/10% 도달 시각, 빔전류 99/50/10% 시각, 캐비티→빔 지연,
-   3개 캐비티 붕괴 시각 차이, 원인 class(`rf_trip`, `beam_first_rf_trip`,
-   `beam_only`, `single/dual_cavity_quench`)를 추가. fast scope 313건 기준.
+   3개 캐비티 붕괴 시각 차이, 측정 패턴(`rf_trip`, `beam_first_rf_trip`,
+   `beam_only`, `single_cavity_quench`, `mixed`)을 추가. fast scope 313건 기준.
+   2개 캐비티 붕괴는 dual quench로 단정하지 않고 `mixed`로 둔다.
    상세 계산과 PLS-II cavity 시정수 검증은 `beamdump/docs/SEQUENCE_PHYSICS_ANALYSIS.md`.
 6. **`waveform.physics` + 교과서 인용** — `config/physics_references.json`에
-   SRF/빔물리/BLM/PLS-II 문헌 20개와 7개 physics topic을 정리했다.
+   SRF/빔물리/MIS·MPS·BLM/PLS-II 문헌 27개와 7개 physics topic을 정리했다.
    `postmortem_analyze_waveform`/`postmortem_analyze_quench`는 class별
    `summary_ko`, `chain_ko`, `steps_ko`, timeline, PLS-II 파라미터 check,
    `citations`를 반환한다.
    `postmortem_get_glossary(topic=...)`로 topic별 equations/citations을
    조회할 수 있다. `topic='list'`는 16개 addressable topic index를 반환한다.
-   PLS-II fundamental R/Q는 89 Ω(문헌의 100 Ω은 HOM R/Q 문맥)이다.
+   PLS-II fundamental R/Q는 89 Ω, 운전점은 1.5 MV/cavity(총 4.5 MV),
+   RF acceptance는 2.8%다. MIS는 진공/온도/냉각/방사선 기반 빔 permit,
+   MPS는 마그넷 전원 보호, BLM은 모니터링으로 구분한다.
    2020-04-05 500 MHz CESR-B 수직시험은 문헌 인용과 분리해
    `internal_test_notes`에 1건 기록했다. per-event 저장본은
    `data/features/event_physics_interpretations.jsonl` (313줄)와
@@ -319,7 +322,7 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
 | `src/rag/index.py` | RAG 인덱스 |
 | `src/features/` | 파형 특징, 보고서, quench, 벡터 스토어 |
 | `config/domain_glossary.json` | 도메인 배경지식 정본 |
-| `config/physics_references.json` | 교과서/강의록/PLS-II 문헌 20개, physics topic 7개 |
+| `config/physics_references.json` | 교과서/강의록/PLS-II 문헌 27개, physics topic 7개 |
 | `src/features/physics.py` | 순차 class → 물리 해석·PLS-II check·citation |
 | `docs/PHYSICS_REFERENCES.md` | 교과서 내용 사람이 읽는 정리 |
 | `scripts/build_event_physics.py` | per-event physics JSONL 생성 |

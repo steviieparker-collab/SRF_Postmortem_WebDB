@@ -191,8 +191,9 @@ TOOL_DESCRIPTIONS = {
         "t0, beam-current fall timing, CM1/2/3 cavity sag, reflect rise, forward trip, "
         "digital interlock transitions, quench unit, and data caveats. The "
         "'sequence' block adds cavity 90/50/10% crossing times, the cavity-to-beam "
-        "delay, the 3-cavity collapse spread, and a cause class (rf_trip, "
-        "beam_first_rf_trip, beam_only, single/dual_cavity_quench). The "
+        "delay, the 3-cavity collapse spread, and a sequence pattern (rf_trip, "
+        "beam_first_rf_trip, beam_only, single_cavity_quench, mixed). The pattern "
+        "is descriptive; root cause is not assigned. The "
         "'physics' block adds a deterministic textbook-grounded interpretation "
         "with PLS-II parameter checks and citations. Covers 313/866 "
         "events (2023+, parquet only). Values are computed by code, not an LLM. Returns "
@@ -246,24 +247,27 @@ TOOL_DESCRIPTIONS = {
         "data_rules (MS exclusion, manual vs auto classification, relay delay), "
         "answer_style (required caveats and quoting rules), "
         "authority (document/data authority order), caveats (standing limitations). "
-        "PHYSICS LIBRARY (config/physics_references.json), 7 topics and 20 "
+        "PHYSICS LIBRARY (config/physics_references.json), 7 topics and 27 "
         "references: "
         "cavity_figures_of_merit (Q0, QL, R/Q, beta, U, Pc, Pbeam, beta_opt), "
         "cavity_decay_after_rf_off (tau=2QL/omega; PLS-II 95-108 us natural, "
-        "24-39 us beam-loaded, midpoint 31 us), "
-        "beam_energy_loss_after_rf_trip (dE/dt=-U0/T_rev=1.32 GeV/ms; 1/5/10% loss "
-        "times; momentum acceptance), "
-        "machine_protection_timescales (BLM/MPS us-ms response; why 1 Hz Archiver "
-        "cannot order cause and effect), "
-        "transverse_instability (exponential growth, betatron tune, BPM limits), "
-        "beam_dump_sequence_classes (rf_trip, beam_first_rf_trip, beam_only, "
-        "single/dual cavity quench), "
-        "pls2_operating_point (3 GeV, 400 mA, 499.973 MHz, 3 cavities, Q0/Qext, "
-        "R/Q=89 ohm). "
+        "24-32 us beam-loaded, midpoint 28 us), "
+        "mis_machine_interlock (MIS monitors vacuum/temperature/LCW/radiation and "
+        "drops beam permit -> RF off; BLM is monitoring only; MPS is separate), "
+        "beam_energy_loss_after_rf_trip (dE/dt=-U0/T_rev=1.32 GeV/ms; PLS-II RF "
+        "acceptance 2.8% at 4.5 MV), "
+        "transverse_instability (exponential growth; PLS-II TFS and FOFB; BPM "
+        "limits), "
+        "beam_dump_causes (empirical PLS-II taxonomy: RF single station, RF common, "
+        "MPS, MIS, CONTROL/TFS/FOFB, BEAMLINE, MECHVAC, KICKER, MAGNET, PSI, "
+        "LINAC, external), "
+        "pls2_operating_point (3 GeV, 400 mA, 499.973 MHz, 3 cavities at 1.5 MV "
+        "each = 4.5 MV, Q0/Qext, R/Q=89 ohm, RF acceptance 2.8%). "
         "The full physics document also carries one internal test note "
         "(2020-04-05 vertical test, 500 MHz CESR-B): it is measured test data, "
         "not a textbook citation, and is under 'internal_test_notes'. "
         "A physics topic returns title, summary_ko, equations[{name,expr,note}], "
+        "categories[] (for beam_dump_causes), "
         "citations[{id,title,authors,year,doi,url,locator,supports}], and caveats. "
         "A domain topic returns its JSON object or entry list. "
         "Parameters: topic (optional). topic='list' returns the topic index only. "
@@ -1480,9 +1484,9 @@ def postmortem_get_glossary(topic: Optional[str] = None) -> dict[str, Any]:
     topic: optional key. Domain keys: system_overview, interlock_hierarchy,
     trip_sequence, signals, naming, data_rules, answer_style, authority,
     caveats. Physics keys: cavity_figures_of_merit,
-    cavity_decay_after_rf_off, beam_energy_loss_after_rf_trip,
-    machine_protection_timescales, transverse_instability,
-    beam_dump_sequence_classes, pls2_operating_point. Omit to return both
+    cavity_decay_after_rf_off, mis_machine_interlock,
+    beam_energy_loss_after_rf_trip, transverse_instability,
+    beam_dump_causes, pls2_operating_point. Omit to return both
     documents (the physics library is under ``physics``).
     """
     if topic and topic.strip().lower() in {"list", "index", "topics", "__list__"}:

@@ -382,10 +382,10 @@ def sequence_features(
         cls, rule = "rf_trip", "3 cavities to <10%, cavity first"
     elif n_coll == 1 and cav_min is not None and cav_min < 0.1:
         cls, rule = "single_cavity_quench", "1 cavity to <10%, cavity first"
-    elif n_coll == 2 and cav_min is not None and cav_min < 0.1:
-        cls, rule = "dual_cavity_quench", "2 cavities to <10%, cavity first"
     else:
-        cls, rule = "mixed", "cavity sag without a clear order"
+        # 2-cavity collapse is not labelled a dual quench: it has not been
+        # observed at PLS-II and may be an RF station/common-point fault.
+        cls, rule = "mixed", "cavity sag/collapse without a unique cause pattern"
     out["class"] = cls
     out["class_rule"] = rule
     return out

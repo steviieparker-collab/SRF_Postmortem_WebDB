@@ -12,7 +12,7 @@
     "u0_mev_per_turn": 1.242,
     "v_total_mv": [
       4.5,
-      4.95
+      4.5
     ],
     "q0": [
       750000000.0,
@@ -27,8 +27,9 @@
       300,
       400
     ],
-    "momentum_acceptance_percent": 1.35,
-    "cavities": 3
+    "cavities": 3,
+    "rf_acceptance_percent": 2.8,
+    "acceptance_note": "PLS-II RF acceptance 2.8% at 3 GeV, 4.5 MV. Design requires dE/E > 2.7% for injection/lifetime; lattice momentum acceptance is not published as a single value."
   },
   "internal_test_notes": [
     {
@@ -389,23 +390,10 @@
         "LLRF",
         "forward power 140–190 kW",
         "reflected power 1–5 kW",
-        "cavity voltage 1.5–1.65 MV"
+        "1.5 MV/cavity operation (4.5 MV total)",
+        "1.65 MV/cavity in 400 mA top-up test"
       ],
-      "note": "운전 시 forward/reflect power."
-    },
-    {
-      "id": "pls2_momentum2001",
-      "category": "pls2",
-      "title": "Measurement of Touschek Lifetime in PLS Storage Ring",
-      "authors": "PLS team",
-      "year": 2001,
-      "publisher": "APAC2001 WEP021",
-      "locator": "RF acceptance and momentum acceptance",
-      "topics": [
-        "momentum acceptance 1.35% at 2.5 GeV",
-        "RF acceptance 1.58–2.18%"
-      ],
-      "note": "PLS 기준. PLS-II 3 GeV에는 근사값으로 사용."
+      "note": "운전점은 1.5 MV/cavity(4.5 MV). 1.65 MV/cavity(4.95 MV)는 400 mA top-up 시험 조건."
     },
     {
       "id": "pls2_srf2015",
@@ -422,6 +410,142 @@
         "window vacuum"
       ],
       "note": "고전류 운전과 결합 최적화."
+    },
+    {
+      "id": "pls2_srf2012",
+      "category": "pls2",
+      "title": "Preliminary Test of Superconducting RF Cavities for PLS-II",
+      "authors": "Y.U. Sohn et al.",
+      "year": 2012,
+      "publisher": "IPAC2012 WEPPC024",
+      "url": "https://proceedings.jacow.org/IPAC2012/papers/weppc024.pdf",
+      "locator": "Table 1: 4.5 MV, RF acceptance 2.8%, U0 1242 keV/turn",
+      "topics": [
+        "RF acceptance 2.8%",
+        "4.5 MV",
+        "1242 keV/turn"
+      ],
+      "note": "PLS-II 3 GeV RF/acceptance 기준."
+    },
+    {
+      "id": "pls2_mis2020",
+      "category": "pls2",
+      "title": "Fast Interlock System for Machine Protection in PLS-II",
+      "authors": "M. Lee, T. Ha, J. Lee, S.H. Ahn, I. Hwang",
+      "year": 2020,
+      "publisher": "J. Korean Phys. Soc. 76, 301-305",
+      "doi": "10.3938/jkps.76.301",
+      "url": "https://doi.org/10.3938/jkps.76.301",
+      "locator": "Fast interlock design and beam shut-off time",
+      "topics": [
+        "MIS",
+        "fast interlock",
+        "vacuum protection"
+      ],
+      "note": "PLS-II machine protection fast interlock."
+    },
+    {
+      "id": "pls2_mis_hmi2006",
+      "category": "pls2",
+      "title": "Development of Machine Interlock System HMI for PLS",
+      "authors": "B.R. Park, J.C. Yoon, J.W. Lee, H.S. Kang, J. Choi",
+      "year": 2006,
+      "publisher": "EPAC2006 THPCH121",
+      "url": "https://proceedings.jacow.org/e06/PAPERS/THPCH121.pdf",
+      "locator": "MIS PLC architecture, local/central units, operation modes",
+      "topics": [
+        "MIS",
+        "PLC",
+        "interlock chain"
+      ],
+      "note": "PLS/PLS-II MIS의 PLC 3계층 구조."
+    },
+    {
+      "id": "pls2_vacuum2015",
+      "category": "pls2",
+      "title": "Design and Operation Experience of PLS-II Vacuum System",
+      "authors": "T. Ha, C. Park",
+      "year": 2015,
+      "publisher": "KEK seminar, 2015-01-27",
+      "url": "https://www2.kek.jp/accl/legacy/seminar/file/PLS-II_vacuum_@KEK_20150127.pdf",
+      "locator": "MIS/thermocouple/gauge-controller beam-dump events",
+      "topics": [
+        "MIS",
+        "vacuum",
+        "thermocouple",
+        "gauge controller"
+      ],
+      "note": "2013 thermocouple, gauge controller MIS 트립 사례."
+    },
+    {
+      "id": "pls2_operation2019",
+      "category": "pls2",
+      "title": "Several Significant Fault Recoveries and the Operation Status of the PLS-II",
+      "authors": "M. Kim",
+      "year": 2019,
+      "publisher": "ARW2019",
+      "url": "https://indico.ihep.ac.cn/event/9154/contributions/107486/attachments/57851/66718/191114_ARW2019_KimM.pdf",
+      "locator": "Fault categories and fast orbit interlock 200 ms -> 10 ms",
+      "topics": [
+        "fault statistics",
+        "MPS",
+        "magnet",
+        "kicker",
+        "TFS",
+        "vacuum",
+        "control"
+      ],
+      "note": "PLS-II 운전 고장 통계와 fast interlock 업그레이드."
+    },
+    {
+      "id": "pls2_tfs2021",
+      "category": "pls2",
+      "title": "Transverse bunch-by-bunch feedback system for time-resolved experiments at PLS-II",
+      "authors": "J. Lee et al.",
+      "year": 2021,
+      "publisher": "J. Synchrotron Rad. 28, 1417-1422",
+      "doi": "10.1107/S1600577521005889",
+      "url": "https://doi.org/10.1107/S1600577521005889",
+      "locator": "Bunch-by-bunch transverse feedback, 500 MHz ADC, single-bunch control",
+      "topics": [
+        "TFS",
+        "coupled-bunch instability",
+        "transverse feedback"
+      ],
+      "note": "PLS-II TFS."
+    },
+    {
+      "id": "pls2_fofb2016",
+      "category": "pls2",
+      "title": "Fast Orbit Feedback System at the PLS-II Storage Ring",
+      "authors": "S.-C. Kim et al.",
+      "year": 2016,
+      "publisher": "IPAC2016 WEPOR004",
+      "doi": "10.18429/JACoW-IPAC2016-WEPOR004",
+      "url": "https://proceedings.jacow.org/ipac2016/papers/wepor004.pdf",
+      "locator": "96 BPMs, 48 correctors/plane, 813 Hz operation",
+      "topics": [
+        "FOFB",
+        "fast orbit feedback",
+        "orbit stability"
+      ],
+      "note": "PLS-II FOFB."
+    },
+    {
+      "id": "pls2_kicker2012",
+      "category": "pls2",
+      "title": "Injection Transient Motion at PLS-II",
+      "authors": "I. Hwang et al.",
+      "year": 2012,
+      "publisher": "IPAC2012 MOPPP056",
+      "url": "https://proceedings.jacow.org/IPAC2012/papers/moppp056.pdf",
+      "locator": "Four kicker magnets, single thyratron, 6.8 us pulse",
+      "topics": [
+        "kicker",
+        "thyratron",
+        "4-bump injection"
+      ],
+      "note": "PLS-II kicker pulse power 구조."
     }
   ],
   "topics": {
@@ -493,7 +617,7 @@
     },
     "cavity_decay_after_rf_off": {
       "title": "RF off 이후 Vgap 감쇠",
-      "summary_ko": "RF 전원이 꺼지면 캐비티 전압은 저장에너지가 벽 손실과 빔부하로 빠져나가며 감소한다. 전원이 없을 때의 자연 감쇠는 tau=2*QL/omega이고, 빔이 있으면 빔부하가 추가되어 초기 감쇠가 더 빨라진다. PLS-II는 Qext 1.5–1.7e5, Q0 7.5e8–1.1e9로 강결합되어 있어 자연 시정수는 약 95–108 us, 빔부하를 포함한 초기 시정수는 약 24–39 us(중심값 31 us)가 된다.",
+      "summary_ko": "RF 전원이 꺼지면 캐비티 전압은 저장에너지가 벽 손실과 빔부하로 빠져나가며 감소한다. 전원이 없을 때의 자연 감쇠는 tau=2*QL/omega이고, 빔이 있으면 빔부하가 추가되어 초기 감쇠가 더 빨라진다. PLS-II는 Qext 1.5–1.7e5, Q0 7.5e8–1.1e9, R/Q=89 Ω로 강결합되어 있어 자연 시정수는 약 95–108 us, 빔부하를 포함한 초기 시정수는 약 24–32 us(중심값 28 us)가 된다.",
       "equations": [
         {
           "name": "natural decay",
@@ -532,9 +656,74 @@
         "실제 감쇠는 빔전류가 줄면서 빔부하가 사라지는 과도과정이라 단일 지수함수가 아니다."
       ]
     },
+    "mis_machine_interlock": {
+      "title": "MIS(Machine Interlock System)와 빔덤프",
+      "summary_ko": "PLS-II의 기본 장치보호 시스템은 MIS(Machine Interlock System)다. MIS는 진공도, 빔튜브/빔라인 온도, 냉각수 유량·온도, 방사선량(BLM), 게이트밸브 상태 등을 감시하고, 임계값을 넘으면 빔 permit을 끊어 RF를 OFF시켜 빔을 덤프한다. 이때 MPS 전원을 끄지는 않는다. BLM은 빔손실을 모니터링하는 계측기이며, 방사선량이 한도를 넘으면 MIS 입력이 된다. MPS는 마그넷 전원장치 보호 시스템으로 MIS와 별개다. MPS 고장은 마그넷 전류를 끊어 빔 손실을 만들고, RF는 빔부하 감소로 뒤늦게 반응한다.",
+      "equations": [
+        {
+          "name": "MIS trip chain",
+          "expr": "sensor -> MIS PLC -> beam permit off -> RF off -> beam dump",
+          "note": "MIS는 보호/트리거"
+        },
+        {
+          "name": "fast interlock",
+          "expr": "IVU foil protection: 200 ms -> 10 ms",
+          "note": "ARW2019"
+        }
+      ],
+      "citations": [
+        {
+          "id": "pls2_mis2020",
+          "locator": "Fast interlock design and beam shut-off time",
+          "supports": "PLS-II MIS/fast interlock"
+        },
+        {
+          "id": "pls2_mis_hmi2006",
+          "locator": "MIS PLC architecture and interlock chain",
+          "supports": "MIS 3계층 구조"
+        },
+        {
+          "id": "pls2_vacuum2015",
+          "locator": "MIS/thermocouple/gauge events",
+          "supports": "진공/온도 MIS 트립 사례"
+        },
+        {
+          "id": "pls2_operation2019",
+          "locator": "Fault categories and fast interlock upgrade",
+          "supports": "운전 고장 통계, 200 ms -> 10 ms"
+        },
+        {
+          "id": "forck_juas",
+          "locator": "Section 8.3 Machine protection using beam loss detectors",
+          "supports": "BLM 모니터링 원리"
+        },
+        {
+          "id": "zhukov2010",
+          "locator": "BLM tutorial",
+          "supports": "BLM 종류와 신호"
+        },
+        {
+          "id": "holzer2016",
+          "locator": "LHC BLM requirements",
+          "supports": "BLM 동적범위/시간응답"
+        },
+        {
+          "id": "dehning2014",
+          "locator": "Machine protection instrumentation",
+          "supports": "BLM 시스템"
+        }
+      ],
+      "caveats": [
+        "MIS 트립은 RF를 OFF시키지만 MPS 전원을 끄지는 않는다. MPS는 별도 계통이다.",
+        "MIS는 원인 시스템이 아니라 보호/트리거인 경우가 많다. MIS 트립을 root cause로 기록하면 안 된다.",
+        "MPS와 MIS를 혼동하지 않는다. MPS는 마그넷 전원 보호, MIS는 진공/온도/냉각/방사선 기반 빔 permit이다.",
+        "BLM은 모니터링 계측기다. BLM 자체가 빔을 덤프하지 않고, 임계 초과 시 MIS가 동작한다.",
+        "PLS-II MIS의 실제 채널/임계값은 내부 문서가 필요하다."
+      ]
+    },
     "beam_energy_loss_after_rf_trip": {
       "title": "RF trip 이후 빔 에너지 손실",
-      "summary_ko": "RF가 꺼지면 빔은 매 회전마다 동기복사 에너지 U0를 잃는다. PLS-II는 U0=1.242 MeV/turn, T_rev=0.940 us이므로 dE/dt≈1.32 GeV/ms다. RF 감쇠를 무시한 상수 손실률 기준으로 1%는 약 23 us, 5%는 약 113 us, 10%는 약 227 us다. 실제로는 Vgap이 지수 감쇠하므로 손실률이 점점 커지고, 1.35% momentum acceptance까지는 cavity 90% 이후 약 75 us가 걸린다. 빔은 이 한계를 넘는 순간 손실되기 시작하므로, 캐비티 붕괴 후 수십~수백 us 안에 빔전류가 떨어진다.",
+      "summary_ko": "RF가 꺼지면 빔은 매 회전마다 동기복사 에너지 U0를 잃는다. PLS-II는 U0=1.242 MeV/turn, T_rev=0.940 us이므로 dE/dt≈1.32 GeV/ms다. PLS-II 3 GeV, 4.5 MV의 RF acceptance는 2.8%(84 MeV)이고, 설계 요구치는 ΔE/E > 2.7%다. lattice momentum acceptance는 별도 공개값이 없다. RF 감쇠를 무시한 상수 손실률 기준으로 1%는 약 23 us, 2.8%는 약 64 us다. 실제 Vgap 지수 감쇠(τ≈66 us)를 적분하면 2.8%까지 약 120 us가 걸리고, lattice acceptance가 더 작으면 그보다 이르다. 빔은 이 한계를 넘는 순간 손실되기 시작한다.",
       "equations": [
         {
           "name": "energy loss rate",
@@ -559,9 +748,9 @@
           "supports": "종방향 역학"
         },
         {
-          "id": "pls2_momentum2001",
-          "locator": "Momentum acceptance",
-          "supports": "PLS momentum acceptance 1.35% at 2.5 GeV"
+          "id": "pls2_srf2012",
+          "locator": "Table 1: RF acceptance 2.8%, 4.5 MV, 1242 keV/turn",
+          "supports": "PLS-II 3 GeV 기준"
         },
         {
           "id": "chao2023",
@@ -575,42 +764,13 @@
         }
       ],
       "caveats": [
-        "PLS-II 3 GeV의 momentum acceptance는 PLS 2.5 GeV 값의 근사다. DCCT/scope 응답이 관측 시간을 늘릴 수 있다."
-      ]
-    },
-    "machine_protection_timescales": {
-      "title": "BLM/MPS 시간 규모",
-      "summary_ko": "BLM은 손실 입자가 만드는 신호를 us–ms 안에 검출하고 MPS 인터록을 건다. LHC BLM은 100–200 us 반응으로 설계되며, PLS-II 같은 저장링도 인터록→RF off→빔 손실이 ms 이하로 진행될 수 있다. 따라서 1 Hz 아카이브는 원인과 결과를 같은 샘플에 묶어버리며, 순서를 알려면 fast scope나 turn-by-turn 계측이 필요하다.",
-      "equations": [],
-      "citations": [
-        {
-          "id": "forck_juas",
-          "locator": "Section 8.3 Machine protection using beam loss detectors",
-          "supports": "BLM 기반 기계보호"
-        },
-        {
-          "id": "zhukov2010",
-          "locator": "BLM tutorial",
-          "supports": "BLM 종류와 MPS 인터페이스"
-        },
-        {
-          "id": "holzer2016",
-          "locator": "LHC BLM requirements",
-          "supports": "100–200 us 반응과 동적범위"
-        },
-        {
-          "id": "dehning2014",
-          "locator": "Machine protection instrumentation",
-          "supports": "LHC BLM 시스템"
-        }
-      ],
-      "caveats": [
-        "PLS-II의 실제 BLM/MPS 반응 시간은 문서화된 값이 아니라 설계 일반론이다."
+        "RF acceptance 2.8%는 4.5 MV 기준 상한값이다. 설계 요구치는 ΔE/E > 2.7%이고, lattice momentum acceptance는 별도 측정값이 없어 더 작을 수 있다.",
+        "DCCT/scope 응답이 관측 시간을 늘릴 수 있다."
       ]
     },
     "transverse_instability": {
       "title": "횡방향 불안정과 궤도",
-      "summary_ko": "횡방향 불안정은 betatron 진동 진폭이 지수적으로 자라며 BLM 손실을 만든다. 성장 시간은 수 ms~수십 ms일 수 있어 1 Hz BPM(1초 평균)으로는 직접 볼 수 없다. 1 Hz/10 Hz BPM에서 보이는 것은 초 단위의 궤도 drift나 corrector/FOFB 이상이며, 이는 ms급 불안정과 구분해야 한다.",
+      "summary_ko": "횡방향 불안정은 betatron 진동 진폭이 지수적으로 자라며 빔손실을 만든다. PLS-II는 TFS(bunch-by-bunch transverse feedback)로 coupled-bunch instability를 억제하고, FOFB(96 BPM, 48 corrector/plane, 813 Hz)로 저장빔 궤도를 안정화한다. 성장 시간은 수 ms~수십 ms일 수 있어 1 Hz/10 Hz BPM으로는 직접 볼 수 없다. 1 Hz/10 Hz BPM에서 보이는 것은 초 단위 궤도 drift나 corrector/FOFB 이상이며, ms급 불안정과 구분해야 한다.",
       "equations": [
         {
           "name": "exponential growth",
@@ -635,6 +795,16 @@
           "supports": "집단 불안정"
         },
         {
+          "id": "pls2_tfs2021",
+          "locator": "Bunch-by-bunch transverse feedback at PLS-II",
+          "supports": "TFS"
+        },
+        {
+          "id": "pls2_fofb2016",
+          "locator": "96 BPMs, 48 correctors/plane, 813 Hz",
+          "supports": "FOFB"
+        },
+        {
           "id": "forck_juas",
           "locator": "Beam instrumentation",
           "supports": "BPM과 turn-by-turn 계측"
@@ -651,43 +821,163 @@
         }
       ],
       "caveats": [
-        "turn-by-turn BPM 데이터가 없으면 ms급 성장 시간을 확정할 수 없다."
+        "turn-by-turn BPM 데이터가 없으면 ms급 성장 시간을 확정할 수 없다.",
+        "TFS는 coupled-bunch instability 억제, FOFB는 closed-orbit 안정화로 역할이 다르다."
       ]
     },
-    "beam_dump_sequence_classes": {
-      "title": "빔덤프 인과 순서의 세 가지 유형",
-      "summary_ko": "Fast scope 313건에서 (1) 3개 캐비티가 수 us 안에 동시에 붕괴하고 캐비티가 빔보다 약 300 us 앞서는 RF-first, (2) 빔이 먼저 사라지고 캐비티가 부분적으로(60–75%) 하강하며 forward가 유지되는 beam-first, (3) 캐비티 변화 없이 빔만 사라지는 beam-only가 구분된다. 1개/2개 캐비티만 붕괴하는 quench 유형도 별도로 존재한다.",
+    "beam_dump_causes": {
+      "title": "빔덤프 원인 분류 (PLS-II 운전 경험)",
+      "summary_ko": "Fast scope 313건의 측정 패턴(rf_trip, beam_first_rf_trip, beam_only, single_cavity_quench, mixed)은 인과 순서의 서술이지 root cause 분류가 아니다. PLS-II 운전 경험과 고장 통계에서는 큰 원인을 RF, MPS, MIS, CONTROL, BEAMLINE, MECHVAC, KICKER, MAGNET, 외부/기타로 나눈다. 이 분류는 교과서가 아니라 운전 경험에 기반하며, 머신 구성이 바뀌면 달라질 수 있다.",
       "equations": [],
+      "categories": [
+        {
+          "key": "rf_single_station",
+          "title_ko": "RF 단일 station 고장",
+          "summary_ko": "하나의 RF station(LLRF-HPRF-Cavity=CM)에서 fault. 해당 station RF off, 나머지 2개 cavity가 beam loading을 감당하려다 power limit에 걸려 Vgap 하강/phase 이탈 -> 빔 에너지 손실 -> 궤도 축소 -> 덤프. 흩어진 빔이 진공/온도 상승을 만들어 MIS를 추가로 트립할 수 있다. Beam loading 없는 CM에 고전력이 인가되면 BCC01_Pump out box(ceramic window) 진공과 BPR01 He 용기 압력이 상승해 인터록이 발생할 수 있다.",
+          "signature_ko": "한 station만 급격히 붕괴, 나머지는 부분 sag; cavity가 beam보다 먼저; 이후 MIS/진공/He 압력 트립 가능",
+          "causes_ko": "LLRF, HPRF, CM 각각"
+        },
+        {
+          "key": "rf_common",
+          "title_ko": "RF 공통점 고장 (전 station 동시 off)",
+          "summary_ko": "각 RF station 앞 common point fault. RF interlock controller 또는 CG(Cryogenic) 고장. CG fault 시 CM에 액체헬륨 정상 압력 공급 불가 -> 각 CM BPR01 압력 인터록 -> 모든 RF 동시 OFF. 매우 드물다.",
+          "signature_ko": "3개 cavity 동시 붕괴, cavity가 beam보다 먼저; BPR01/CM 인터록 동반 가능",
+          "causes_ko": "RF interlock controller, CG"
+        },
+        {
+          "key": "mps",
+          "title_ko": "MPS(대용량 마그넷 전원) 고장",
+          "summary_ko": "Bending magnet 등 대용량 MPS 고장 시 빔덤프. 소용량 MPS보다 영향이 크다. 빔이 즉시 죽기보다 수백 ms 동안 서서히 흩어지며 beam current가 RF보다 먼저 감소하는 형태.",
+          "signature_ko": "beam current가 RF/cavity보다 먼저 감소; 수백 ms 스케일; cavity는 beam loading 감소로 부분 sag",
+          "causes_ko": "대용량 magnet power supply"
+        },
+        {
+          "key": "mis",
+          "title_ko": "MIS 트립 (진공/온도/냉각/방사선)",
+          "summary_ko": "빔튜브 내부 온도, 냉각수 flow, 진공도, 빔라인 온도/진공/flow, 방사선량 등이 임계 초과 -> MIS가 beam permit을 끊고 RF off(MPS 전원은 유지). Beamline과 MechVac의 상당수가 여기에 포함. MIS는 root cause가 아니라 보호 트리거일 수 있다.",
+          "signature_ko": "RF off 전에 진공/온도/방사선/flow 신호 상승; beam loss가 먼저일 수도 있음",
+          "causes_ko": "vacuum, temperature, LCW, radiation"
+        },
+        {
+          "key": "control",
+          "title_ko": "CONTROL/TFS/FOFB/feedback",
+          "summary_ko": "TFS 또는 feedback system에 의한 빔 불안정성 증가 -> 빔이 흩어짐 -> MIS 또는 beam loss. 빨리 흩어져 진공/온도/방사선이 빨리 오르면 MIS, 서서히 흩어지면 beam loss.",
+          "signature_ko": "beam current 감소가 먼저, RF는 유지되거나 부분 sag; BPM/TFS/FOFB 로그 확인 필요",
+          "causes_ko": "TFS, FOFB, feedback"
+        },
+        {
+          "key": "beamline",
+          "title_ko": "BEAMLINE",
+          "summary_ko": "빔라인 온도/진공/냉각수/방사선에 의한 MIS가 대부분. Photon beam에 의한 온도/진공 상승 포함.",
+          "signature_ko": "MIS 트립; RF 자체는 정상",
+          "causes_ko": "beamline vacuum/temperature/LCW"
+        },
+        {
+          "key": "mechvac",
+          "title_ko": "MECHVAC (CM 진공/냉각)",
+          "summary_ko": "Beam loss와 CM 진공 인터록이 동시에 발생할 수 있다. 빔 손실 구역이 cavity 근방이면 CM 인터록으로 죽는 경우도 있다. SR#12 Cell(CM1/2 설치 구역) 사례. 보통은 MIS.",
+          "signature_ko": "CM 진공/He 압력 인터록 + beam loss 동시 가능",
+          "causes_ko": "CM vacuum, He pressure, cooling"
+        },
+        {
+          "key": "kicker",
+          "title_ko": "KICKER 펄스전원",
+          "summary_ko": "PLS-II Kicker는 Linac 빔을 저장링에 넣는 4-bump 방식. 4개 magnet이 하나의 thyratron 펄스전원에 연결되어 phase만 다르게 인가된다. Kicker fault는 대부분 pulse power supply(thyratron) 고장이며 빔이 통째로 덤프된다.",
+          "signature_ko": "전체 빔 급격 손실, RF/cavity는 정상",
+          "causes_ko": "thyratron/pulse power supply"
+        },
+        {
+          "key": "magnet",
+          "title_ko": "MAGNET (temp/water flow)",
+          "summary_ko": "마그넷 고장은 대부분 temp sensor나 water flow. 차단되는 것은 MPS 전원이므로 결과 패턴은 MPS 고장과 거의 같다.",
+          "signature_ko": "MPS와 동일: beam current가 RF보다 먼저 감소",
+          "causes_ko": "magnet temp sensor, LCW flow"
+        },
+        {
+          "key": "psi",
+          "title_ko": "PSI (Personnel Safety Interlock)",
+          "summary_ko": "방사선 안전/출입 통제용 PSI가 동작하면 빔을 덤프한다. 장치 고장이 아니라 인명 보호 인터록이므로 MIS/MPS와 구분한다.",
+          "signature_ko": "PSI/출입/방사선 안전 로그; RF/MPS 자체는 정상",
+          "causes_ko": "access, radiation safety"
+        },
+        {
+          "key": "linac",
+          "title_ko": "LINAC",
+          "summary_ko": "Linac RF/마그넷/변조기 고장은 주로 입사(injection)에 영향을 준다. Top-up 중이면 입사 중단/빔 손실로 이어질 수 있으나, 저장빔 자체는 유지되는 경우가 많다.",
+          "signature_ko": "Linac interlock/입사 로그; 저장빔 RF는 정상",
+          "causes_ko": "linac RF, modulator, injection"
+        },
+        {
+          "key": "external",
+          "title_ko": "외부/기타 (power sag, earthquake, unknown)",
+          "summary_ko": "전력 sag(67 ms/4-cycle), 지진, linac, unknown 등. ARW2019 고장 통계에 포함된 범주.",
+          "signature_ko": "외부 이벤트 로그/유틸리티 기록 확인",
+          "causes_ko": "utility, earthquake, linac, unknown"
+        }
+      ],
+      "mapping_ko": "측정 class와 원인은 1:1이 아니다. rf_trip은 rf_common 또는 rf_single_station의 결과일 수 있고, beam_first_rf_trip은 mps/magnet/control의 결과일 수 있다. beam_only는 mis/control/beamline/kicker일 수 있다. Fast scope만으로 root cause를 확정하지 말고 MIS/MPS/LLRF/CG 로그를 함께 본다.",
       "citations": [
         {
-          "id": "padamsee2008",
-          "locator": "Part II, quench and cavity performance",
-          "supports": "단일 캐비티 quench"
+          "id": "pls2_operation2019",
+          "locator": "Fault categories and operation status",
+          "supports": "운전 경험 기반 원인 범주"
         },
         {
-          "id": "forck_juas",
-          "locator": "Section 8.3",
-          "supports": "RF-first의 기계보호 연쇄"
+          "id": "pls2_llrf2019",
+          "locator": "RF trip signatures and LLRF",
+          "supports": "RF station fault"
         },
         {
-          "id": "wiedemann2015",
-          "locator": "Longitudinal dynamics",
-          "supports": "beam-first/beam-only의 빔 역학"
+          "id": "pls2_kicker2012",
+          "locator": "Four kickers, single thyratron",
+          "supports": "kicker fault"
+        },
+        {
+          "id": "pls2_tfs2021",
+          "locator": "Transverse feedback",
+          "supports": "control/TFS"
+        },
+        {
+          "id": "pls2_fofb2016",
+          "locator": "Fast orbit feedback",
+          "supports": "control/FOFB"
+        },
+        {
+          "id": "pls2_mis2020",
+          "locator": "Fast interlock",
+          "supports": "MIS"
+        },
+        {
+          "id": "pls2_vacuum2015",
+          "locator": "Vacuum MIS events",
+          "supports": "MIS/진공"
+        },
+        {
+          "id": "pls2_srf2013",
+          "locator": "CM/SRF commissioning",
+          "supports": "RF/CM"
+        },
+        {
+          "id": "pls2_srf2015",
+          "locator": "400 mA operation",
+          "supports": "RF/CM 고전류 운전"
         }
       ],
       "caveats": [
-        "Class는 fast scope 313건에서 측정한 서술적 분류이며, 원인 라벨과 1:1 대응하지 않는다."
+        "이 분류는 교과서가 아니라 PLS-II 운전 경험/고장 통계 기반이다.",
+        "MIS는 보호 트리거이고 root cause는 별도일 수 있다.",
+        "Fast scope 313건의 class는 측정 패턴이며 원인 라벨이 아니다."
       ]
     },
     "pls2_operating_point": {
       "title": "PLS-II 운전점",
-      "summary_ko": "PLS-II는 3 GeV, 400 mA, 499.973 MHz, 3개 SRF cavity로 운전된다. 총 gap voltage는 공칭 4.5 MV이고, 400 mA top-up 운전에서는 여유를 두고 4.95 MV(캐비티당 1.65 MV)까지 올린다. 회당 에너지 손실은 1.242 MeV, 회전주파수는 1.0638 MHz다. 300–400 mA에서 캐비티는 강하게 결합되어 Qext 1.5–1.7e5, Q0 7.5e8–1.1e9, R/Q=89 Ω를 보인다.",
+      "summary_ko": "PLS-II는 3 GeV, 400 mA, 499.973 MHz, 3개 SRF cavity로 운전된다. 현재 각 cavity는 1.5 MV로 운전하며 총 4.5 MV다. 400 mA top-up 시험에서는 여유를 두고 4.95 MV(1.65 MV/cavity)까지 올린 적이 있으나 운전점은 아니다. 회당 에너지 손실은 1.242 MeV, 회전주파수는 1.0638 MHz, RF acceptance는 2.8%다. 300–400 mA에서 Qext 1.5–1.7e5, Q0 7.5e8–1.1e9, R/Q=89 Ω를 보인다.",
       "equations": [],
       "citations": [
         {
           "id": "pls2_status2016",
           "locator": "Table 1",
-          "supports": "3 GeV, 400 mA, 499.973 MHz, 3 cavities"
+          "supports": "3 GeV, 400 mA, 499.973 MHz, 3 cavities, 4.5 MV"
         },
         {
           "id": "pls2_srf2013",
@@ -696,18 +986,23 @@
         },
         {
           "id": "pls2_llrf2019",
-          "locator": "Cavity voltage and power",
-          "supports": "1.5–1.65 MV/cavity, forward power"
+          "locator": "Cavity voltage and power at 4.5 MV",
+          "supports": "1.5 MV/cavity 운전"
         },
         {
           "id": "pls2_srf2015",
           "locator": "400 mA operation",
           "supports": "고전류 결합 최적화"
+        },
+        {
+          "id": "pls2_srf2012",
+          "locator": "Table 1: RF acceptance 2.8%",
+          "supports": "RF acceptance"
         }
       ],
       "caveats": [
         "운전점은 시기별로 조금씩 다르다. 이벤트별 실제 값은 아카이브 PV를 봐야 한다.",
-        "R/Q=89 Ω은 fundamental mode 값이다. PLS-II 설계 문헌의 'R/Q 100 Ω'은 HOM R/Q를 낮춘 문맥이므로 혼동하지 않는다."
+        "1.5 MV/cavity가 현재 운전점이고, 1.65 MV/cavity(4.95 MV)는 400 mA top-up 시험 조건이다."
       ]
     }
   },
@@ -718,7 +1013,7 @@
       "citations": [
         "cavity_decay_after_rf_off",
         "beam_energy_loss_after_rf_trip",
-        "machine_protection_timescales",
+        "mis_machine_interlock",
         "pls2_operating_point"
       ]
     },
@@ -728,7 +1023,7 @@
       "citations": [
         "cavity_figures_of_merit",
         "transverse_instability",
-        "beam_dump_sequence_classes"
+        "beam_dump_causes"
       ]
     },
     "beam_only": {
@@ -736,30 +1031,25 @@
       "summary_ko": "캐비티는 20% 아래로 내려가지 않는다. RF는 원인이 아니며 beam line, kicker, 궤도, 횡방향 손실을 봐야 한다.",
       "citations": [
         "transverse_instability",
-        "machine_protection_timescales"
+        "mis_machine_interlock",
+        "beam_dump_causes"
       ]
     },
     "single_cavity_quench": {
       "title_ko": "단일 캐비티 quench",
-      "summary_ko": "1개 캐비티만 0으로 붕괴하고 캐비티가 빔보다 먼저 움직인다. 해당 CM의 quench를 의심하고 QUEN 채널과 그 캐비티의 forward/reflect를 확인한다.",
+      "summary_ko": "1개 캐비티만 0으로 붕괴하고 캐비티가 빔보다 먼저 움직인다. 해당 CM의 quench 또는 RF station fault를 의심하고 QUEN 채널과 그 캐비티의 forward/reflect를 확인한다.",
       "citations": [
         "cavity_decay_after_rf_off",
-        "padamsee2008"
-      ]
-    },
-    "dual_cavity_quench": {
-      "title_ko": "2개 캐비티 quench",
-      "summary_ko": "2개 캐비티가 붕괴하고 캐비티가 빔보다 먼저 움직인다. 공통 냉각/진공/LLRF 이상 또는 연쇄 quench를 의심한다.",
-      "citations": [
-        "cavity_decay_after_rf_off",
-        "padamsee2008"
+        "padamsee2008",
+        "mis_machine_interlock"
       ]
     },
     "mixed": {
       "title_ko": "혼합/판정 보류",
-      "summary_ko": "캐비티 변화는 있으나 순서가 명확하지 않다. fast scope의 cavity/forward/reflect와 digital 전이를 함께 봐야 한다.",
+      "summary_ko": "캐비티 변화는 있으나 순서가 명확하지 않거나, 2개 캐비티만 붕괴한 경우다. 2개 붕괴를 dual quench로 단정하지 말고 RF station/common point, LLRF/HPRF 로그를 확인한다.",
       "citations": [
-        "beam_dump_sequence_classes"
+        "beam_dump_causes",
+        "mis_machine_interlock"
       ]
     }
   },

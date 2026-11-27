@@ -78,12 +78,15 @@
                     <tr><td class="text-secondary">Revolution frequency</td><td>{{ pls2.f_rev_mhz }} MHz</td></tr>
                     <tr><td class="text-secondary">RF frequency</td><td>{{ pls2.f_rf_mhz }} MHz (harmonic {{ pls2.harmonic }})</td></tr>
                     <tr><td class="text-secondary">Energy loss per turn</td><td>{{ pls2.u0_mev_per_turn }} MeV</td></tr>
-                    <tr><td class="text-secondary">Total cavity voltage</td><td>{{ pls2.v_total_mv | join(' – ') }} MV ({{ pls2.cavities }} cavities)</td></tr>
+                    <tr><td class="text-secondary">Total cavity voltage</td><td>{{ pls2.v_total_mv[0] }} MV ({{ pls2.v_total_mv[0] / pls2.cavities }} MV/cavity, {{ pls2.cavities }} cavities)</td></tr>
                     <tr><td class="text-secondary">Q0</td><td>{{ pls2.q0 | join(' – ') }}</td></tr>
                     <tr><td class="text-secondary">Qext</td><td>{{ pls2.qext | join(' – ') }}</td></tr>
                     <tr><td class="text-secondary">R/Q</td><td>{{ pls2.r_over_q_ohm }} Ω</td></tr>
                     <tr><td class="text-secondary">Beam current</td><td>{{ pls2.beam_current_ma | join(' – ') }} mA</td></tr>
-                    <tr><td class="text-secondary">Momentum acceptance</td><td>{{ pls2.momentum_acceptance_percent }} % (PLS 2.5 GeV 기준)</td></tr>
+                    <tr><td class="text-secondary">RF acceptance</td><td>{{ pls2.rf_acceptance_percent }} % (PLS-II 3 GeV, 4.5 MV)</td></tr>
+                    {% if pls2.acceptance_note %}
+                    <tr><td></td><td class="cite-meta">{{ pls2.acceptance_note }}</td></tr>
+                    {% endif %}
                 </tbody>
             </table>
         </div>
@@ -190,6 +193,24 @@
                 </div>
                 {% endif %}
 
+                {% if t.categories %}
+                <div class="mb-3">
+                    <div class="text-secondary small mb-1"><strong>Categories ({{ t.categories | length }})</strong></div>
+                    {% for c in t.categories %}
+                    <div class="border-start border-secondary ps-3 mb-2">
+                        <div><strong>{{ c.title_ko }}</strong> <span class="cite-meta">{{ c.key }}</span></div>
+                        <div class="small">{{ c.summary_ko }}</div>
+                        {% if c.signature_ko %}<div class="cite-meta">관측 단서: {{ c.signature_ko }}</div>{% endif %}
+                        {% if c.causes_ko %}<div class="cite-meta">주요 원인: {{ c.causes_ko }}</div>{% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if t.mapping_ko %}
+                <div class="alert alert-secondary py-2 small">{{ t.mapping_ko }}</div>
+                {% endif %}
+
                 {% if t.citations %}
                 <div class="mb-3">
                     <div class="text-secondary small mb-1"><strong>Citations ({{ t.citations | length }})</strong></div>
@@ -226,8 +247,11 @@
     {% endfor %}
 </div>
 
-<!-- Sequence classes -->
-<h5 class="mb-2"><i class="bi bi-diagram-3 me-1"></i>Sequence classes</h5>
+<!-- Sequence classes (measured patterns, not root cause) -->
+<h5 class="mb-1"><i class="bi bi-diagram-3 me-1"></i>Sequence patterns (fast scope)</h5>
+<div class="text-secondary small mb-2">
+    측정된 인과 순서 패턴입니다. 원인 분류는 physics topic <code>beam_dump_causes</code>를 보세요.
+</div>
 <div class="card mb-4">
     <div class="card-body py-2">
         <div class="table-responsive">
