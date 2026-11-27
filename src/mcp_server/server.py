@@ -471,7 +471,10 @@ def _glossary_index() -> dict[str, Any]:
                 key: {
                     "title": value.get("title"),
                     "summary_ko": value.get("summary_ko"),
-                    "citation_ids": [c.get("id") for c in value.get("citations", [])],
+                    "citation_ids": [
+                        c.get("id") if isinstance(c, dict) else c
+                        for c in value.get("citations", [])
+                    ],
                 }
                 for key, value in topics.items()
             },
