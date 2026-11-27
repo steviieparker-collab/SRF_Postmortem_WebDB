@@ -21,6 +21,15 @@ from mcp.server.mcpserver import MCPServer, Image
 from mcp.types import TextContent
 
 from ..alarm.event_link import fetch_pv_range, resolve_t0
+from ..features.analysis import (
+    analysis_guide,
+    analyze_cohort,
+    build_event_analysis,
+    find_examples,
+    image_metadata,
+    route_question,
+    search_notes,
+)
 from ..features.physics import (
     interpret_sequence,
     normalize_sequence,
@@ -85,40 +94,52 @@ def _with_images(
     payload: dict[str, Any],
     event_id: str,
     scope: Optional[str] = None,
+    image_meta: Optional[list[dict[str, Any]]] = None,
 ) -> Any:
     """Attach image metadata and MCP Image blocks to a tool result.
 
     The first content block stays JSON text so existing clients keep parsing
     ``content[0].text``; image blocks follow for clients that support MCP images.
+    Each image metadata record includes ``visible_channels`` and a panel caption
+    so an agent does not mistake the forward panel for the whole event.
     """
-    images = _waveform_image_paths(event_id)
+    paths = _waveform_image_paths(event_id)
     selected = _parse_image_scopes(scope)
     if selected is not None:
-        images = {k: v for k, v in images.items() if k in selected}
-    payload["images"] = [
-        {
-            "scope": key,
-            "mime_type": "image/jpeg",
-            "source": str(path.relative_to(_ROOT)),
-            "url": f"/api/waveforms/{event_id}/{key}_narrow.jpg",
-        }
-        for key, path in images.items()
-    ]
-    payload["image_available"] = bool(images)
-    if not images:
+        paths = {k: v for k, v in paths.items() if k in selected}
+    meta_by_scope = {
+        str(item.get("scope")): item
+        for item in (image_meta or image_metadata(event_id))
+        if item.get("scope")
+    }
+    output_meta: list[dict[str, Any]] = []
+    blocks: list[Any] = []
+    for key, path in paths.items():
+        meta = dict(meta_by_scope.get(key) or {})
+        meta.setdefault("event_id", event_id)
+        meta.setdefault("scope", key)
+        meta.setdefault("mime_type", "image/jpeg")
+        meta.setdefault("source", str(path.relative_to(_ROOT)))
+        meta.setdefault(
+            "url", f"/api/waveforms/{event_id}/{key}_narrow.jpg"
+        )
+        output_meta.append(meta)
+        blocks.append(Image(path=path))
+    payload["images"] = output_meta
+    payload["image_available"] = bool(output_meta)
+    if not output_meta:
         payload["image_hint"] = (
             "No pre-rendered narrow-scope JPEG for this event. "
             "Use the event URL or regenerate waveform images in the web pipeline."
         )
         return payload
-    blocks: list[Any] = [
+    return [
         TextContent(
             type="text",
             text=json.dumps(payload, ensure_ascii=False, default=str),
-        )
+        ),
+        *blocks,
     ]
-    blocks.extend(Image(path=path) for path in images.values())
-    return blocks
 
 server = MCPServer(
     "srf-postmortem",
@@ -130,9 +151,15 @@ server = MCPServer(
         "similar events, and (for supported PVs) Archiver time-series summaries."
     ),
     instructions=(
-        "Use the postmortem_* tools. For single-event questions call "
-        "postmortem_get_event first. For waveform/quench shape questions call "
-        "postmortem_analyze_waveform and postmortem_find_similar_waveforms "
+        "Use the postmortem_* tools. Call postmortem_route_question when unsure "
+        "which tool to start with. For causal single-event questions call "
+        "postmortem_explain_event first (it returns primary_interlock, "
+        "quench_unit, tau_reliable, warnings, claim_checks, and image panel "
+        "metadata); use postmortem_get_event for notes/alarms/attachments. "
+        "For whole-dataset patterns call postmortem_analyze_cohort; for curated "
+        "teaching examples call postmortem_find_examples. For waveform/quench "
+        "shape questions call postmortem_analyze_waveform and "
+        "postmortem_find_similar_waveforms "
         "(events with parquet only; call postmortem_get_capabilities for current "
         "coverage). For integrated quench questions call "
         "postmortem_analyze_quench or postmortem_compare_quench_events. "
@@ -153,6 +180,11 @@ server = MCPServer(
         "Before interpreting waveform features or writing a causal explanation, "
         "call postmortem_get_glossary (or read postmortem://domain-guide) for the "
         "SRF interlock hierarchy, signal definitions, and the first-interlock rule. "
+        "Treat physics.class as an observational pattern, not a root-cause label. "
+        "If tau_reliable=false, do not quote a single decay tau. "
+        "Do not use RDY_KSU# as root cause when QUEN_CM#, ARC_CM#, VAC_CM#, or "
+        "another CM signal is earlier. Read postmortem_get_capabilities."
+        "analysis_contract before answering. "
         "Device-name abbreviations are in postmortem_get_capabilities.abbreviations "
         "and postmortem_get_glossary(topic='abbreviations'): CM, LLRF, HPRF, KSU, "
         "IC, MIS, PSI, MPS, BLM, TFS, FOFB, BCL01/BCL03, BPR01, BPS01, and the "
@@ -193,6 +225,13 @@ _CAVEATS = [
     "A cavity probe voltage that dips and then rises is not necessarily "
     "'recovering'; it can oscillate because of beam phase slip and beam loading. "
     "PLS-II over-input protection limits forward power to about 1.2x nominal.",
+    "physics.class is an observational pattern, not a root cause. Use "
+    "postmortem_explain_event for primary_interlock, quench_unit, tau_reliable, "
+    "warnings, and claim_checks.",
+    "If tau_reliable=false (90-10% span is long/two-stage), do not quote a single "
+    "decay tau. Report the span and per-cavity values instead.",
+    "RDY_KSU# can be downstream of QUEN_CM#, ARC_CM#, VAC_CM#, or beam loss. "
+    "Check the earliest digital before naming a root cause.",
 ]
 
 TOOL_DESCRIPTIONS = {
@@ -233,7 +272,38 @@ TOOL_DESCRIPTIONS = {
         "An empty similar[] means the DB has no event_links for this event, not an API error. "
         "Set include_images=true (or waveform_image=true) to append MCP Image blocks "
         "for the pre-rendered forward/cavity/reflect JPEGs; image_scope=all|forward|"
-        "cavity|reflect or a comma list. JSON stays in content[0].text.",
+        "cavity|reflect or a comma list. JSON stays in content[0].text. "
+        "image records include event_id, visible_channels, and panel caption.",
+    "postmortem_explain_event":
+        "Preferred single-event explanation tool. Returns a deterministic evidence "
+        "bundle: event, manual-vs-auto classification, primary_interlock, quench "
+        "unit/source, per-cavity sequence, tau_reliable, per-cavity tau, root_cause "
+        "from notes, mechanism steps, warnings, claim_checks, required_disclosures, "
+        "and image panel metadata. Use this before writing any causal explanation. "
+        "The physics.class is explicitly marked observational; do not use it as a "
+        "root-cause label. Set include_images=true to append MCP Image blocks.",
+    "postmortem_analyze_cohort":
+        "Summarize a cohort of waveform events by class, quench_unit, first "
+        "interlock, fault_family, year range, tau_reliable, beam delay range, or "
+        "waveform availability. Returns counts/distributions, median/min/max beam "
+        "delay, and representative examples sorted by delay. Use this for "
+        "whole-dataset patterns; then call postmortem_explain_event for examples. "
+        "Do not use vector search for counts.",
+    "postmortem_find_examples":
+        "Return curated teaching examples by topic. Topics include "
+        "cm_single_fault (CM ARC/flowmeter, not quench), ksu_single_station, and "
+        "quench_propagation (with explicit cautions). Each example includes why_clean, "
+        "caution, summary, warnings, and waveform image metadata. Use this before "
+        "choosing an event as a canonical example.",
+    "postmortem_search_notes":
+        "Hybrid lexical + dense retrieval over operator event notes. Use it to find "
+        "similar wording/cases, not for counts, timing, or causal proof. Returns "
+        "event_id, timestamp, fault_type, notes, dense/lexical scores, citation, and "
+        "url. Falls back to lexical search if onnxruntime/model files are unavailable.",
+    "postmortem_route_question":
+        "Rule-based routing hint for a natural-language question. Returns recommended "
+        "tools, glossary topics, suggested filters, cautions, and a reminder that the "
+        "route is not an answer. Use it when unsure which MCP tools to call first.",
     "postmortem_aggregate_events":
         "Count events grouped by one or more fields. group_by accepts year, month "
         "(YYYY-MM), fault_type, case_id, auto_case_id, auto_fault_type, "
@@ -489,6 +559,45 @@ TOOL_META = {
         "examples": [
             {"event_ids": ["20240907_025313", "20241002_171719",
                            "20251205_014253"]},
+        ],
+    },
+    "postmortem_explain_event": {
+        "response_shape": "event_explanation",
+        "examples": [
+            {"event_id": "20261013_212628"},
+            {"event_id": "20251205_014253"},
+            {"event_id": "20261013_212628", "include_images": True},
+        ],
+    },
+    "postmortem_analyze_cohort": {
+        "response_shape": "cohort_analysis",
+        "examples": [
+            {"fault_family": "cm_arc", "limit": 5},
+            {"class_name": "single_cavity_quench", "tau_reliable": True},
+            {"first_interlock": "RDY_KSU3", "min_delay_us": 200,
+             "max_delay_us": 400},
+        ],
+    },
+    "postmortem_find_examples": {
+        "response_shape": "example_registry",
+        "examples": [
+            {},
+            {"topic": "cm_single_fault"},
+            {"topic": "quench_propagation"},
+        ],
+    },
+    "postmortem_search_notes": {
+        "response_shape": "note_search",
+        "examples": [
+            {"query": "KSU water flow low", "top_k": 5},
+            {"query": "CM quench propagation", "top_k": 5},
+        ],
+    },
+    "postmortem_route_question": {
+        "response_shape": "question_route",
+        "examples": [
+            {"question": "CM 하나 fault로 빔덤프가 어떻게 발생하나?"},
+            {"question": "KSU 인터록과 Kicker 인터록의 차이는?"},
         ],
     },
     "postmortem_get_glossary": {
@@ -759,9 +868,15 @@ def postmortem_get_capabilities() -> dict[str, Any]:
                 "citations, and caveats. topic='list' returns the full index."
             ),
         },
+        "analysis_contract": analysis_guide(),
         "tools": [
             "postmortem_search_events",
             "postmortem_get_event",
+            "postmortem_explain_event",
+            "postmortem_analyze_cohort",
+            "postmortem_find_examples",
+            "postmortem_search_notes",
+            "postmortem_route_question",
             "postmortem_aggregate_events",
             "postmortem_similar_events",
             "postmortem_search_alarm_catalog",
@@ -1133,6 +1248,99 @@ def postmortem_get_event(
     if _truthy(include_images) or _truthy(waveform_image):
         return _with_images(result, str(event_id), image_scope)
     return result
+
+
+@server.tool(description=TOOL_DESCRIPTIONS["postmortem_explain_event"],
+             meta=TOOL_META["postmortem_explain_event"])
+def postmortem_explain_event(
+    event_id: str,
+    include_images: Union[bool, str] = False,
+    image_scope: Optional[str] = None,
+) -> Any:
+    """Return a deterministic evidence bundle for one event."""
+    result = build_event_analysis(str(event_id))
+    if _truthy(include_images):
+        return _with_images(
+            result,
+            str(event_id),
+            image_scope,
+            image_meta=result.get("images") or [],
+        )
+    return result
+
+
+@server.tool(description=TOOL_DESCRIPTIONS["postmortem_analyze_cohort"],
+             meta=TOOL_META["postmortem_analyze_cohort"])
+def postmortem_analyze_cohort(
+    class_name: Optional[str] = None,
+    quench_unit: Optional[str] = None,
+    first_interlock: Optional[str] = None,
+    fault_family: Optional[str] = None,
+    year_from: Optional[int] = None,
+    year_to: Optional[int] = None,
+    tau_reliable: Optional[bool] = None,
+    min_delay_us: Optional[float] = None,
+    max_delay_us: Optional[float] = None,
+    has_waveform: Optional[bool] = True,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Summarize a cohort of waveform events with deterministic counts."""
+    try:
+        return analyze_cohort(
+            class_name=class_name,
+            quench_unit=quench_unit,
+            first_interlock=first_interlock,
+            fault_family=fault_family,
+            year_from=year_from,
+            year_to=year_to,
+            tau_reliable=tau_reliable,
+            min_delay_us=min_delay_us,
+            max_delay_us=max_delay_us,
+            has_waveform=has_waveform,
+            limit=limit,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "response_type": "cohort_analysis",
+            "available": False,
+            "error": f"cohort analysis unavailable: {type(exc).__name__}: {exc}",
+        }
+
+
+@server.tool(description=TOOL_DESCRIPTIONS["postmortem_find_examples"],
+             meta=TOOL_META["postmortem_find_examples"])
+def postmortem_find_examples(topic: Optional[str] = None) -> dict[str, Any]:
+    """Return curated teaching examples by topic."""
+    try:
+        return find_examples(topic)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "response_type": "example_registry",
+            "available": False,
+            "error": f"example registry unavailable: {type(exc).__name__}: {exc}",
+        }
+
+
+@server.tool(description=TOOL_DESCRIPTIONS["postmortem_search_notes"],
+             meta=TOOL_META["postmortem_search_notes"])
+def postmortem_search_notes(query: str, top_k: int = 8) -> dict[str, Any]:
+    """Hybrid lexical + dense retrieval over event notes."""
+    try:
+        return search_notes(query, top_k=top_k)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "response_type": "note_search",
+            "available": False,
+            "query": query,
+            "error": f"note search unavailable: {type(exc).__name__}: {exc}",
+        }
+
+
+@server.tool(description=TOOL_DESCRIPTIONS["postmortem_route_question"],
+             meta=TOOL_META["postmortem_route_question"])
+def postmortem_route_question(question: str) -> dict[str, Any]:
+    """Rule-based routing hints for a natural-language question."""
+    return route_question(question)
 
 
 @server.tool(description=TOOL_DESCRIPTIONS["postmortem_aggregate_events"],
@@ -1522,15 +1730,35 @@ def postmortem_analyze_waveform(
             "resolution is coarser than the 2 µs traces."
         )
 
+    try:
+        analysis = build_event_analysis(str(record["event_id"]))
+    except Exception:  # noqa: BLE001 - evidence bundle must not break raw data
+        analysis = {}
+    event_meta = analysis.get("event") or {}
+    classification = analysis.get("classification") or {}
+    summary = analysis.get("summary") or {}
+    warnings = list(features.get("warnings") or [])
+    for warning in analysis.get("warnings") or []:
+        if warning not in warnings:
+            warnings.append(warning)
+
     result = {
         "response_type": "waveform_analysis",
         "available": True,
         "event_id": record["event_id"],
         "snapshot_id": record["snapshot_id"],
         "model": record.get("model"),
-        "timestamp": record.get("timestamp"),
-        "fault_type": features.get("fault_type", ""),
-        "user_fault_type": features.get("user_fault_type", ""),
+        "timestamp": event_meta.get("timestamp") or record.get("timestamp") or "",
+        "fault_type": event_meta.get("fault_type") or features.get("fault_type", ""),
+        "user_fault_type": event_meta.get("user_fault_type") or "",
+        "event": event_meta,
+        "classification": classification,
+        "summary": summary,
+        "primary_interlock": analysis.get("primary_interlock"),
+        "quench": analysis.get("quench"),
+        "root_cause": analysis.get("root_cause"),
+        "claim_checks": analysis.get("claim_checks") or [],
+        "required_disclosures": analysis.get("required_disclosures") or [],
         "waveform": {
             "n_samples": features.get("n_samples"),
             "dt_s": dt,
@@ -1552,15 +1780,26 @@ def postmortem_analyze_waveform(
             "signature": features.get("signature"),
             "analog": features.get("analog"),
             "digital": digital,
-            "warnings": features.get("warnings") or [],
+            "warnings": warnings,
+            "tau_reliable": (analysis.get("sequence") or {}).get("tau_reliable"),
+            "per_cavity_tau_us": (analysis.get("sequence") or {}).get(
+                "per_cavity_tau_us"
+            ),
+            "first_interlock": analysis.get("primary_interlock"),
+            "claim_checks": analysis.get("claim_checks") or [],
         },
         "citation": f"[E:{record['event_id']}]",
-        "url": f"/events/{record['event_id']}",
+        "url": event_meta.get("url") or f"/events/{record['event_id']}",
         "caveats": caveats,
     }
     if _truthy(generate_plot) or _truthy(include_images):
         result["plot_source"] = "pre_rendered_narrow_jpg"
-        return _with_images(result, str(event_id), image_scope)
+        return _with_images(
+            result,
+            str(event_id),
+            image_scope,
+            image_meta=analysis.get("images"),
+        )
     return result
 
 
@@ -1708,6 +1947,7 @@ def postmortem_get_glossary(topic: Optional[str] = None) -> dict[str, Any]:
     phys = physics_reference_bundle()
     if phys.get("available"):
         result["physics"] = phys
+    result["analysis_guide"] = analysis_guide()
     return result
 
 

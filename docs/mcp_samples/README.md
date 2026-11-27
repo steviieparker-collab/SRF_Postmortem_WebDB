@@ -5,7 +5,7 @@
 
 | 파일 | 호출 | 설명 |
 |---|---|---|
-| `tools_list.json` | `tools/list` | 도구 17개 목록과 스키마 |
+| `tools_list.json` | `tools/list` | 도구 22개 목록과 스키마 |
 | `capabilities.json` | `postmortem_get_capabilities` | 데이터 커버리지, `data_as_of`, 인덱스 상태 |
 | `connection.json` | `GET /connection` | 접속 URL, 인증 방식, 세션 모드 |
 | `aggregate_fault_type_2026.json` | `postmortem_aggregate_events(group_by="fault_type", year=2026)` | MS 제외 2026년 fault 집계 (total 38) |

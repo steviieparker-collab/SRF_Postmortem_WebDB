@@ -21,7 +21,7 @@
 | 서버 이름 | `srf-postmortem` |
 | 버전 | 0.1.0 |
 | 구현 | Python MCP SDK + Starlette/Uvicorn |
-| 도구 수 | **17개** |
+| 도구 수 | **22개** |
 | 데이터 | `db/events.db` (SQLite, 읽기 전용) + `data/feature_store.sqlite3` + `data/rag/rag.sqlite3` |
 | 전송 | stdio / SSE(:8765) / Streamable HTTP JSON(:8766) |
 | 실행 위치 | `shpark@141.223.105.232` (`~/SRF_Postmortem_WebDB`) |
@@ -43,7 +43,7 @@ MCP 클라이언트 (Claude Desktop / Claude Code / 임의 HTTP 에이전트)
 scripts/run_mcp.py  ── 인증/allowlist/전송 계층
         │
         ▼
-src/mcp_server/server.py  ── 17개 도구 정의, 응답 포맷, caveat, data_as_of
+src/mcp_server/server.py  ── 22개 도구 정의, 응답 포맷, caveat, data_as_of
         │
         ├── src/rag/tools.py       ── 결정적 SQL 계층 (검색/집계/이벤트 상세)
         ├── src/features/*         ── 파형 특징 벡터, 보고서 인덱스, quench 분석
@@ -61,27 +61,32 @@ db/events.db (read-only)  +  data/feature_store.sqlite3  +  data/rag/rag.sqlite3
 
 ---
 
-## 3. 도구 17개
+## 3. 도구 22개
 
 | # | 도구 | 역할 |
 |---:|---|---|
-| 1 | `postmortem_get_capabilities` | 데이터 커버리지, `data_as_of`, 인덱스 상태, 도구 목록 |
+| 1 | `postmortem_get_capabilities` | 데이터 커버리지, `data_as_of`, 분석 계약, 도구 목록 |
 | 2 | `postmortem_search_events` | 이벤트 검색 (기간/빔타임/PV/fault/case 필터) |
 | 3 | `postmortem_get_event` | 이벤트 상세 + 분류(수동/자동) + notes |
-| 4 | `postmortem_aggregate_events` | 기간별 집계 (fault_type/case_id/auto_case_id 등) |
-| 5 | `postmortem_similar_events` | 유사 이벤트 |
-| 6 | `postmortem_search_alarm_catalog` | 알람/PV 카탈로그 검색 |
-| 7 | `postmortem_get_alarm_status` | 알람 현재 상태 |
-| 8 | `postmortem_resolve_event` | 이벤트-보고서/문서 연결 |
-| 9 | `postmortem_list_fault_types` | fault type 목록 |
-| 10 | `postmortem_list_beam_times` | 빔타임 목록 |
-| 11 | `postmortem_get_pv_series` | PV 시계열 |
-| 12 | `postmortem_analyze_waveform` | 파형 분석 (t0, signature, beam_fall, sequence, physics, digital) |
-| 13 | `postmortem_find_similar_waveforms` | 유사 파형 |
-| 14 | `postmortem_search_reports` | 보고서/이미지 검색 (캡션/OCR 포함) |
-| 15 | `postmortem_analyze_quench` | quench 통합 분석 (파형+PV+하이라이트) |
-| 16 | `postmortem_compare_quench_events` | quench 이벤트 비교 |
-| 17 | `postmortem_get_glossary` | 도메인 배경지식 + 물리 topic/citation (topic별) |
+| 4 | `postmortem_explain_event` | **결정적 evidence bundle**: primary_interlock, quench, tau_reliable, warnings, claim_checks, image panel |
+| 5 | `postmortem_analyze_cohort` | class/quench_unit/first_interlock/delay 조건의 cohort 집계 |
+| 6 | `postmortem_find_examples` | 큐레이션 예시: cm_single_fault(ARC/flowmeter), quench_propagation |
+| 7 | `postmortem_search_notes` | 이벤트 notes hybrid retrieval (lexical + e5-small) |
+| 8 | `postmortem_route_question` | 질문→도구/glossary/filter 라우팅 힌트 |
+| 9 | `postmortem_aggregate_events` | 기간별 집계 (fault_type/case_id/auto_case_id 등) |
+| 10 | `postmortem_similar_events` | 유사 이벤트 |
+| 11 | `postmortem_search_alarm_catalog` | 알람/PV 카탈로그 검색 |
+| 12 | `postmortem_get_alarm_status` | 알람 현재 상태 |
+| 13 | `postmortem_resolve_event` | 이벤트-보고서/문서 연결 |
+| 14 | `postmortem_list_fault_types` | fault type 목록 |
+| 15 | `postmortem_list_beam_times` | 빔타임 목록 |
+| 16 | `postmortem_get_pv_series` | PV 시계열 |
+| 17 | `postmortem_analyze_waveform` | 파형 분석 (t0, signature, beam_fall, sequence, physics, digital, claim_check) |
+| 18 | `postmortem_find_similar_waveforms` | 유사 파형 |
+| 19 | `postmortem_search_reports` | 보고서/이미지 검색 (캡션/OCR 포함) |
+| 20 | `postmortem_analyze_quench` | quench 통합 분석 (파형+PV+하이라이트) |
+| 21 | `postmortem_compare_quench_events` | quench 이벤트 비교 |
+| 22 | `postmortem_get_glossary` | 도메인 배경지식 + 물리 topic/citation (topic별) |
 
 ---
 
@@ -219,7 +224,7 @@ venv-mcp/bin/python scripts/mcp_smoke.py
 ```
 
 Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_config.json`.
-연결 후 도구 17개가 보이면 정상. 연결이 안 되면 8766 포트가 리스닝 중인지,
+연결 후 도구 22개가 보이면 정상. 연결이 안 되면 8766 포트가 리스닝 중인지,
 클라이언트 IP가 `141.223.105.0/24`인지 먼저 확인한다.
 
 ---
@@ -286,6 +291,21 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
    `data/features/event_physics_interpretations.jsonl` (313줄)와
    `data/features/event_physics_summary.csv` (313행 요약).
    사람이 읽는 정리는 `docs/PHYSICS_REFERENCES.md`.
+7. **분석 계약/cohort/예시 계층** — 새 도구 5개를 추가했다.
+   - `postmortem_explain_event`: `primary_interlock`, `quench`, `sequence`,
+     `tau_reliable`, `root_cause`, `warnings`, `claim_checks`,
+     `required_disclosures`, 이미지 `visible_channels`/`caption_ko`를 한 번에 반환.
+   - `postmortem_analyze_cohort`: class/quench_unit/first_interlock/fault_family/
+     delay 조건의 다중 이벤트 집계.
+   - `postmortem_find_examples`: `cm_single_fault`는 CM ARC/flowmeter,
+     `quench_propagation`은 경고와 함께 제공.
+   - `postmortem_search_notes`: notes lexical + e5-small dense retrieval.
+   - `postmortem_route_question`: 질문→도구/glossary/filter 라우팅.
+   `config/analysis_guide.json`의 evidence_order/do_not_say/good-bad 예시를
+   `postmortem_get_capabilities.analysis_contract`와
+   `postmortem_get_glossary().analysis_guide`에 포함했다.
+   `postmortem_analyze_waveform`의 `timestamp`/`fault_type` 공백 버그도
+   event DB join으로 수정했고, class/tau/KSU downstream 경고를 최상단에 노출한다.
 
 ---
 
@@ -293,7 +313,7 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
 
 | ID | 호출 | 기대값 |
 |---|---|---|
-| T1 | capabilities | 도구 17, `data_as_of` 존재, `as of 2026-11-24, total 868 (675 non-MS)` |
+| T1 | capabilities | 도구 22, `data_as_of` 존재, `analysis_contract` 존재, `as of 2026-11-24, total 868 (675 non-MS)` |
 | T2 | glossary | 섹션 11개, `abbreviations` 장치 약어표, `trip_sequence.mis_beam_dump` |
 | T3 | aggregate fault_type, 2026 | total 38, RF_Interlock 11 (28.95%) |
 | T3-b | hide_ms=false | total 123, MIS 52 (42.28%) |
@@ -304,6 +324,11 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
 | T8 | analyze_waveform | `waveform_analysis`, t0/signature/beam_fall/sequence/digital |
 | T9 | search_reports | `kinds`에 image 포함 |
 | T10 | analyze_quench | waveform/pv/highlights/caveats, BCL03 delta 양수 |
+| T11 | explain_event(`20261013_212628`) | `primary_interlock=ARC_CM3`, `root_cause.fault_family=cm_arc`, `claim_checks`에 quench 금지 |
+| T12 | explain_event(`20251205_014253`) | `QUEN_CM1` first, `tau_reliable=false`, `RDY_KSU` downstream warning, image `visible_channels` |
+| T13 | find_examples(`cm_single_fault`) | `20261013_212628` + `20260623_110438`, quench 아님 |
+| T14 | analyze_cohort(`fault_family=cm_arc`) | `available=true`, `total_filtered>0` |
+| T15 | route_question(CM fault) | `postmortem_explain_event` 추천 |
 
 ---
 
@@ -326,13 +351,17 @@ Claude Desktop 설정 파일 위치(Windows): `%APPDATA%\Claude\claude_desktop_c
 | 경로 | 설명 |
 |---|---|
 | `scripts/run_mcp.py` | MCP 실행 진입점, 인증/allowlist/전송 |
-| `src/mcp_server/server.py` | 17개 도구 정의, 응답 포맷, caveat |
+| `src/mcp_server/server.py` | 22개 도구 정의, 응답 포맷, caveat |
 | `src/rag/tools.py` | 결정적 SQL 계층 (검색/집계/상세) |
 | `src/rag/index.py` | RAG 인덱스 |
 | `src/features/` | 파형 특징, 보고서, quench, 벡터 스토어 |
+| `src/features/analysis.py` | explain_event, cohort, examples, notes 검색, routing |
+| `config/analysis_guide.json` | 분석 계약/금지 표현/good-bad 예시 |
+| `config/analysis_examples.json` | 큐레이션 예시 registry |
 | `config/domain_glossary.json` | 도메인 배경지식 정본 |
 | `config/physics_references.json` | 교과서/강의록/PLS-II 문헌 31개, physics topic 8개 |
 | `src/features/physics.py` | 순차 class → 물리 해석·PLS-II check·citation |
+| `scripts/mcp_quality_eval.py` | MCP 답변 품질 golden check |
 | `docs/PHYSICS_REFERENCES.md` | 교과서 내용 사람이 읽는 정리 |
 | `scripts/build_event_physics.py` | per-event physics JSONL 생성 |
 | `requirements-mcp.txt` | MCP 의존성 |

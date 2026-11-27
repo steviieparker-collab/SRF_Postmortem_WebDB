@@ -1,7 +1,7 @@
 # MCP 테스트 인수인계 (2026-11-25)
 
 다른 에이전트가 SRF Postmortem MCP를 검증할 때 쓰는 문서.
-서버 재시작: 2026-11-25 11:30 KST. 도구 17개.
+서버 재시작: 2026-11-27 KST. 도구 22개.
 
 ## 1. 접속
 
@@ -45,8 +45,9 @@ Claude Desktop은 `mcp-remote` 브리지 사용:
 수치는 전부 코드가 계산한다. LLM이 만들어낸 숫자는 실패로 처리할 것.
 
 ### T1. capabilities
-`postmortem_get_capabilities` → 도구 **17개**, `domain_glossary` 블록,
-`abbreviations` 블록(장치 약어표, `count`와 `entries`), `query_defaults.hide_ms=true`.
+`postmortem_get_capabilities` → 도구 **22개**, `domain_glossary` 블록,
+`abbreviations` 블록(장치 약어표, `count`와 `entries`), `analysis_contract`
+(evidence_order/rules/tool_sequence), `query_defaults.hide_ms=true`.
 `data_as_of`에 `latest_event_timestamp`, `total_events`, `total_events_non_ms`, `statement`가 있어야 한다.
 현재 값: `as of 2026-11-24, total 868 events in DB (675 non-MS)`.
 
@@ -175,6 +176,28 @@ image_scope="cavity")` → `content[0].text` JSON에 `image_available=true`,
 `postmortem_analyze_waveform("20240907_025313", generate_plot=true)`도 동일.
 `postmortem_search_events(fault_type=["Case 3: RF_Interlock",
 "Case 9: Cavity_quench"])` → validation error 없이 `fault_types`로 정규화.
+
+### T13. explain_event — CM3 ARC
+`postmortem_explain_event("20261013_212628")` →
+`primary_interlock.channel`이 `ARC_CM3_FC3_d`,
+`root_cause.fault_family="cm_arc"`, `quench.units_with_quen_assert=[]`,
+`claim_checks`에 “이 이벤트는 cavity quench다”가 `forbidden`으로 포함.
+`images[].event_id`, `images[].visible_channels`, `images[].caption_ko` 존재.
+
+### T14. explain_event — CM1 quench
+`postmortem_explain_event("20251205_014253")` →
+`primary_interlock.channel`이 `QUEN_CM1_FC1_d`,
+`summary.tau_reliable=false`, `summary.classification_conflict=true`,
+`warnings`에 RDY_KSU downstream/다중 캐비티 경고,
+`claim_checks`에 단일 tau 금지와 KSU root cause 금지 포함.
+
+### T15. cohort/examples
+`postmortem_analyze_cohort(fault_family="cm_arc", limit=5)` →
+`available=true`, `total_filtered>0`, `examples[]`에 event_id/class/delay.
+`postmortem_find_examples(topic="cm_single_fault")` →
+`20261013_212628`과 `20260623_110438` 포함, quench를 canonical example로 쓰지 않음.
+`postmortem_route_question("CM 하나 fault로 빔덤프 메커니즘")` →
+`recommended_tools`에 `postmortem_explain_event` 포함.
 
 ## 4. 해석 규칙 — 틀리면 답이 틀어진다
 

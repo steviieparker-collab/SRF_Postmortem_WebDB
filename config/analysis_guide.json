@@ -1,0 +1,46 @@
+{
+  "version": "1.0",
+  "updated": "2026-11-27",
+  "title": "MCP event-analysis contract",
+  "evidence_order": [
+    "1. event classification: manual (user_fault_type) vs automatic (fault_type)",
+    "2. first digital interlock and quench_unit / quench_units_with_quen_assert",
+    "3. per-cavity sequence (90/50/10% times), not a class-level median",
+    "4. reliability flags: tau_reliable, cavity_tau_span_us, per-cavity tau",
+    "5. image panel mapping: images[].scope and visible_channels",
+    "6. root cause stated in notes, then cause_candidates as hypotheses"
+  ],
+  "rules": [
+    "physics.class is an observational pattern, never a root-cause label.",
+    "If tau_reliable=false, do not quote a single decay tau; report the 90-10% span and two-stage/slow tail.",
+    "A cavity probe dip followed by a rise is beam-loading/phase-slip oscillation, not 'recovery'.",
+    "RDY_KSU# can be downstream of QUEN_CM#, ARC_CM#, VAC_CM#, or a beam-loss event; check the earliest digital.",
+    "Do not call multi-cavity collapse simultaneous unless the per-cavity 50/10% times agree.",
+    "Forward power around 1.1-1.2 is the post-limit value from over-input protection (~1.2x), not the LLRF demand.",
+    "Do not invent He-cooling loss, thermal runaway, or QL collapse unless the note or logs state it.",
+    "For a CM single-fault example, prefer CM ARC or CM flowmeter/water-flow events; quench events often mix in multi-cavity/propagation effects."
+  ],
+  "tool_sequence": [
+    "postmortem_route_question(question)",
+    "postmortem_explain_event(event_id) for one event",
+    "postmortem_analyze_cohort(filters) for a multi-event pattern",
+    "postmortem_find_examples(topic) for curated teaching examples",
+    "postmortem_search_notes(query) only for similar operator wording, not for counts"
+  ],
+  "good_examples": [
+    {
+      "event_id": "20261013_212628",
+      "why": "CM3 ARC only; single cavity collapse; first digital ARC_CM3; clean CM single-fault example."
+    },
+    {
+      "event_id": "20260623_110438",
+      "why": "KSU3 HVPS water flow low; CM3 station RF off; one cavity collapses; clean flowmeter/station example."
+    }
+  ],
+  "bad_examples": [
+    {
+      "event_id": "20251205_014253",
+      "why": "CM1 quench, but class=rf_trip and 3 cavities eventually collapse; tau_reliable=false. Do not use as the canonical single-CM example, do not quote tau=17 ms, and do not call the collapses simultaneous."
+    }
+  ]
+}

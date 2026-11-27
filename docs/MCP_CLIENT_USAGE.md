@@ -124,14 +124,66 @@ result.content[1..]      ← 이미지 요청 시 ImageContent 블록
 {
   "image_available": true,
   "images": [
-    {"scope": "cavity", "mime_type": "image/jpeg",
-     "source": "data/waveforms/20260921_162300/cavity_narrow.jpg",
-     "url": "/api/waveforms/20260921_162300/cavity_narrow.jpg"}
+    {
+      "event_id": "20260921_162300",
+      "scope": "cavity",
+      "mime_type": "image/jpeg",
+      "source": "data/waveforms/20260921_162300/cavity_narrow.jpg",
+      "url": "/api/waveforms/20260921_162300/cavity_narrow.jpg",
+      "visible_channels": ["Cavity_SRF1", "QUEN_CM1_FC1", "..."],
+      "caption_ko": "Cavity 패널: CM QUEN/ARC/VAC/HE-PR/RDY digital이 보인다."
+    }
   ]
 }
 ```
 
 `url`은 웹 기준 상대 경로다. MCP 이미지 블록을 쓰면 별도 fetch가 필요 없다.
+**이미지는 패널별로 보이는 채널이 다르다.** Forward 패널에 `RDY_KSU1`이
+보여도 `QUEN_CM1`은 Cavity 패널에 있을 수 있다. `visible_channels`와
+`caption_ko`를 먼저 읽는다.
+
+---
+
+## 3.5 분석용 도구
+
+단일 이벤트의 원인 설명은 `postmortem_explain_event`를 먼저 쓴다.
+
+```json
+{"event_id": "20261013_212628", "include_images": true}
+```
+
+응답 핵심:
+
+- `primary_interlock` — 가장 먼저 뜬 digital
+- `quench.unit/source/units_with_quen_assert`
+- `sequence.tau_reliable`, `per_cavity_tau_us`
+- `root_cause` — note 기반
+- `warnings`, `claim_checks`, `required_disclosures`
+- `images[].visible_channels/caption_ko`
+
+전체 패턴은 `postmortem_analyze_cohort`로 본다.
+
+```json
+{"fault_family": "cm_arc", "limit": 10}
+```
+
+큐레이션 예시는 `postmortem_find_examples`:
+
+```json
+{"topic": "cm_single_fault"}
+```
+
+`cm_single_fault`는 quench가 아니라 **CM ARC / flowmeter** 사례를 준다.
+`quench_propagation`은 별도 topic이며 “단일 CM 교본으로 쓰지 말 것” 경고가 붙는다.
+
+질문 라우팅:
+
+```json
+{"question": "CM 하나 fault로 빔덤프 메커니즘을 설명해줘"}
+```
+
+`postmortem_search_notes`는 운영자 notes의 유사 문구 검색이다. counts/timing에는
+쓰지 않고, `postmortem_explain_event`/`postmortem_analyze_cohort`와 함께 쓴다.
 
 ---
 

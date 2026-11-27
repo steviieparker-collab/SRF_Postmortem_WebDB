@@ -1,0 +1,41 @@
+{
+  "version": "1.0",
+  "updated": "2026-11-27",
+  "topics": {
+    "cm_single_fault": {
+      "description": "One CM / one RF station fault that produces a clean single-cavity collapse. Use these instead of quench propagation events for teaching the CM-to-beam-dump chain.",
+      "examples": [
+        {
+          "event_id": "20261013_212628",
+          "why_clean": "CM3 ARC interlock. ARC_CM3 is the first digital, only CM3 collapses, and CM1/CM2 only dip/oscillate.",
+          "caution": "The MCP measurement class is single_cavity_quench, but QUEN_CM3 did not assert; the actual fault is ARC."
+        },
+        {
+          "event_id": "20260623_110438",
+          "why_clean": "KSU3 HVPS water flow low. RDY_KSU3 is the only interlock, CM3 collapses, and the remaining stations stay up.",
+          "caution": "This is a KSU/HPRF station fault, not a cavity quench."
+        }
+      ]
+    },
+    "ksu_single_station": {
+      "description": "KSU/HPRF internal fault on one station. The faulted station loses RF first; other stations compensate within the over-input limit.",
+      "examples": [
+        {
+          "event_id": "20260623_110438",
+          "why_clean": "KSU3 HVPS water flow low; clean single-station RF loss.",
+          "caution": "Do not call this a Kicker event; KSU is Klystron Supply Unit."
+        }
+      ]
+    },
+    "quench_propagation": {
+      "description": "Quench events are valid events but are poor canonical examples for 'one CM fault' because the waveform class can be rf_trip/mixed and multiple cavities may move.",
+      "examples": [
+        {
+          "event_id": "20251205_014253",
+          "why_clean": "Operator note says CM1 quench and QUEN_CM1 is the first digital.",
+          "caution": "Class=rf_trip, all 3 cavities eventually collapse, tau_reliable=false, and the CM2/CM3 10% times are +37 ms. Do not quote tau=17 ms, do not call the collapses simultaneous, and do not call this a clean single-CM example."
+        }
+      ]
+    }
+  }
+}
