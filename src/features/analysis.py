@@ -22,7 +22,7 @@ from typing import Any, Optional
 from ..rag.db import connect_events
 from ..rag.tools import get_event_context
 from .physics import interpret_sequence, normalize_sequence
-from .store import connect_feature_store
+from .store import connect_feature_store, get_waveform_features
 
 _ROOT = Path(__file__).resolve().parent.parent.parent
 _GUIDE_PATH = _ROOT / "config" / "analysis_guide.json"
